@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Outbreak Overkill</title>
+  <meta name="description" content="A bio-horror horde survival game. Survive 15 minutes in the Cold Harbor quarantine zone until evac arrives.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@600;800&family=IBM+Plex+Mono:wght@500;700&family=Special+Elite&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="game" aria-label="Outbreak Overkill game view"></canvas>
+
+  <div id="hud-buttons" class="hud-buttons" hidden>
+    <button id="btn-mute" class="hud-btn" type="button">Sound on</button>
+    <button id="btn-pause" class="hud-btn" type="button" aria-label="Pause">II</button>
+  </div>
+
+  <div id="banner" class="banner" role="status" hidden></div>
+
+  <!-- Main menu -->
+  <section id="screen-menu" class="screen screen-menu" hidden>
+    <div class="menu">
+      <header class="menu-head">
+        <p class="file-no">Case file 09-27 · Cold Harbor quarantine zone</p>
+        <h1 class="logo"><span class="logo-top">Outbreak</span><span class="logo-bottom">Overkill</span></h1>
+      </header>
+
+      <article class="brief">
+        <span class="stamp">Classified</span>
+        <p>Helix Biotech's Lazarus strain got out of Sub-Level 4 at 02:10. By dawn, Cold Harbor stopped answering the radio.</p>
+        <p>Evac lands in <strong>15:00</strong>. Your weapons fire on their own. Keep moving, collect the DNA samples the infected drop, and pick an upgrade each time you level.</p>
+      </article>
+
+      <h2 class="section-label">Choose operative</h2>
+      <div id="char-list" class="chars"></div>
+
+      <div class="menu-actions">
+        <button id="btn-start" class="btn btn-primary" type="button">Deploy</button>
+      </div>
+      <p class="controls"><kbd>WASD</kbd> or arrows or drag to move · <kbd>Esc</kbd> pause · <kbd>M</kbd> mute · <kbd>`</kbd> debug</p>
+      <p id="records" class="records"></p>
+    </div>
+  </section>
+
+  <!-- Level up -->
+  <section id="screen-levelup" class="screen screen-dim" hidden>
+    <div class="panel panel-wide">
+      <p class="eyebrow">Field upgrade</p>
+      <h2 class="panel-title">Level <span id="lu-level">2</span></h2>
+      <div id="lu-cards" class="cards"></div>
+      <p class="hint">Press 1, 2 or 3, or tap a card</p>
+    </div>
+  </section>
+
+  <!-- Supply case -->
+  <section id="screen-chest" class="screen screen-dim" hidden>
+    <div class="panel">
+      <p class="eyebrow">Recovered from the body</p>
+      <h2 class="panel-title">Supply case</h2>
+      <ul id="chest-list" class="chest-list"></ul>
+      <button id="chest-ok" class="btn btn-primary" type="button">Take it</button>
+    </div>
+  </section>
+
+  <!-- Pause -->
+  <section id="screen-pause" class="screen screen-dim" hidden>
+    <div class="panel">
+      <p class="eyebrow">Holding position</p>
+      <h2 class="panel-title">Paused</h2>
+      <ul id="pause-build" class="build-list"></ul>
+      <dl id="pause-stats" class="stat-grid"></dl>
+      <div class="panel-actions">
+        <button id="btn-resume" class="btn btn-primary" type="button">Resume</button>
+        <button id="btn-quit" class="btn btn-ghost" type="button">Abandon run</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Results -->
+  <section id="screen-results" class="screen screen-dim" hidden>
+    <div class="panel">
+      <p id="res-eyebrow" class="eyebrow"></p>
+      <h2 id="res-title" class="panel-title"></h2>
+      <dl id="res-stats" class="stat-grid stat-grid-big"></dl>
+      <div class="table-wrap"><table id="res-weapons" class="res-table"></table></div>
+      <div class="panel-actions">
+        <button id="btn-retry" class="btn btn-primary" type="button">Deploy again</button>
+        <button id="btn-menu" class="btn btn-ghost" type="button">Main menu</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Load order matters: config and helpers first, main.js last. -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/weapons.js"></script>
+  <script src="js/spawner.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

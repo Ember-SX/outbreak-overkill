@@ -1,0 +1,197 @@
+/* DOM screens: main menu, level-up cards, supply case, pause, results, and the warning banner. */
+(function (OO) {
+  'use strict';
+
+  const U = OO.U;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  class UI {
+    constructor(game) {
+      this.g = game;
+      this.options = [];
+      this.lockUntil = 0;
+      this.selectedChar = U.storage.get('oo.char', 'mara');
+      if (!OO.CHARACTERS[this.selectedChar]) this.selectedChar = 'mara';
+      this.screens = ['screen-menu', 'screen-levelup', 'screen-chest', 'screen-pause', 'screen-results'];
+
+      this.buildMenu();
+      $('btn-start').addEventListener('click', () => this.startRun());
+      $('btn-resume').addEventListener('click', () => this.g.resume());
+      $('btn-quit').addEventListener('click', () => this.g.quitToMenu());
+      $('btn-retry').addEventListener('click', () => this.startRun());
+      $('btn-menu').addEventListener('click', () => this.g.quitToMenu());
+      $('chest-ok').addEventListener('click', () => this.g.closeChest());
+      $('btn-pause').addEventListener('click', () => (this.g.state === 'paused' ? this.g.resume() : this.g.pause()));
+      $('btn-mute').addEventListener('click', () => { OO.Audio.init(); this.g.toggleMute(); });
+      window.addEventListener('keydown', (e) => this.onKey(e));
+      this.updateMute();
+      this.showMenu();
+    }
+
+    startRun() {
+      OO.Audio.init();
+      OO.Audio.play('select');
+      this.g.start(this.selectedChar);
+    }
+
+    // ------------------------------------------------------------ menu
+    buildMenu() {
+      const list = $('char-list');
+      list.innerHTML = '';
+      for (const id in OO.CHARACTERS) {
+        const c = OO.CHARACTERS[id], w = OO.WEAPONS[c.weapon];
+        const b = document.createElement('button');
+        b.className = 'char-card';
+        b.id = 'char-' + id;
+        b.setAttribute('aria-pressed', String(id === this.selectedChar));
+        b.innerHTML = `
+          <span class="char-photo"><img src="${OO.Icons.url(w.icon, 36, '#d9ceb2')}" alt=""></span>
+          <span class="char-body">
+            <span class="char-name">${esc(c.name)}</span>
+            <span class="char-role">${esc(c.role)}</span>
+            <span class="char-kit">Starts with ${esc(w.name)}</span>
+            <span class="char-bonus">${esc(c.bonusText)}</span>
+          </span>`;
+        b.addEventListener('click', () => this.selectChar(id));
+        list.appendChild(b);
+      }
+    }
+
+    selectChar(id) {
+      this.selectedChar = id;
+      for (const cid in OO.CHARACTERS) $('char-' + cid).setAttribute('aria-pressed', String(cid === id));
+      OO.Audio.init();
+      OO.Audio.play('select');
+    }
+
+    showMenu() {
+      this.hideAll();
+      const r = this.g.records;
+      $('records').textContent = r.runs
+        ? `Longest survival ${U.formatTime(r.bestTime)} · Most kills ${r.bestKills} · Evacuated ${r.wins} of ${r.runs} runs`
+        : 'No runs on file yet.';
+      $('screen-menu').hidden = false;
+    }
+
+    hideAll() { for (const s of this.screens) $(s).hidden = true; }
+
+    setHud(on) { $('hud-buttons').hidden = !on; }
+
+    updateMute() {
+      const m = this.g.settings.muted;
+      $('btn-mute').textContent = m ? 'Sound off' : 'Sound on';
+      $('btn-mute').setAttribute('aria-pressed', String(!m));
+    }
+
+    // ------------------------------------------------------------ level up
+    showLevelUp(options, level) {
+      this.options = options;
+      this.lockUntil = performance.now() + 350;   // stop a held key or stray tap from picking blind
+      $('lu-level').textContent = level;
+      const wrap = $('lu-cards');
+      wrap.innerHTML = '';
+      options.forEach((opt, i) => {
+        const d = this.g.describeUpgrade(opt);
+        const b = document.createElement('button');
+        b.className = 'card' + (d.isNew ? ' card-new' : '');
+        b.innerHTML = `
+          <span class="card-top">
+            <span class="card-key">${i + 1}</span>
+            <span class="card-type">${esc(d.type)}</span>
+            <span class="card-badge">${esc(d.badge)}</span>
+          </span>
+          <img class="card-icon" src="${OO.Icons.url(d.icon, 40, '#1b1a17')}" alt="">
+          <span class="card-name">${esc(d.name)}</span>
+          <span class="card-text">${esc(d.text)}</span>`;
+        b.addEventListener('click', () => this.pick(i));
+        wrap.appendChild(b);
+      });
+      $('screen-levelup').hidden = false;
+    }
+
+    pick(i) {
+      if (performance.now() < this.lockUntil) return;
+      const opt = this.options[i];
+      if (opt) this.g.chooseUpgrade(opt);
+    }
+
+    // ------------------------------------------------------------ supply case
+    showChest(results, credits) {
+      const ul = $('chest-list');
+      ul.innerHTML = results.map((d) => `
+        <li><img src="${OO.Icons.url(d.icon, 28, '#e3a33b')}" alt="">
+          <span><strong>${esc(d.name)}</strong> <em>${esc(d.badge)}</em><br>${esc(d.text)}</span></li>`).join('')
+        + `<li><img src="${OO.Icons.url('credits', 28, '#e3a33b')}" alt=""><span><strong>+${credits} credits</strong></span></li>`;
+      this.lockUntil = performance.now() + 400;
+      $('screen-chest').hidden = false;
+    }
+
+    // ------------------------------------------------------------ pause
+    showPause() {
+      const p = this.g.player;
+      const rows = p.weapons.map((w) => `<li><img src="${OO.Icons.url(w.def.icon, 24, '#e3a33b')}" alt=""><span>${esc(w.def.name)}</span><b>Lv ${w.level}</b></li>`)
+        .concat(p.passiveOrder.map((id) => `<li><img src="${OO.Icons.url(OO.PASSIVES[id].icon, 24, '#56d6c0')}" alt=""><span>${esc(OO.PASSIVES[id].name)}</span><b>Lv ${p.passives[id]}</b></li>`));
+      $('pause-build').innerHTML = rows.join('');
+      const s = p.stats;
+      $('pause-stats').innerHTML = [
+        ['Max HP', Math.round(s.maxHp)], ['Armor', s.armor], ['Damage', Math.round(s.might * 100) + '%'],
+        ['Area', Math.round(s.area * 100) + '%'], ['Cooldown', Math.round(s.cooldown * 100) + '%'],
+        ['Speed', Math.round(s.speed)], ['Pickup range', Math.round(s.magnet)], ['Time', U.formatTime(this.g.time)],
+      ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+      $('screen-pause').hidden = false;
+    }
+
+    // ------------------------------------------------------------ results
+    showResults(r) {
+      this.hideAll();
+      $('res-eyebrow').textContent = r.victory ? 'Extraction confirmed' : 'Signal lost';
+      $('res-title').textContent = r.victory ? 'You made the chopper' : 'You were overrun';
+      $('screen-results').classList.toggle('won', r.victory);
+      $('res-stats').innerHTML = [
+        ['Survived', U.formatTime(r.time)], ['Level', r.level], ['Kills', r.kills], ['Credits', r.credits],
+      ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+      const rows = r.weapons.slice().sort((a, b) => b.dmg - a.dmg).map((w) => `
+        <tr><td><img src="${OO.Icons.url(OO.WEAPONS[w.id].icon, 20, '#e3a33b')}" alt=""> ${esc(w.name)}</td>
+        <td>${w.level}</td><td>${w.dmg.toLocaleString()}</td><td>${w.kills}</td></tr>`).join('');
+      $('res-weapons').innerHTML = `<thead><tr><th>Weapon</th><th>Lv</th><th>Damage</th><th>Kills</th></tr></thead><tbody>${rows}</tbody>`;
+      this.lockUntil = performance.now() + 600;
+      $('screen-results').hidden = false;
+    }
+
+    // ------------------------------------------------------------ banner
+    banner(text, kind) {
+      const el = $('banner');
+      el.textContent = text;
+      el.className = 'banner banner-' + (kind || 'warn');
+      el.hidden = false;
+      void el.offsetWidth;          // restart the CSS animation
+      el.classList.add('show');
+      clearTimeout(this._bannerT);
+      this._bannerT = setTimeout(() => { el.hidden = true; }, 3400);
+    }
+
+    // ------------------------------------------------------------ keyboard for screens
+    onKey(e) {
+      const s = this.g.state;
+      const locked = performance.now() < this.lockUntil;
+      if (s === 'levelup') {
+        const n = parseInt(e.key, 10);
+        if (n >= 1 && n <= this.options.length) this.pick(n - 1);
+      } else if (s === 'chest') {
+        if (!locked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.g.closeChest(); }
+      } else if (s === 'menu') {
+        if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') this.startRun();
+        const ids = Object.keys(OO.CHARACTERS);
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          const i = ids.indexOf(this.selectedChar) + (e.key === 'ArrowRight' ? 1 : -1);
+          this.selectChar(ids[(i + ids.length) % ids.length]);
+        }
+      } else if (s === 'results') {
+        if (!locked && e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') this.startRun();
+      }
+    }
+  }
+
+  OO.UI = UI;
+})(window.OO = window.OO || {});

@@ -1,0 +1,13 @@
+# build output
+dist/
+
+# dependencies (none yet, but ready for when we add a bundler)
+node_modules/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.log

@@ -1,0 +1,90 @@
+/* The Director: reads the wave table and event script from config.js and puts infected on the field. */
+(function (OO) {
+  'use strict';
+
+  const U = OO.U;
+
+  class Director {
+    constructor(game) {
+      this.g = game;
+      this.timer = 0.5;
+      this.eventIdx = 0;
+      this.crateTimer = 12;
+    }
+
+    wave() {
+      const i = Math.min(OO.WAVES.length - 1, Math.floor(this.g.time / 60));
+      return OO.WAVES[i];
+    }
+
+    ringPos(radius) {
+      const p = this.g.player;
+      const a = U.rand(0, U.TAU);
+      const R = radius || this.g.spawnRadius;
+      return [p.x + Math.cos(a) * R, p.y + Math.sin(a) * R];
+    }
+
+    update(dt) {
+      const g = this.g;
+      while (this.eventIdx < OO.EVENTS.length && g.time >= OO.EVENTS[this.eventIdx].t) {
+        this.runEvent(OO.EVENTS[this.eventIdx++]);
+      }
+
+      const w = this.wave();
+      this.timer -= dt;
+      if (this.timer <= 0) {
+        this.timer = w.interval;
+        const alive = g.enemies.length;
+        // Top up toward the wave's target quickly, trickle a little past it, then hold.
+        let n = 0;
+        if (alive < w.target) n = w.batch + Math.ceil((w.target - alive) * 0.25);
+        else if (alive < w.target * 1.3) n = w.batch;
+        for (let i = 0; i < n && g.enemies.length < OO.CONFIG.MAX_ENEMIES; i++) {
+          const [x, y] = this.ringPos(g.spawnRadius + U.rand(0, 80));
+          g.spawnEnemy(U.weightedPick(w.pool), x, y);
+        }
+      }
+
+      this.crateTimer -= dt;
+      if (this.crateTimer <= 0) {
+        this.crateTimer = U.rand(18, 28);
+        let crates = 0;
+        for (const e of g.enemies) if (e.def.crate) crates++;
+        if (crates < 4) {
+          const [x, y] = this.ringPos(U.rand(260, 480));
+          g.spawnEnemy('crate', x, y);
+        }
+      }
+    }
+
+    runEvent(ev) {
+      const g = this.g, p = g.player;
+      if (ev.text) g.ui.banner(ev.text, ev.kind === 'boss' ? 'boss' : 'warn');
+      switch (ev.kind) {
+        case 'pack': {
+          const [cx, cy] = this.ringPos(g.spawnRadius + 60);
+          for (let i = 0; i < ev.count; i++) g.spawnEnemy(ev.enemy, cx + U.rand(-70, 70), cy + U.rand(-70, 70));
+          break;
+        }
+        case 'ring': {
+          const R = g.spawnRadius * 0.85;
+          for (let i = 0; i < ev.count; i++) {
+            const a = (i / ev.count) * U.TAU;
+            g.spawnEnemy(ev.enemy, p.x + Math.cos(a) * R, p.y + Math.sin(a) * R);
+          }
+          break;
+        }
+        case 'elite':
+        case 'boss':
+          for (let i = 0; i < ev.count; i++) {
+            const [x, y] = this.ringPos(g.spawnRadius + 40);
+            g.spawnEnemy(ev.enemy, x, y);
+          }
+          if (ev.kind === 'boss') { OO.Audio.play('boss'); g.shake(10); }
+          break;
+      }
+    }
+  }
+
+  OO.Director = Director;
+})(window.OO = window.OO || {});
