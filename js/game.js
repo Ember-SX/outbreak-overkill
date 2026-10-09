@@ -644,7 +644,7 @@
         this.shake(12);
         OO.Audio.play('explode');
       }
-      if (U.chance(0.004)) this.addPickup('herb', e.x + 12, e.y);
+      if (U.chance(0.007)) this.addPickup('herb', e.x + 12, e.y);
       OO.Audio.play('kill');
     }
 

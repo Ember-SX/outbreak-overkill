@@ -17,7 +17,9 @@
     LIGHT_RADIUS: 330,            // flashlight radius in world units
     // Burster stampede: warning time, when the lane locks (seconds before launch), row spacing.
     STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44, homing: 0.12 },
-    PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.4 },
+    // Spitters hang back and are easy to ignore, so cap how many can be alive: 1 + 0.5/min, max 7.
+    spitterCap(minute) { return Math.min(7, 1 + Math.floor(minute * 0.5)); },
+    PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.45 },
     xpToNext(level) {
       if (level < 20) return 5 + (level - 1) * 8;
       if (level < 40) return 157 + (level - 20) * 12;
@@ -35,12 +37,12 @@
                 explode: { r: 78, dmg: 16, enemyDmg: 45 } },
     spitter:  { name: 'Spitter',     hp: 28,   speed: 52, dmg: 6,  r: 13, xp: 3,   mass: 1,   body: '#33502a', skin: '#86b542', eye: '#e2ff6a', blood: 'bile',
                 // Keeps its distance, swells up, then lobs acid where you're heading. The pool lingers.
-                ranged: { min: 190, max: 310, cd: [2.4, 3.4], windup: 0.6, flight: 0.85, splash: 34, impact: 12,
-                          pool: { r: 40, life: 3.6, tick: 0.35, dmg: 6 } } },
+                ranged: { min: 150, max: 240, cd: [3.0, 4.2], windup: 0.6, flight: 0.85, splash: 34, impact: 10,
+                          pool: { r: 40, life: 3.6, tick: 0.35, dmg: 5 } } },
     burster:  { name: 'Burster',     hp: 6,    speed: 430, dmg: 0, r: 10, xp: 1,   mass: 0.5, body: '#6a1830', skin: '#c94f6c', eye: '#ffe6e6', blood: 'red',
                 // Only arrive in stampedes (see OO.EVENTS kind 'stampede'). Explode on contact with you or cover.
                 burster: { r: 64, dmg: 42, enemyDmg: 90 } },
-    brute:    { name: 'Brute',       hp: 450,  speed: 42, dmg: 22, r: 26, xp: 25,  mass: 10,  body: '#3c3e46', skin: '#6c707c', eye: '#ff3a30', blood: 'red', elite: true },
+    brute:    { name: 'Brute',       hp: 450,  speed: 42, dmg: 18, r: 26, xp: 25,  mass: 10,  body: '#3c3e46', skin: '#6c707c', eye: '#ff3a30', blood: 'red', elite: true },
     stalker:  { name: 'The Stalker', hp: 4800, speed: 58, dmg: 30, r: 32, xp: 120, mass: 40,  body: '#1b1620', skin: '#3b2d45', eye: '#ff2444', blood: 'red', boss: true },
     crate:    { name: 'Supply Crate', hp: 1,   speed: 0,  dmg: 0,  r: 15, xp: 0,   mass: 999, crate: true },
   };
@@ -227,29 +229,30 @@
   // ---------------------------------------------------------------- WAVES
   // One entry per minute. pool = weighted enemy types. target = on-field count the
   // director tops up to. interval/batch = steady trickle on top of that.
+  // v0.2: minutes 0-2 match v0.1; the horde then grows to +10% (3-5), +20% (6-9) and +30% (10+).
   OO.WAVES = [
-    { pool: [['shambler', 1]],                                                   target: 22,  interval: 1.08, batch: 3 },
-    { pool: [['shambler', 7], ['hound', 3]],                                     target: 48,  interval: 0.9, batch: 4 },
-    { pool: [['shambler', 6], ['hound', 4], ['spitter', 1]],                     target: 72,  interval: 0.9, batch: 4 },
-    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3], ['spitter', 1]],     target: 96,  interval: 0.81, batch: 4 },
-    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3], ['bloater', 1], ['spitter', 1]], target: 120, interval: 0.81, batch: 5 },
-    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 1], ['spitter', 1.5]], target: 132, interval: 0.81, batch: 5 },
-    { pool: [['skinner', 6], ['hound', 3], ['bloater', 1], ['spitter', 1.5]],    target: 168, interval: 0.72, batch: 5 },
-    { pool: [['shambler', 4], ['bloater', 3], ['skinner', 3], ['spitter', 2]],   target: 192, interval: 0.72, batch: 6 },
-    { pool: [['hound', 6], ['skinner', 3], ['bloater', 1], ['spitter', 1.5]],    target: 240, interval: 0.63, batch: 6 },
-    { pool: [['shambler', 3], ['hound', 3], ['skinner', 3], ['bloater', 1], ['spitter', 2]], target: 276, interval: 0.63, batch: 7 },
-    { pool: [['skinner', 5], ['bloater', 2], ['hound', 3], ['spitter', 2]],      target: 312, interval: 0.54, batch: 7 },
-    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 2], ['spitter', 2.5]], target: 348, interval: 0.54, batch: 8 },
-    { pool: [['hound', 4], ['skinner', 4], ['bloater', 2], ['spitter', 2.5]],    target: 384, interval: 0.45, batch: 8 },
-    { pool: [['skinner', 5], ['bloater', 3], ['hound', 2], ['spitter', 3]],      target: 420, interval: 0.45, batch: 9 },
-    { pool: [['shambler', 2], ['hound', 3], ['skinner', 4], ['bloater', 3], ['spitter', 3]], target: 480, interval: 0.36, batch: 10 },
+    { pool: [['shambler', 1]],                                                   target: 18,  interval: 1.2, batch: 2 },
+    { pool: [['shambler', 7], ['hound', 3]],                                     target: 40,  interval: 1.0, batch: 3 },
+    { pool: [['shambler', 6], ['hound', 4], ['spitter', 1]],                     target: 60,  interval: 1.0, batch: 3 },
+    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3], ['spitter', 1]],     target: 88,  interval: 0.86, batch: 4 },
+    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3], ['bloater', 1], ['spitter', 1]], target: 110, interval: 0.86, batch: 5 },
+    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 1], ['spitter', 1.5]], target: 121, interval: 0.86, batch: 5 },
+    { pool: [['skinner', 6], ['hound', 3], ['bloater', 1], ['spitter', 1.5]],    target: 168, interval: 0.73, batch: 5 },
+    { pool: [['shambler', 4], ['bloater', 3], ['skinner', 3], ['spitter', 2]],   target: 192, interval: 0.73, batch: 6 },
+    { pool: [['hound', 6], ['skinner', 3], ['bloater', 1], ['spitter', 1.5]],    target: 240, interval: 0.64, batch: 6 },
+    { pool: [['shambler', 3], ['hound', 3], ['skinner', 3], ['bloater', 1], ['spitter', 2]], target: 276, interval: 0.64, batch: 7 },
+    { pool: [['skinner', 5], ['bloater', 2], ['hound', 3], ['spitter', 2]],      target: 338, interval: 0.53, batch: 7 },
+    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 2], ['spitter', 2.5]], target: 377, interval: 0.53, batch: 8 },
+    { pool: [['hound', 4], ['skinner', 4], ['bloater', 2], ['spitter', 2.5]],    target: 416, interval: 0.44, batch: 8 },
+    { pool: [['skinner', 5], ['bloater', 3], ['hound', 2], ['spitter', 3]],      target: 455, interval: 0.44, batch: 9 },
+    { pool: [['shambler', 2], ['hound', 3], ['skinner', 4], ['bloater', 3], ['spitter', 3]], target: 520, interval: 0.35, batch: 10 },
   ];
 
   // Scripted moments. kinds: pack (clustered rush), ring (encirclement), elite, boss, banner.
   OO.EVENTS = [
     { t: 60,  kind: 'banner', text: 'Rot Hounds are on your scent' },
     { t: 90,  kind: 'pack',  enemy: 'hound',    count: 20 },
-    { t: 120, kind: 'elite', enemy: 'brute',    count: 1, text: 'Brute sighted' },
+    { t: 150, kind: 'elite', enemy: 'brute',    count: 1, text: 'Brute sighted' },
     { t: 135, kind: 'banner', text: 'Spitters: keep moving, the acid lingers' },
     { t: 165, kind: 'stampede', count: 7,  text: 'Stampede! Get behind cover' },
     { t: 210, kind: 'ring',  enemy: 'shambler', count: 40, text: 'They have you surrounded' },
@@ -257,7 +260,7 @@
     { t: 300, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'Warning: The Stalker is hunting you' },
     { t: 285, kind: 'stampede', count: 9,  text: 'Bursters again. Find cover' },
     { t: 330, kind: 'elite', enemy: 'brute',    count: 1 },
-    { t: 360, kind: 'pack',  enemy: 'spitter',  count: 8, text: 'A nest of Spitters' },
+    { t: 360, kind: 'pack',  enemy: 'spitter',  count: 5, text: 'A nest of Spitters' },
     { t: 390, kind: 'pack',  enemy: 'hound',    count: 40 },
     { t: 405, kind: 'stampede', count: 11 },
     { t: 420, kind: 'elite', enemy: 'brute',    count: 2 },

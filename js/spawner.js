@@ -40,9 +40,14 @@
         let n = 0;
         if (alive < target) n = w.batch + Math.ceil((target - alive) * 0.25);
         else if (alive < target * 1.3) n = w.batch;
+        let spitters = 0;
+        for (const e of g.enemies) if (e.def.ranged && !e.dead) spitters++;
+        const spitCap = OO.CONFIG.spitterCap(g.time / 60);
         for (let i = 0; i < n && g.enemies.length < OO.CONFIG.MAX_ENEMIES; i++) {
           const [x, y] = this.ringPos(g.spawnRadius + U.rand(0, 80));
-          g.spawnEnemy(U.weightedPick(w.pool), x, y);
+          let type = U.weightedPick(w.pool);
+          if (OO.ENEMIES[type].ranged && spitters++ >= spitCap) type = 'shambler';
+          g.spawnEnemy(type, x, y);
         }
       }
 
