@@ -50,9 +50,11 @@
         this.crateTimer = U.rand(18, 28);
         let crates = 0;
         for (const e of g.enemies) if (e.def.crate) crates++;
-        if (crates < 4) {
+        for (let tries = 0; crates < 4 && tries < 8; tries++) {
           const [x, y] = this.ringPos(U.rand(260, 480));
+          if (g.world.hitCircle(x, y, 22)) continue;   // not inside a wreck
           g.spawnEnemy('crate', x, y);
+          break;
         }
       }
     }

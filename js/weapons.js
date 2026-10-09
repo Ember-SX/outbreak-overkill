@@ -65,7 +65,7 @@
         st.burstT -= dt;
         if (st.burstT <= 0) {
           st.burst--; st.burstT = 0.08;
-          const t = g.nearestEnemy(p.x, p.y, 750);
+          const t = g.nearestVisible(p.x, p.y, 750);
           const a = t ? Math.atan2(t.y - p.y, t.x - p.x) : p.faceAngle;
           p.aimAngle = a; p.aimT = 0.6;
           g.spawnProjectile({
@@ -79,7 +79,7 @@
       }
       w.timer -= dt;
       if (w.timer <= 0) {
-        if (g.nearestEnemy(p.x, p.y, 750)) { st.burst = s.amount; st.burstT = 0; w.timer = s.cd; }
+        if (g.nearestVisible(p.x, p.y, 750)) { st.burst = s.amount; st.burstT = 0; w.timer = s.cd; }
         else w.timer = 0.1;
       }
     },
@@ -129,7 +129,7 @@
       const p = g.player;
       w.timer -= dt;
       if (w.timer > 0) return;
-      const t = g.nearestEnemy(p.x, p.y, s.speed * s.duration + 30);   // only fire when something is in range
+      const t = g.nearestVisible(p.x, p.y, s.speed * s.duration + 30);   // only fire when something is in range
       if (!t) { w.timer = 0.15; return; }
       w.timer = s.cd;
       const base = Math.atan2(t.y - p.y, t.x - p.x);

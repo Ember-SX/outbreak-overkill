@@ -156,6 +156,7 @@
       ctx.fillRect(camX - 40, camY - 40, g.viewW + 80, g.viewH + 80);
       this.drawDecals(ctx);
       this.drawZones(ctx);
+      this.drawObstacles(ctx);
       this.drawEnemies(ctx);
       this.drawPlayer(ctx);
       for (const w of p.weapons) w.draw(ctx, g);
@@ -168,6 +169,7 @@
 
       // Things that should read through the dark: eyes, loot, tracers, lightning, numbers.
       world();
+      this.drawObstacleEdges(ctx);
       this.drawEyes(ctx);
       this.drawPickups(ctx);
       this.drawProjectiles(ctx);
@@ -248,6 +250,118 @@
         ctx.fillStyle = gr;
         circle(ctx, z.x, z.y, z.r * 1.15);
       }
+    }
+
+    // ---------------------------------------------------------------- obstacles
+    drawObstacles(ctx) {
+      for (const o of this.g.world.list) {
+        if (!this.inView(o.x, o.y, Math.max(o.maxX - o.minX, o.maxY - o.minY))) continue;
+        const spr = o.spr || (o.spr = this.obstacleSprite(o));
+        ctx.drawImage(spr, o.x - spr.hw, o.y - spr.hh, spr.hw * 2, spr.hh * 2);
+      }
+    }
+
+    /** Faint rim on every obstacle, drawn over the darkness so cover is readable in the dark. */
+    drawObstacleEdges(ctx) {
+      ctx.strokeStyle = 'rgba(235,226,207,0.13)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (const o of this.g.world.list) {
+        if (!this.inView(o.x, o.y, 100)) continue;
+        if (o.kind === 'circle') { ctx.moveTo(o.x + o.r, o.y); ctx.arc(o.x, o.y, o.r, 0, TAU); }
+        else ctx.rect(o.minX, o.minY, o.maxX - o.minX, o.maxY - o.minY);
+      }
+      ctx.stroke();
+    }
+
+    /** Pre-renders one obstacle (with its drop shadow) into its own little canvas. */
+    obstacleSprite(o) {
+      const pad = 12;
+      const hw = (o.kind === 'circle' ? o.r : o.hw) + pad, hh = (o.kind === 'circle' ? o.r : o.hh) + pad;
+      const c = document.createElement('canvas');
+      c.width = Math.ceil(hw * 2 * SPRITE_SCALE); c.height = Math.ceil(hh * 2 * SPRITE_SCALE);
+      const x = c.getContext('2d');
+      x.scale(SPRITE_SCALE, SPRITE_SCALE);
+      x.translate(hw, hh);
+      let seed = Math.floor(o.seed * 1e6);
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      const rrect = (X, Y, W, H, r) => { x.beginPath(); x.roundRect ? x.roundRect(X, Y, W, H, r) : x.rect(X, Y, W, H); };
+
+      // shadow
+      x.fillStyle = 'rgba(0,0,0,0.5)';
+      if (o.kind === 'circle') { x.beginPath(); x.arc(5, 7, o.r, 0, TAU); x.fill(); }
+      else { rrect(-o.hw + 5, -o.hh + 7, o.hw * 2, o.hh * 2, 6); x.fill(); }
+
+      // vehicles are drawn lying along x, then rotated if the obstacle is vertical
+      const vertical = o.kind === 'rect' && o.hh > o.hw;
+      if (vertical) x.rotate(Math.PI / 2);
+      const L = vertical ? o.hh : o.hw, Wd = vertical ? o.hw : o.hh;
+
+      switch (o.type) {
+        case 'car':
+        case 'bus': {
+          const pal = [['#5b3b2c', '#3e2a20'], ['#33424f', '#232e37'], ['#2a2724', '#191715'], ['#5e5a3c', '#3c3926']][o.tint || 0];
+          const bus = o.type === 'bus';
+          x.fillStyle = bus ? '#5c5031' : pal[0]; rrect(-L, -Wd, L * 2, Wd * 2, bus ? 5 : 9); x.fill();
+          x.fillStyle = bus ? '#423a24' : pal[1]; rrect(-L * (bus ? 0.92 : 0.45), -Wd * 0.72, L * (bus ? 1.84 : 0.95), Wd * 1.44, 5); x.fill();
+          x.fillStyle = '#162026';
+          if (bus) {
+            for (let i = -5; i <= 5; i++) { x.fillRect(i * L * 0.16 - 5, -Wd + 3, 10, 5); x.fillRect(i * L * 0.16 - 5, Wd - 8, 10, 5); }
+          } else {
+            x.beginPath(); x.moveTo(L * 0.5, -Wd * 0.72); x.lineTo(L * 0.7, -Wd * 0.6); x.lineTo(L * 0.7, Wd * 0.6); x.lineTo(L * 0.5, Wd * 0.72); x.fill();
+            x.beginPath(); x.moveTo(-L * 0.45, -Wd * 0.72); x.lineTo(-L * 0.62, -Wd * 0.6); x.lineTo(-L * 0.62, Wd * 0.6); x.lineTo(-L * 0.45, Wd * 0.72); x.fill();
+            x.fillStyle = '#c9c0a0'; x.fillRect(L - 4, -Wd + 4, 3, 6); x.fillRect(L - 4, Wd - 10, 3, 6);
+          }
+          // scorch and rust
+          for (let i = 0; i < 4; i++) {
+            x.fillStyle = `rgba(${rnd() < 0.5 ? '15,12,10' : '110,52,24'},${0.25 + rnd() * 0.3})`;
+            x.beginPath(); x.arc((rnd() - 0.5) * L * 1.6, (rnd() - 0.5) * Wd * 1.4, 4 + rnd() * 9, 0, TAU); x.fill();
+          }
+          x.strokeStyle = 'rgba(0,0,0,0.5)'; x.lineWidth = 1.5;
+          x.beginPath(); x.moveTo(-L * 0.1, -Wd); x.lineTo(-L * 0.1, Wd); x.stroke();
+          break;
+        }
+        case 'barrier': {
+          x.fillStyle = '#6f6d64'; rrect(-L, -Wd, L * 2, Wd * 2, 3); x.fill();
+          x.fillStyle = '#8b897f'; x.fillRect(-L + 3, -Wd * 0.35, L * 2 - 6, Wd * 0.7);
+          for (const end of [-1, 1]) {
+            for (let i = 0; i < 3; i++) {
+              x.fillStyle = i % 2 ? '#1b1a17' : '#c9a227';
+              x.fillRect(end * (L - 6 - i * 7) - 3.5, -Wd, 7, Wd * 2);
+            }
+          }
+          x.strokeStyle = 'rgba(0,0,0,0.45)'; x.lineWidth = 1;
+          x.beginPath(); x.moveTo((rnd() - 0.5) * L, -Wd); x.lineTo((rnd() - 0.5) * L, Wd); x.stroke();
+          break;
+        }
+        case 'dumpster': {
+          x.fillStyle = '#2d4633'; rrect(-L, -Wd, L * 2, Wd * 2, 3); x.fill();
+          x.fillStyle = '#3a5a41'; x.fillRect(-L + 3, -Wd + 3, L - 4, Wd * 2 - 6); x.fillRect(1, -Wd + 3, L - 4, Wd * 2 - 6);
+          x.fillStyle = 'rgba(110,52,24,0.5)';
+          for (let i = 0; i < 3; i++) { x.beginPath(); x.arc((rnd() - 0.5) * L * 1.6, (rnd() - 0.5) * Wd * 1.4, 3 + rnd() * 5, 0, TAU); x.fill(); }
+          break;
+        }
+        case 'pillar': {
+          x.fillStyle = '#5f5d56'; x.beginPath(); x.arc(0, 0, o.r, 0, TAU); x.fill();
+          x.fillStyle = '#76746b'; x.beginPath(); x.arc(-2, -2, o.r * 0.78, 0, TAU); x.fill();
+          x.fillStyle = '#3a3833';
+          for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU; x.fillRect(Math.cos(a) * o.r * 0.45 - 1.5, Math.sin(a) * o.r * 0.45 - 1.5, 3, 3); }
+          break;
+        }
+        case 'barrels': {
+          x.fillStyle = '#9c8228'; x.beginPath(); x.arc(0, 0, o.r, 0, TAU); x.fill();
+          x.strokeStyle = '#5c4c16'; x.lineWidth = 2; x.beginPath(); x.arc(0, 0, o.r * 0.78, 0, TAU); x.stroke();
+          x.fillStyle = '#1b1a17';
+          for (let i = 0; i < 3; i++) {
+            const a = (i / 3) * TAU - Math.PI / 2;
+            x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, o.r * 0.55, a - 0.38, a + 0.38); x.closePath(); x.fill();
+          }
+          x.fillStyle = '#9c8228'; x.beginPath(); x.arc(0, 0, o.r * 0.16, 0, TAU); x.fill();
+          break;
+        }
+      }
+      c.hw = hw; c.hh = hh;
+      return c;
     }
 
     drawEnemies(ctx) {

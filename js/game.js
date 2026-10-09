@@ -61,6 +61,8 @@
         faceAngle: 0, aimAngle: 0, aimT: 0, moving: false, walk: 0, iframes: 0, hurt: 0,
         weapons: [], passives: {}, passiveOrder: [], stats: {}, statsVersion: 0, char: ch, pendingLevels: 0,
       };
+      this.world = new OO.World(Math.floor(Math.random() * 1e9));
+      this.world.update(0, 0);
       this.recalcStats();
       this.player.hp = this.player.stats.maxHp;
       this.addWeapon(ch.weapon);
@@ -304,6 +306,8 @@
         p.faceAngle = Math.atan2(ay, ax);
         p.walk += dt * 10 * Math.hypot(ax, ay);
       }
+      this.world.update(p.x, p.y);
+      this.world.resolveCircle(p, p.r);
       p.iframes -= dt; p.hurt -= dt; p.aimT -= dt;
       if (p.aimT <= 0) p.aimAngle = p.faceAngle;
       if (p.stats.regen) p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.regen * dt);
@@ -343,6 +347,7 @@
         dmg: d.dmg * (1 + m * 0.05), r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
+      if (!d.crate && this.world) this.world.resolveCircle(e, e.r);
       this.enemies.push(e);
       return e;
     }
@@ -384,6 +389,23 @@
           const c = Math.cos(wob), s = Math.sin(wob);
           const nx = mx * c - my * s; my = mx * s + my * c; mx = nx;
         }
+        // Obstacle avoidance: if something solid is just ahead, slide around it
+        // (the side is remembered briefly so they don't dither in front of a wall).
+        if (spd > 0) {
+          const ahead = e.r + 24;
+          const o = this.world.hitCircle(e.x + mx * ahead, e.y + my * ahead, e.r);
+          const ai = e.ai;
+          if (ai.sideT > 0) ai.sideT -= dt;
+          if (o) {
+            let tx = -(e.y - o.y), ty = e.x - o.x;
+            if (!(ai.sideT > 0)) { ai.side = tx * mx + ty * my >= 0 ? 1 : -1; ai.sideT = 1.2; }
+            tx *= ai.side; ty *= ai.side;
+            const tl = Math.hypot(tx, ty) || 1;
+            mx = mx * 0.35 + tx / tl; my = my * 0.35 + ty / tl;
+            const ml = Math.hypot(mx, my) || 1;
+            mx /= ml; my /= ml;
+          }
+        }
         e.a = Math.atan2(my, mx);
         e.x += mx * spd * dt + e.kbx * dt;
         e.y += my * spd * dt + e.kby * dt;
@@ -415,6 +437,7 @@
           o.x -= nx * push * (e.mass / tm); o.y -= ny * push * (e.mass / tm);
         }
       }
+      for (const e of this.enemies) if (!e.dead && !e.def.crate) this.world.resolveCircle(e, e.r);
     }
 
     nearestEnemy(x, y, maxD, exclude) {
@@ -426,6 +449,24 @@
         if (d < bd) { bd = d; best = e; }
       }
       return best;
+    }
+
+    /** Nearest enemy with a clear line of fire (obstacles block bullets). */
+    nearestVisible(x, y, maxD) {
+      const first = this.nearestEnemy(x, y, maxD);
+      if (!first || !this.world.blocked(x, y, first.x, first.y)) return first;
+      const md = maxD * maxD, cands = [];
+      for (const e of this.enemies) {
+        if (e.dead || e.def.crate) continue;
+        const d = U.dist2(x, y, e.x, e.y);
+        if (d < md) cands.push([d, e]);
+      }
+      cands.sort((a, b) => a[0] - b[0]);
+      for (let i = 0; i < cands.length && i < 10; i++) {
+        const e = cands[i][1];
+        if (!this.world.blocked(x, y, e.x, e.y)) return e;
+      }
+      return null;
     }
 
     randomEnemyNear(x, y, maxD, exclude) {
@@ -550,6 +591,11 @@
         pr.x += pr.vx * dt; pr.y += pr.vy * dt;
         pr.life -= dt;
         if (pr.life <= 0) { pr.dead = true; continue; }
+        if (this.world.hitCircle(pr.x, pr.y, pr.r)) {
+          pr.dead = true;
+          this.burst(pr.x, pr.y, '#ffd98a', 3, 90);
+          continue;
+        }
         this.grid.query(pr.x, pr.y, pr.r + 32, buf);
         for (const e of buf) {
           if (e.dead || pr.hit.has(e.id)) continue;
