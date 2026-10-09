@@ -35,10 +35,11 @@
       if (this.timer <= 0) {
         this.timer = w.interval;
         const alive = g.enemies.length;
+        const target = w.target * g.difficulty.count;
         // Top up toward the wave's target quickly, trickle a little past it, then hold.
         let n = 0;
-        if (alive < w.target) n = w.batch + Math.ceil((w.target - alive) * 0.25);
-        else if (alive < w.target * 1.3) n = w.batch;
+        if (alive < target) n = w.batch + Math.ceil((target - alive) * 0.25);
+        else if (alive < target * 1.3) n = w.batch;
         for (let i = 0; i < n && g.enemies.length < OO.CONFIG.MAX_ENEMIES; i++) {
           const [x, y] = this.ringPos(g.spawnRadius + U.rand(0, 80));
           g.spawnEnemy(U.weightedPick(w.pool), x, y);

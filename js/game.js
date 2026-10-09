@@ -117,6 +117,17 @@
       this.ui.hideAll();
     }
 
+    toggleSetting(key) {
+      this.settings[key] = !this.settings[key];
+      U.storage.set('oo.settings', this.settings);
+    }
+
+    setDifficulty(id) {
+      if (!OO.DIFFICULTY[id]) return;
+      this.settings.difficulty = id;
+      U.storage.set('oo.settings', this.settings);
+    }
+
     toggleMute() {
       this.settings.muted = !this.settings.muted;
       OO.Audio.setMuted(this.settings.muted);
@@ -427,12 +438,13 @@
     // ------------------------------------------------------------ enemies
     spawnEnemy(type, x, y) {
       const d = OO.ENEMIES[type], m = this.time / 60;
-      const hpMul = d.crate ? 1 : d.boss ? 1 + m * 0.12 : 1 + m * 0.15;
+      const diff = this.difficulty;
+      const hpMul = d.crate ? 1 : (d.boss ? 1 + m * 0.12 : 1 + m * 0.15) * diff.hp;
       const e = {
         id: ++this.nextId, type, def: d, x, y,
         hp: d.hp * hpMul, maxHp: d.hp * hpMul,
         speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)),
-        dmg: d.dmg * (1 + m * 0.05), r: d.r, mass: d.mass,
+        dmg: d.dmg * (1 + m * 0.05) * diff.dmg, r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
       if (!d.crate && !d.burster && this.world) this.world.resolveCircle(e, e.r);
@@ -623,7 +635,7 @@
       const bile = e.def.blood === 'bile';
       this.addDecal(e.x, e.y, e.r * U.rand(1.4, 2.1), bile ? 'bile' : 'red');
       this.burst(e.x, e.y, bile ? '#a8b83a' : '#8f1712', e.def.boss ? 50 : 7, e.def.boss ? 280 : 140);
-      if (e.def.explode) this.pendingExplosions.push({ x: e.x, y: e.y, r: e.def.explode.r, dmg: e.def.explode.dmg, enemyDmg: e.def.explode.enemyDmg, kind: 'bile' });
+      if (e.def.explode) this.pendingExplosions.push({ x: e.x, y: e.y, r: e.def.explode.r, dmg: e.def.explode.dmg * this.enemyDmgScale(), enemyDmg: e.def.explode.enemyDmg, kind: 'bile' });
       if (e.def.burster) this.detonate(e);
       if (e.def.elite) this.addPickup('case', e.x, e.y, { big: false });
       if (e.def.boss) {
@@ -773,7 +785,7 @@
     }
 
     /** Damage multiplier for enemy attacks at the current time. */
-    enemyDmgScale() { return 1 + (this.time / 60) * 0.05; }
+    enemyDmgScale() { return (1 + (this.time / 60) * 0.05) * this.difficulty.dmg; }
 
     spit(e) {
       const p = this.player, R = e.def.ranged;
@@ -967,7 +979,7 @@
     // ------------------------------------------------------------ effects
     addEffect(fx) { if (this.effects.length < 120) this.effects.push(fx); }
     addLight(x, y, r, i, life) { if (this.lights.length < 40) this.lights.push({ x, y, r, i, life: life || 0.05, max: life || 0.05 }); }
-    shake(a) { if (!this.reducedMotion) this.shakeAmt = Math.max(this.shakeAmt, a); }
+    shake(a) { if (!this.reducedMotion && this.settings.shake) this.shakeAmt = Math.max(this.shakeAmt, a); }
 
     addText(x, y, val, kind) {
       if (this.texts.length > 90) this.texts.shift();

@@ -16,11 +16,15 @@
       this.screens = ['screen-menu', 'screen-levelup', 'screen-chest', 'screen-pause', 'screen-results', 'screen-armory'];
 
       this.buildMenu();
+      this.buildDifficulty();
+      this.updateSettings();
       $('btn-start').addEventListener('click', () => this.startRun());
       $('btn-armory').addEventListener('click', () => this.showArmory());
       $('armory-back').addEventListener('click', () => this.showMenu());
       $('armory-refund').addEventListener('click', () => { this.g.refundArmory(); this.showArmory(); });
       $('btn-reroll').addEventListener('click', () => this.g.reroll());
+      $('set-shake').addEventListener('click', () => { this.g.toggleSetting('shake'); this.updateSettings(); });
+      $('set-numbers').addEventListener('click', () => { this.g.toggleSetting('damageNumbers'); this.updateSettings(); });
       $('btn-skip').addEventListener('click', () => { if (performance.now() >= this.lockUntil) this.g.skipLevel(); });
       $('btn-resume').addEventListener('click', () => this.g.resume());
       $('btn-quit').addEventListener('click', () => this.g.quitToMenu());
@@ -61,6 +65,32 @@
         b.addEventListener('click', () => this.selectChar(id));
         list.appendChild(b);
       }
+    }
+
+    buildDifficulty() {
+      const list = $('diff-list');
+      list.innerHTML = '';
+      for (const id in OO.DIFFICULTY) {
+        const d = OO.DIFFICULTY[id];
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'threat-btn threat-' + id;
+        b.id = 'diff-' + id;
+        b.setAttribute('aria-pressed', String(this.g.settings.difficulty === id));
+        b.innerHTML = `<span class="threat-name">${esc(d.name)}</span><span class="threat-text">${esc(d.text)}</span>`;
+        b.addEventListener('click', () => {
+          this.g.setDifficulty(id);
+          for (const k in OO.DIFFICULTY) $('diff-' + k).setAttribute('aria-pressed', String(k === id));
+          OO.Audio.init(); OO.Audio.play('select');
+        });
+        list.appendChild(b);
+      }
+    }
+
+    updateSettings() {
+      const s = this.g.settings;
+      $('set-shake').textContent = 'Screen shake: ' + (s.shake ? 'on' : 'off');
+      $('set-numbers').textContent = 'Damage numbers: ' + (s.damageNumbers ? 'on' : 'off');
     }
 
     selectChar(id) {

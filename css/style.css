@@ -231,6 +231,23 @@ kbd {
 }
 .records { color: #b3ac9b; font-variant-numeric: tabular-nums; }
 
+.threat { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.threat-btn {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  text-align: left;
+  background: rgba(8, 10, 9, 0.6);
+  border: 2px solid var(--line);
+}
+.threat-btn[aria-pressed="true"] { border-color: var(--amber); background: rgba(227, 163, 59, 0.08); }
+.threat-nightmare[aria-pressed="true"] { border-color: var(--blood); background: rgba(163, 32, 27, 0.14); }
+.threat-name { font-family: var(--font-display); font-weight: 800; font-size: 20px; text-transform: uppercase; line-height: 1.1; }
+.threat-nightmare .threat-name { color: #ff5a4a; }
+.threat-text { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+
+.settings { display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* ------------------------------------------------------------------ buttons */
 .btn {
   padding: 12px 28px;

@@ -930,7 +930,10 @@
       ctx.fillText(U.formatTime(g.time), W / 2, top + 20);
       ctx.font = `500 10px ${FONT_MONO}`;
       ctx.fillStyle = '#8f8a7d';
-      ctx.fillText('EVAC IN ' + U.formatTime(remaining), W / 2, top + 58);
+      ctx.fillText('EVAC IN ' + U.formatTime(remaining) + (g.settings.difficulty === 'nightmare' ? ' · NIGHTMARE' : ''), W / 2, top + 58);
+
+      // Off-screen markers: bosses, elites and supply cases you can't see yet
+      this.drawOffscreenMarkers();
 
       // Kills and credits (left of the DOM pause/mute buttons)
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
@@ -995,6 +998,31 @@
         ctx.fillStyle = '#d4291f'; ctx.fillRect(bx, by + 1, bw * (hp / max), 6);
       }
       ctx.textBaseline = 'alphabetic';
+    }
+
+    drawOffscreenMarkers() {
+      const g = this.g, ctx = this.ctx, z = g.zoom, W = this.w, H = this.h;
+      const marks = [];
+      for (const e of g.enemies) {
+        if (e.dead || !(e.def.boss || e.def.elite)) continue;
+        marks.push([e.x, e.y, e.def.boss ? '#ff3b2f' : '#ff8a3a', e.def.boss ? 13 : 9]);
+      }
+      for (const k of g.pickups) if (k.kind === 'case' && !k.dead) marks.push([k.x, k.y, '#e3a33b', 9]);
+      const cx = W / 2, cy = H / 2, mx = 22, myTop = 100, myBot = 22;
+      for (const [wx, wy, col, size] of marks) {
+        const sx = (wx - this.cam.x) * z, sy = (wy - this.cam.y) * z;
+        if (sx > 0 && sx < W && sy > 0 && sy < H) continue;
+        const a = Math.atan2(sy - cy, sx - cx), tx = Math.cos(a), ty = Math.sin(a);
+        const kx = (cx - mx) / Math.max(Math.abs(tx), 1e-3);
+        const ky = ty < 0 ? (cy - myTop) / Math.max(-ty, 1e-3) : (cy - myBot) / Math.max(ty, 1e-3);
+        const k = Math.min(kx, ky), px = cx + tx * k, py = cy + ty * k;
+        ctx.save();
+        ctx.translate(px, py); ctx.rotate(a);
+        ctx.fillStyle = col;
+        ctx.globalAlpha = 0.75 + Math.sin(g.time * 6) * 0.2;
+        ctx.beginPath(); ctx.moveTo(size, 0); ctx.lineTo(-size * 0.7, -size * 0.75); ctx.lineTo(-size * 0.35, 0); ctx.lineTo(-size * 0.7, size * 0.75); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
     }
 
     drawStick() {
