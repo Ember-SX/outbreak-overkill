@@ -10,12 +10,12 @@
 
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory)
-    MAX_ENEMIES: 450,
+    MAX_ENEMIES: 500,
     MAX_GEMS: 320,                // past this, new XP merges into one overflow gem
     MAX_WEAPONS: 6,
     MAX_PASSIVES: 6,
     LIGHT_RADIUS: 330,            // flashlight radius in world units
-    PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.45 },
+    PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.4 },
     xpToNext(level) {
       if (level < 20) return 5 + (level - 1) * 8;
       if (level < 40) return 157 + (level - 20) * 12;
@@ -26,13 +26,13 @@
   // ---------------------------------------------------------------- ENEMIES
   // hp/dmg scale with time in game.spawnEnemy(). r = collision radius. mass = knockback resistance.
   OO.ENEMIES = {
-    shambler: { name: 'Shambler',    hp: 12,   speed: 36, dmg: 8,  r: 13, xp: 1,   mass: 1,   body: '#56613f', skin: '#7f8b61', eye: '#ffd24a', blood: 'red' },
-    hound:    { name: 'Rot Hound',   hp: 8,    speed: 96, dmg: 6,  r: 11, xp: 1,   mass: 0.6, body: '#4d2a22', skin: '#8b4b3a', eye: '#ff5a2a', blood: 'red' },
-    skinner:  { name: 'Skinner',     hp: 32,   speed: 70, dmg: 12, r: 13, xp: 3,   mass: 1.2, body: '#7a211d', skin: '#b8473d', eye: '#fff0e8', blood: 'red' },
+    shambler: { name: 'Shambler',    hp: 12,   speed: 40, dmg: 8,  r: 13, xp: 1,   mass: 1,   body: '#56613f', skin: '#7f8b61', eye: '#ffd24a', blood: 'red' },
+    hound:    { name: 'Rot Hound',   hp: 9,    speed: 100, dmg: 7,  r: 11, xp: 1,   mass: 0.6, body: '#4d2a22', skin: '#8b4b3a', eye: '#ff5a2a', blood: 'red' },
+    skinner:  { name: 'Skinner',     hp: 36,   speed: 72, dmg: 12, r: 13, xp: 3,   mass: 1.2, body: '#7a211d', skin: '#b8473d', eye: '#fff0e8', blood: 'red' },
     bloater:  { name: 'Bloater',     hp: 70,   speed: 25, dmg: 14, r: 22, xp: 5,   mass: 3,   body: '#666e2c', skin: '#a2ad48', eye: '#eaff7a', blood: 'bile',
                 explode: { r: 78, dmg: 16, enemyDmg: 45 } },
     brute:    { name: 'Brute',       hp: 450,  speed: 42, dmg: 22, r: 26, xp: 25,  mass: 10,  body: '#3c3e46', skin: '#6c707c', eye: '#ff3a30', blood: 'red', elite: true },
-    stalker:  { name: 'The Stalker', hp: 4000, speed: 56, dmg: 30, r: 32, xp: 120, mass: 40,  body: '#1b1620', skin: '#3b2d45', eye: '#ff2444', blood: 'red', boss: true },
+    stalker:  { name: 'The Stalker', hp: 4800, speed: 58, dmg: 30, r: 32, xp: 120, mass: 40,  body: '#1b1620', skin: '#3b2d45', eye: '#ff2444', blood: 'red', boss: true },
     crate:    { name: 'Supply Crate', hp: 1,   speed: 0,  dmg: 0,  r: 15, xp: 0,   mass: 999, crate: true },
   };
 
@@ -152,37 +152,39 @@
   // One entry per minute. pool = weighted enemy types. target = on-field count the
   // director tops up to. interval/batch = steady trickle on top of that.
   OO.WAVES = [
-    { pool: [['shambler', 1]],                                                   target: 18,  interval: 1.2, batch: 2 },
-    { pool: [['shambler', 7], ['hound', 3]],                                     target: 40,  interval: 1.0, batch: 3 },
-    { pool: [['shambler', 6], ['hound', 4]],                                     target: 60,  interval: 1.0, batch: 3 },
-    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3]],                     target: 80,  interval: 0.9, batch: 3 },
-    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3], ['bloater', 1]],     target: 100, interval: 0.9, batch: 4 },
-    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 1]],                   target: 110, interval: 0.9, batch: 4 },
-    { pool: [['skinner', 6], ['hound', 3], ['bloater', 1]],                      target: 140, interval: 0.8, batch: 4 },
-    { pool: [['shambler', 4], ['bloater', 3], ['skinner', 3]],                   target: 160, interval: 0.8, batch: 5 },
-    { pool: [['hound', 6], ['skinner', 3], ['bloater', 1]],                      target: 200, interval: 0.7, batch: 5 },
-    { pool: [['shambler', 3], ['hound', 3], ['skinner', 3], ['bloater', 1]],     target: 230, interval: 0.7, batch: 6 },
-    { pool: [['skinner', 5], ['bloater', 2], ['hound', 3]],                      target: 260, interval: 0.6, batch: 6 },
-    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 2]],                   target: 290, interval: 0.6, batch: 7 },
-    { pool: [['hound', 4], ['skinner', 4], ['bloater', 2]],                      target: 320, interval: 0.5, batch: 7 },
-    { pool: [['skinner', 5], ['bloater', 3], ['hound', 2]],                      target: 350, interval: 0.5, batch: 8 },
-    { pool: [['shambler', 2], ['hound', 3], ['skinner', 4], ['bloater', 3]],     target: 400, interval: 0.4, batch: 9 },
+    { pool: [['shambler', 1]],                                                   target: 22,  interval: 1.08, batch: 3 },
+    { pool: [['shambler', 7], ['hound', 3]],                                     target: 48,  interval: 0.9, batch: 4 },
+    { pool: [['shambler', 6], ['hound', 4]],                                     target: 72,  interval: 0.9, batch: 4 },
+    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3]],                     target: 96,  interval: 0.81, batch: 4 },
+    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3], ['bloater', 1]],     target: 120, interval: 0.81, batch: 5 },
+    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 1]],                   target: 132, interval: 0.81, batch: 5 },
+    { pool: [['skinner', 6], ['hound', 3], ['bloater', 1]],                      target: 168, interval: 0.72, batch: 5 },
+    { pool: [['shambler', 4], ['bloater', 3], ['skinner', 3]],                   target: 192, interval: 0.72, batch: 6 },
+    { pool: [['hound', 6], ['skinner', 3], ['bloater', 1]],                      target: 240, interval: 0.63, batch: 6 },
+    { pool: [['shambler', 3], ['hound', 3], ['skinner', 3], ['bloater', 1]],     target: 276, interval: 0.63, batch: 7 },
+    { pool: [['skinner', 5], ['bloater', 2], ['hound', 3]],                      target: 312, interval: 0.54, batch: 7 },
+    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 2]],                   target: 348, interval: 0.54, batch: 8 },
+    { pool: [['hound', 4], ['skinner', 4], ['bloater', 2]],                      target: 384, interval: 0.45, batch: 8 },
+    { pool: [['skinner', 5], ['bloater', 3], ['hound', 2]],                      target: 420, interval: 0.45, batch: 9 },
+    { pool: [['shambler', 2], ['hound', 3], ['skinner', 4], ['bloater', 3]],     target: 480, interval: 0.36, batch: 10 },
   ];
 
   // Scripted moments. kinds: pack (clustered rush), ring (encirclement), elite, boss, banner.
   OO.EVENTS = [
     { t: 60,  kind: 'banner', text: 'Rot Hounds are on your scent' },
     { t: 90,  kind: 'pack',  enemy: 'hound',    count: 20 },
-    { t: 150, kind: 'elite', enemy: 'brute',    count: 1, text: 'Brute sighted' },
+    { t: 120, kind: 'elite', enemy: 'brute',    count: 1, text: 'Brute sighted' },
     { t: 210, kind: 'ring',  enemy: 'shambler', count: 40, text: 'They have you surrounded' },
     { t: 240, kind: 'elite', enemy: 'brute',    count: 1 },
     { t: 300, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'Warning: The Stalker is hunting you' },
-    { t: 390, kind: 'pack',  enemy: 'hound',    count: 35 },
+    { t: 330, kind: 'elite', enemy: 'brute',    count: 1 },
+    { t: 390, kind: 'pack',  enemy: 'hound',    count: 40 },
     { t: 420, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 480, kind: 'ring',  enemy: 'bloater',  count: 18, text: 'Bloaters closing in. Keep your distance' },
     { t: 540, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 600, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'The Stalker is back, and angrier' },
-    { t: 660, kind: 'pack',  enemy: 'hound',    count: 50 },
+    { t: 660, kind: 'pack',  enemy: 'hound',    count: 60 },
+    { t: 690, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 720, kind: 'ring',  enemy: 'skinner',  count: 70, text: 'Skinners in the walls' },
     { t: 780, kind: 'elite', enemy: 'brute',    count: 3 },
     { t: 840, kind: 'boss',  enemy: 'stalker',  count: 2, text: 'Two Stalkers. Evac is one minute out' },

@@ -335,12 +335,12 @@
     // ------------------------------------------------------------ enemies
     spawnEnemy(type, x, y) {
       const d = OO.ENEMIES[type], m = this.time / 60;
-      const hpMul = d.crate ? 1 : d.boss ? 1 + m * 0.1 : 1 + m * 0.12;
+      const hpMul = d.crate ? 1 : d.boss ? 1 + m * 0.12 : 1 + m * 0.15;
       const e = {
         id: ++this.nextId, type, def: d, x, y,
         hp: d.hp * hpMul, maxHp: d.hp * hpMul,
         speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)),
-        dmg: d.dmg * (1 + m * 0.04), r: d.r, mass: d.mass,
+        dmg: d.dmg * (1 + m * 0.05), r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
       this.enemies.push(e);
