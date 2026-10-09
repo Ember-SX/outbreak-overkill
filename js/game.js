@@ -54,6 +54,7 @@
       this.enemies = []; this.projectiles = []; this.pickups = []; this.zones = []; this.lobs = [];
       this.effects = []; this.particles = []; this.decals = []; this.texts = []; this.lights = [];
       this.pendingExplosions = [];
+      this.enemyShots = []; this.hazards = [];
       this.overflowGem = null; this.gemCount = 0;
       this.shakeAmt = 0; this.flashWhite = 0; this.xpCombo = 0; this.xpComboT = 0; this.heartT = 0;
       this.player = {
@@ -300,6 +301,7 @@
       // Player movement
       const ax = Input.axis.x, ay = Input.axis.y;
       p.moving = ax !== 0 || ay !== 0;
+      p.vx = ax * p.stats.speed; p.vy = ay * p.stats.speed;
       if (p.moving) {
         p.x += ax * p.stats.speed * dt;
         p.y += ay * p.stats.speed * dt;
@@ -322,6 +324,8 @@
       for (const w of p.weapons) w.update(dt, this);
       this.updateProjectiles(dt);
       this.updateLobs(dt);
+      this.updateEnemyShots(dt);
+      this.updateHazards(dt);
       this.updateZones(dt);
       this.processExplosions();
       this.updatePickups(dt);
@@ -384,6 +388,24 @@
           } else if (ai.timer <= 0 && d < 520) {
             ai.mode = 'wind'; ai.timer = 0.7;
           }
+        } else if (e.def.ranged) {
+          // Spitter: hold a firing distance, strafe, wind up, spit.
+          const R = e.def.ranged, ai = e.ai;
+          if (ai.cd === undefined) { ai.cd = U.rand(1, 2); ai.wind = 0; ai.strafe = U.chance(0.5) ? 1 : -1; }
+          if (ai.wind > 0) {
+            spd = 0;
+            ai.wind -= dt;
+            if (ai.wind <= 0) this.spit(e);
+          } else {
+            if (d < R.min) { mx = -mx; my = -my; spd *= 0.85; }
+            else if (d <= R.max) { const tx = -my * ai.strafe, ty = mx * ai.strafe; mx = tx; my = ty; spd *= 0.55; }
+            ai.cd -= dt;
+            if (ai.cd <= 0 && d < R.max + 60) {
+              ai.wind = R.windup;
+              ai.cd = U.rand(R.cd[0], R.cd[1]);
+              OO.Audio.play('gurgle');
+            }
+          }
         } else if (e.type === 'shambler') {
           const wob = Math.sin(e.t * 1.7 + e.id) * 0.35;
           const c = Math.cos(wob), s = Math.sin(wob);
@@ -411,6 +433,7 @@
         e.y += my * spd * dt + e.kby * dt;
         const k = Math.max(0, 1 - dt * 9);
         e.kbx *= k; e.kby *= k;
+        if (e.def.ranged) e.a = Math.atan2(dy, dx);   // always faces you, even while backing off
 
         if (d < e.r + p.r) this.hurtPlayer(e.dmg);
       }
@@ -561,6 +584,49 @@
           if (d < ex.r + o.r) this.damageEnemy(o, ex.enemyDmg, (dx / d) * 220, (dy / d) * 220, null);
         }
       }
+    }
+
+    /** Damage multiplier for enemy attacks at the current time. */
+    enemyDmgScale() { return 1 + (this.time / 60) * 0.05; }
+
+    spit(e) {
+      const p = this.player, R = e.def.ranged;
+      const lead = R.flight * 0.5;      // aims where you're going, but only half-committed
+      const tx = p.x + (p.vx || 0) * lead + U.rand(-14, 14);
+      const ty = p.y + (p.vy || 0) * lead + U.rand(-14, 14);
+      this.enemyShots.push({ x0: e.x, y0: e.y, x1: tx, y1: ty, t: 0, dur: R.flight, r: R.splash,
+        impact: R.impact * this.enemyDmgScale(), pool: R.pool });
+      OO.Audio.play('spit');
+    }
+
+    updateEnemyShots(dt) {
+      const p = this.player;
+      for (const s of this.enemyShots) {
+        s.t += dt;
+        if (s.t < s.dur) continue;
+        s.dead = true;
+        if (U.dist2(p.x, p.y, s.x1, s.y1) < (s.r + p.r) ** 2) this.hurtPlayer(s.impact);
+        this.hazards.push({ x: s.x1, y: s.y1, r: s.pool.r, life: s.pool.life, max: s.pool.life, tick: s.pool.tick, tickT: 0.1,
+          dmg: s.pool.dmg * this.enemyDmgScale(), seed: Math.random() * 100 });
+        this.burst(s.x1, s.y1, '#a8d84a', 10, 150);
+        this.addDecal(s.x1, s.y1, s.r * 0.7, 'bile');
+        OO.Audio.play('splat');
+      }
+      compact(this.enemyShots);
+    }
+
+    updateHazards(dt) {
+      const p = this.player;
+      for (const h of this.hazards) {
+        h.life -= dt;
+        if (h.life <= 0) { h.dead = true; continue; }
+        h.tickT -= dt;
+        if (h.tickT <= 0) {
+          h.tickT = h.tick;
+          if (U.dist2(p.x, p.y, h.x, h.y) < (h.r + p.r * 0.4) ** 2) this.hurtPlayer(h.dmg);
+        }
+      }
+      compact(this.hazards);
     }
 
     airstrike() {

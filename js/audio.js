@@ -109,6 +109,20 @@
         if (!throttle(name, 90)) return;
         noise({ dur: 0.4, vol: 0.25, freq: 900, f2: 200 });
         break;
+      case 'gurgle':
+        if (!throttle(name, 160)) return;
+        tone({ type: 'sine', f: 110, f2: 300, dur: 0.5, vol: 0.07 });
+        noise({ dur: 0.45, vol: 0.05, freq: 500, f2: 1400, type: 'bandpass', q: 4 });
+        break;
+      case 'spit':
+        if (!throttle(name, 90)) return;
+        noise({ dur: 0.18, vol: 0.18, freq: 1600, f2: 400, type: 'bandpass', q: 2 });
+        tone({ type: 'sine', f: 320, f2: 140, dur: 0.14, vol: 0.08 });
+        break;
+      case 'splat':
+        if (!throttle(name, 90)) return;
+        noise({ dur: 0.28, vol: 0.2, freq: 900, f2: 160 });
+        break;
       case 'saw':
         if (!throttle(name, 400)) return;
         tone({ type: 'sawtooth', f: 90, f2: 140, dur: 0.3, vol: 0.03 });

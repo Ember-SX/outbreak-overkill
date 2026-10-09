@@ -10,8 +10,8 @@
   const TAU = Math.PI * 2;
   const FONT_DISPLAY = '"Big Shoulders Stencil Display", Impact, "Arial Narrow", sans-serif';
   const FONT_MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
-  const HEAD = { shambler: 0.45, hound: 1.45, skinner: 0.35, bloater: 0.6, brute: 0.55, stalker: 0.5 };
-  const ANIM = { shambler: 5, hound: 16, skinner: 9, bloater: 4, brute: 3, stalker: 4 };   // anim speed (rad/s)
+  const HEAD = { spitter: 0.3, shambler: 0.45, hound: 1.45, skinner: 0.35, bloater: 0.6, brute: 0.55, stalker: 0.5 };
+  const ANIM = { spitter: 6, shambler: 5, hound: 16, skinner: 9, bloater: 4, brute: 3, stalker: 4 };   // anim speed (rad/s)
   const FRAMES = 8;
   const SPRITE_SCALE = 2;
 
@@ -172,6 +172,8 @@
       this.drawObstacleEdges(ctx);
       this.drawEyes(ctx);
       this.drawPickups(ctx);
+      this.drawHazards(ctx);
+      this.drawEnemyShots(ctx);
       this.drawProjectiles(ctx);
       this.drawEffects(ctx, true);
       this.drawTexts(ctx);
@@ -439,6 +441,12 @@
       ctx.drawImage(spr, -spr.half, -spr.half, spr.half * 2, spr.half * 2);
       ctx.restore();
 
+      if (e.def.ranged && e.ai.wind > 0) {
+        const k = 1 - e.ai.wind / e.def.ranged.windup;
+        const sx = e.x + Math.cos(e.a) * r * 0.65, sy = e.y + Math.sin(e.a) * r * 0.65;
+        ctx.fillStyle = `rgba(190,240,90,${0.55 + k * 0.4})`;
+        circle(ctx, sx, sy, r * (0.45 + k * 0.45));
+      }
       if (e.type === 'stalker' && e.ai.mode === 'wind') {
         ctx.strokeStyle = `rgba(255,40,60,${0.5 + Math.sin(e.t * 40) * 0.4})`;
         ctx.lineWidth = 3;
@@ -505,6 +513,19 @@
           ctx.fillStyle = fl ? '#fff' : '#e8909c'; circle(ctx, r * 0.35, 0, r * 0.55);
           ctx.strokeStyle = fl ? '#fff' : '#b35a68'; ctx.lineWidth = 1.2;
           ctx.beginPath(); ctx.moveTo(r * 0.1, 0); ctx.lineTo(r * 0.75, 0); ctx.stroke();
+          break;
+        }
+        case 'spitter': {
+          const pulse = Math.sin(t * 6) * 0.06;
+          ctx.fillStyle = body;
+          ctx.beginPath(); ctx.ellipse(-r * 0.15, 0, r * 1.05, r * 0.9, 0, 0, TAU); ctx.fill();
+          ctx.fillStyle = fl ? '#fff' : '#22361b';
+          for (let i = 0; i < 4; i++) circle(ctx, -r * 0.9 + i * r * 0.3, 0, r * 0.14);
+          ctx.fillStyle = fl ? '#fff' : '#b8e070';
+          circle(ctx, r * 0.55, 0, r * (0.5 + pulse));
+          ctx.fillStyle = skin; circle(ctx, r * 0.2, 0, r * 0.42);
+          ctx.fillStyle = fl ? '#fff' : '#1b2a12';
+          ctx.beginPath(); ctx.ellipse(r * 0.95, 0, r * 0.16, r * 0.3, 0, 0, TAU); ctx.fill();
           break;
         }
         case 'brute': {
@@ -652,6 +673,41 @@
       c.half = half;
       this.cache.set(key, c);
       return c;
+    }
+
+    /** Acid pools: drawn over the darkness so you can always see where not to stand. */
+    drawHazards(ctx) {
+      const t = this.g.time;
+      for (const h of this.g.hazards) {
+        if (!this.inView(h.x, h.y, h.r)) continue;
+        const a = Math.min(1, h.life / 0.6, (h.max - h.life) / 0.15 + 0.2);
+        const gr = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.r);
+        gr.addColorStop(0, `rgba(150,210,60,${0.5 * a})`);
+        gr.addColorStop(0.7, `rgba(110,170,40,${0.38 * a})`);
+        gr.addColorStop(1, 'rgba(80,120,20,0)');
+        ctx.fillStyle = gr; circle(ctx, h.x, h.y, h.r);
+        ctx.fillStyle = `rgba(210,255,140,${0.6 * a})`;
+        for (let i = 0; i < 4; i++) {
+          const ph = (t * 1.3 + h.seed + i * 0.37) % 1;
+          const ang = h.seed * 7 + i * 2.1, rr = h.r * 0.55 * ((i * 0.31 + h.seed) % 1);
+          circle(ctx, h.x + Math.cos(ang) * rr, h.y + Math.sin(ang) * rr, 1 + ph * 3.5);
+        }
+      }
+    }
+
+    /** Spitter globs in flight, plus a closing reticle on the landing spot. */
+    drawEnemyShots(ctx) {
+      for (const s of this.g.enemyShots) {
+        const k = U.clamp(s.t / s.dur, 0, 1);
+        ctx.strokeStyle = `rgba(190,240,90,${0.25 + k * 0.55})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath(); ctx.arc(s.x1, s.y1, s.r * (1.5 - k * 0.5), 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+        const x = U.lerp(s.x0, s.x1, k), y = U.lerp(s.y0, s.y1, k) - Math.sin(k * Math.PI) * 80;
+        ctx.fillStyle = 'rgba(150,210,60,0.35)'; circle(ctx, x, y, 9);
+        ctx.fillStyle = '#c6f06a'; circle(ctx, x, y, 5);
+      }
     }
 
     drawProjectiles(ctx) {
