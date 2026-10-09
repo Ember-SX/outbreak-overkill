@@ -15,6 +15,8 @@
     MAX_WEAPONS: 6,
     MAX_PASSIVES: 6,
     LIGHT_RADIUS: 330,            // flashlight radius in world units
+    // Burster stampede: warning time, when the lane locks (seconds before launch), row spacing.
+    STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44, homing: 0.12 },
     PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.4 },
     xpToNext(level) {
       if (level < 20) return 5 + (level - 1) * 8;
@@ -35,6 +37,9 @@
                 // Keeps its distance, swells up, then lobs acid where you're heading. The pool lingers.
                 ranged: { min: 190, max: 310, cd: [2.4, 3.4], windup: 0.6, flight: 0.85, splash: 34, impact: 12,
                           pool: { r: 40, life: 3.6, tick: 0.35, dmg: 6 } } },
+    burster:  { name: 'Burster',     hp: 6,    speed: 430, dmg: 0, r: 10, xp: 1,   mass: 0.5, body: '#6a1830', skin: '#c94f6c', eye: '#ffe6e6', blood: 'red',
+                // Only arrive in stampedes (see OO.EVENTS kind 'stampede'). Explode on contact with you or cover.
+                burster: { r: 64, dmg: 42, enemyDmg: 90 } },
     brute:    { name: 'Brute',       hp: 450,  speed: 42, dmg: 22, r: 26, xp: 25,  mass: 10,  body: '#3c3e46', skin: '#6c707c', eye: '#ff3a30', blood: 'red', elite: true },
     stalker:  { name: 'The Stalker', hp: 4800, speed: 58, dmg: 30, r: 32, xp: 120, mass: 40,  body: '#1b1620', skin: '#3b2d45', eye: '#ff2444', blood: 'red', boss: true },
     crate:    { name: 'Supply Crate', hp: 1,   speed: 0,  dmg: 0,  r: 15, xp: 0,   mass: 999, crate: true },
@@ -179,21 +184,29 @@
     { t: 90,  kind: 'pack',  enemy: 'hound',    count: 20 },
     { t: 120, kind: 'elite', enemy: 'brute',    count: 1, text: 'Brute sighted' },
     { t: 135, kind: 'banner', text: 'Spitters: keep moving, the acid lingers' },
+    { t: 165, kind: 'stampede', count: 7,  text: 'Stampede! Get behind cover' },
     { t: 210, kind: 'ring',  enemy: 'shambler', count: 40, text: 'They have you surrounded' },
     { t: 240, kind: 'elite', enemy: 'brute',    count: 1 },
     { t: 300, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'Warning: The Stalker is hunting you' },
+    { t: 285, kind: 'stampede', count: 9,  text: 'Bursters again. Find cover' },
     { t: 330, kind: 'elite', enemy: 'brute',    count: 1 },
     { t: 360, kind: 'pack',  enemy: 'spitter',  count: 8, text: 'A nest of Spitters' },
     { t: 390, kind: 'pack',  enemy: 'hound',    count: 40 },
+    { t: 405, kind: 'stampede', count: 11 },
     { t: 420, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 480, kind: 'ring',  enemy: 'bloater',  count: 18, text: 'Bloaters closing in. Keep your distance' },
+    { t: 510, kind: 'stampede', count: 11, ranks: 2, text: 'Double stampede' },
     { t: 540, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 600, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'The Stalker is back, and angrier' },
+    { t: 645, kind: 'stampede', count: 13, ranks: 2 },
     { t: 660, kind: 'pack',  enemy: 'hound',    count: 60 },
     { t: 690, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 720, kind: 'ring',  enemy: 'skinner',  count: 70, text: 'Skinners in the walls' },
+    { t: 735, kind: 'stampede', count: 13, ranks: 2 },
     { t: 780, kind: 'elite', enemy: 'brute',    count: 3 },
+    { t: 815, kind: 'stampede', count: 15, ranks: 2 },
     { t: 840, kind: 'boss',  enemy: 'stalker',  count: 2, text: 'Two Stalkers. Evac is one minute out' },
     { t: 870, kind: 'banner', text: 'Evac helicopter inbound. Hold on' },
+    { t: 880, kind: 'stampede', count: 15, ranks: 2, text: 'One last stampede' },
   ];
 })(window.OO = window.OO || {});

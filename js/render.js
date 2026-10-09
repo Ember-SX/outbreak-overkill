@@ -10,8 +10,8 @@
   const TAU = Math.PI * 2;
   const FONT_DISPLAY = '"Big Shoulders Stencil Display", Impact, "Arial Narrow", sans-serif';
   const FONT_MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
-  const HEAD = { spitter: 0.3, shambler: 0.45, hound: 1.45, skinner: 0.35, bloater: 0.6, brute: 0.55, stalker: 0.5 };
-  const ANIM = { spitter: 6, shambler: 5, hound: 16, skinner: 9, bloater: 4, brute: 3, stalker: 4 };   // anim speed (rad/s)
+  const HEAD = { burster: 0.9, spitter: 0.3, shambler: 0.45, hound: 1.45, skinner: 0.35, bloater: 0.6, brute: 0.55, stalker: 0.5 };
+  const ANIM = { burster: 18, spitter: 6, shambler: 5, hound: 16, skinner: 9, bloater: 4, brute: 3, stalker: 4 };   // anim speed (rad/s)
   const FRAMES = 8;
   const SPRITE_SCALE = 2;
 
@@ -172,6 +172,7 @@
       this.drawObstacleEdges(ctx);
       this.drawEyes(ctx);
       this.drawPickups(ctx);
+      this.drawStampedeLanes(ctx);
       this.drawHazards(ctx);
       this.drawEnemyShots(ctx);
       this.drawProjectiles(ctx);
@@ -515,6 +516,21 @@
           ctx.beginPath(); ctx.moveTo(r * 0.1, 0); ctx.lineTo(r * 0.75, 0); ctx.stroke();
           break;
         }
+        case 'burster': {
+          const leg = Math.sin(t * 18) * r * 0.5;
+          ctx.strokeStyle = body; ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(r * 0.3, -r * 0.5); ctx.lineTo(r * 0.3 + leg, -r * 1.1);
+          ctx.moveTo(r * 0.3, r * 0.5); ctx.lineTo(r * 0.3 - leg, r * 1.1);
+          ctx.moveTo(-r * 0.6, -r * 0.5); ctx.lineTo(-r * 0.6 - leg, -r * 1.1);
+          ctx.moveTo(-r * 0.6, r * 0.5); ctx.lineTo(-r * 0.6 + leg, r * 1.1);
+          ctx.stroke();
+          ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(0, 0, r * 1.3, r * 0.8, 0, 0, TAU); ctx.fill();
+          ctx.fillStyle = fl ? '#fff' : '#ff6b5a';
+          circle(ctx, -r * 0.35, -r * 0.25, r * 0.38); circle(ctx, -r * 0.2, r * 0.3, r * 0.32); circle(ctx, -r * 0.75, 0, r * 0.3);
+          ctx.fillStyle = skin; circle(ctx, r * 0.9, 0, r * 0.45);
+          break;
+        }
         case 'spitter': {
           const pulse = Math.sin(t * 6) * 0.06;
           ctx.fillStyle = body;
@@ -675,6 +691,40 @@
       return c;
     }
 
+    /**
+     * Stampede warning lane, drawn over the darkness: a red band with chevrons running in the
+     * direction of travel. The two-slot gap in the row is left unshaded. Pulses faster once locked.
+     */
+    drawStampedeLanes(ctx) {
+      const g = this.g, t = g.time, sp = OO.CONFIG.STAMPEDE.spacing;
+      for (const st of g.stampedes) {
+        const L = g.stampedeLane(st), ang = Math.atan2(L.dy, L.dx);
+        const len = L.back * 2;
+        const k = 1 - st.t / st.warn;
+        const pulse = st.locked ? 0.5 + 0.5 * Math.sin(t * 30) : 0.5 + 0.5 * Math.sin(t * 8);
+        ctx.save();
+        ctx.translate(L.sx, L.sy);
+        ctx.rotate(ang);
+        // one band per row slot (local x = direction of travel, local y = across the row)
+        for (let j = 0; j < st.count; j++) {
+          if (j === st.gap || j === st.gap + 1) continue;
+          const y = (j - (st.count - 1) / 2) * sp;
+          ctx.fillStyle = `rgba(210,30,25,${(0.05 + k * 0.1) + pulse * 0.06})`;
+          ctx.fillRect(0, y - sp / 2, len, sp);
+        }
+        // chevrons
+        ctx.strokeStyle = `rgba(255,80,60,${0.18 + k * 0.3 + (st.locked ? pulse * 0.3 : 0)})`;
+        ctx.lineWidth = 3;
+        const half = L.width / 2, step = 90, shift = (t * 260) % step;
+        ctx.beginPath();
+        for (let x = shift; x < len; x += step) {
+          ctx.moveTo(x, -half * 0.5); ctx.lineTo(x + 26, 0); ctx.lineTo(x, half * 0.5);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
     /** Acid pools: drawn over the darkness so you can always see where not to stand. */
     drawHazards(ctx) {
       const t = this.g.time;
@@ -751,8 +801,8 @@
           ctx.restore();
         } else if (f.kind === 'burst' && !overDark) {
           const r = f.r * (1.1 - a * 0.6);
-          ctx.fillStyle = `rgba(185,201,74,${0.45 * a})`; circle(ctx, f.x, f.y, r);
-          ctx.strokeStyle = `rgba(230,255,140,${0.8 * a})`; ctx.lineWidth = 3;
+          ctx.fillStyle = f.blood ? `rgba(200,40,30,${0.5 * a})` : `rgba(185,201,74,${0.45 * a})`; circle(ctx, f.x, f.y, r);
+          ctx.strokeStyle = f.blood ? `rgba(255,170,120,${0.85 * a})` : `rgba(230,255,140,${0.8 * a})`; ctx.lineWidth = 3;
           ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.stroke();
         } else if (f.kind === 'bolt' && overDark) {
           ctx.globalCompositeOperation = 'lighter';
@@ -907,6 +957,28 @@
       };
       p.weapons.forEach((w, i) => drawSlot(x0 + i * (slot + gap), top + 22, w.def.icon, w.level, w.maxLevel, '#e3a33b'));
       p.passiveOrder.forEach((id, i) => drawSlot(x0 + i * (slot + gap), top + 22 + slot + gap, OO.PASSIVES[id].icon, p.passives[id], OO.PASSIVES[id].max, '#56d6c0'));
+
+      // Stampede origin arrows at the screen edge
+      for (const st of g.stampedes) {
+        const L = g.stampedeLane(st);
+        const ang = Math.atan2(L.sy - p.y, L.sx - p.x);
+        const cx = W / 2, cy = this.h / 2, m = 46;
+        const tx = Math.cos(ang), ty = Math.sin(ang);
+        const s = Math.min((cx - m) / Math.max(Math.abs(tx), 1e-3), (cy - m) / Math.max(Math.abs(ty), 1e-3));
+        const ex = cx + tx * s, ey = cy + ty * s;
+        const pulse = 0.55 + 0.45 * Math.sin(g.time * (st.locked ? 30 : 10));
+        ctx.save();
+        ctx.translate(ex, ey); ctx.rotate(ang + Math.PI);
+        ctx.fillStyle = `rgba(255,60,45,${pulse})`;
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath(); ctx.moveTo(-14 + i * 12, -14); ctx.lineTo(i * 12, 0); ctx.lineTo(-14 + i * 12, 14); ctx.lineTo(-8 + i * 12, 0); ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+        ctx.font = `800 16px ${FONT_DISPLAY}`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = `rgba(255,90,70,${pulse})`;
+        ctx.fillText(st.locked ? 'INCOMING' : 'STAMPEDE', ex - tx * 46, ey - ty * 46);
+      }
 
       // Boss health
       const bosses = g.bosses;

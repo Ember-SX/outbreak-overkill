@@ -76,6 +76,9 @@
           }
           break;
         }
+        case 'stampede':
+          this.stampede(ev);
+          break;
         case 'elite':
         case 'boss':
           for (let i = 0; i < ev.count; i++) {
@@ -87,6 +90,22 @@
       }
     }
   }
+
+  /**
+   * Start a Burster stampede. Phases: 'warn' (rumble, shrieks, a lane that tracks you),
+   * locked for the last STAMPEDE.lockAt seconds, then the row launches across the lane.
+   */
+  Director.prototype.stampede = function (ev) {
+    const g = this.g, p = g.player, S = OO.CONFIG.STAMPEDE;
+    const count = ev.count || 9;
+    const gap = U.randInt(1, Math.max(1, count - 3));    // two empty slots somewhere in the row
+    g.stampedes.push({
+      a: U.rand(0, U.TAU), ax: p.x, ay: p.y, t: S.warn, warn: S.warn, locked: false,
+      count, ranks: ev.ranks || 1, gap, shrieked: false,
+    });
+    if (!ev.text) g.ui.banner('Stampede! Get behind cover', 'boss');
+    OO.Audio.play('rumble');
+  };
 
   OO.Director = Director;
 })(window.OO = window.OO || {});

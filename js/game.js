@@ -54,7 +54,7 @@
       this.enemies = []; this.projectiles = []; this.pickups = []; this.zones = []; this.lobs = [];
       this.effects = []; this.particles = []; this.decals = []; this.texts = []; this.lights = [];
       this.pendingExplosions = [];
-      this.enemyShots = []; this.hazards = [];
+      this.enemyShots = []; this.hazards = []; this.stampedes = [];
       this.overflowGem = null; this.gemCount = 0;
       this.shakeAmt = 0; this.flashWhite = 0; this.xpCombo = 0; this.xpComboT = 0; this.heartT = 0;
       this.player = {
@@ -315,6 +315,7 @@
       if (p.stats.regen) p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.regen * dt);
 
       this.director.update(dt);
+      this.updateStampedes(dt);
       this.updateEnemies(dt);
 
       this.grid.clear();
@@ -351,7 +352,7 @@
         dmg: d.dmg * (1 + m * 0.05), r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
-      if (!d.crate && this.world) this.world.resolveCircle(e, e.r);
+      if (!d.crate && !d.burster && this.world) this.world.resolveCircle(e, e.r);
       this.enemies.push(e);
       return e;
     }
@@ -362,6 +363,7 @@
         if (e.dead) continue;
         e.flash -= dt; e.t += dt;
         if (e.def.crate) continue;
+        if (e.def.burster) { this.updateBurster(e, dt); continue; }
         const dx = p.x - e.x, dy = p.y - e.y;
         const d = Math.hypot(dx, dy) || 1;
 
@@ -442,10 +444,10 @@
     separate() {
       const buf = this._sepBuf;
       for (const e of this.enemies) {
-        if (e.dead || e.def.crate) continue;
+        if (e.dead || e.def.crate || e.def.burster) continue;
         this.grid.query(e.x, e.y, e.r + 32, buf);
         for (const o of buf) {
-          if (o === e || o.dead) continue;
+          if (o === e || o.dead || o.def.burster) continue;   // bursters plough straight through
           if (!o.def.crate && o.id < e.id) continue;   // each enemy pair handled once
           let dx = e.x - o.x, dy = e.y - o.y;
           const min = e.r + o.r;
@@ -460,7 +462,7 @@
           o.x -= nx * push * (e.mass / tm); o.y -= ny * push * (e.mass / tm);
         }
       }
-      for (const e of this.enemies) if (!e.dead && !e.def.crate) this.world.resolveCircle(e, e.r);
+      for (const e of this.enemies) if (!e.dead && !e.def.crate && !e.def.burster) this.world.resolveCircle(e, e.r);
     }
 
     nearestEnemy(x, y, maxD, exclude) {
@@ -534,7 +536,8 @@
       const bile = e.def.blood === 'bile';
       this.addDecal(e.x, e.y, e.r * U.rand(1.4, 2.1), bile ? 'bile' : 'red');
       this.burst(e.x, e.y, bile ? '#a8b83a' : '#8f1712', e.def.boss ? 50 : 7, e.def.boss ? 280 : 140);
-      if (e.def.explode) this.pendingExplosions.push({ x: e.x, y: e.y, r: e.def.explode.r, dmg: e.def.explode.dmg, enemyDmg: e.def.explode.enemyDmg });
+      if (e.def.explode) this.pendingExplosions.push({ x: e.x, y: e.y, r: e.def.explode.r, dmg: e.def.explode.dmg, enemyDmg: e.def.explode.enemyDmg, kind: 'bile' });
+      if (e.def.burster) this.detonate(e);
       if (e.def.elite) this.addPickup('case', e.x, e.y, { big: false });
       if (e.def.boss) {
         this.addPickup('case', e.x, e.y, { big: true });
@@ -570,20 +573,95 @@
       const p = this.player, buf = this._exBuf;
       while (this.pendingExplosions.length && n++ < 40) {
         const ex = this.pendingExplosions.shift();
-        this.addEffect({ kind: 'burst', x: ex.x, y: ex.y, r: ex.r, life: 0.35, max: 0.35 });
-        this.addDecal(ex.x, ex.y, ex.r * 0.8, 'bile');
+        const blood = ex.kind === 'blood';
+        this.addEffect({ kind: 'burst', x: ex.x, y: ex.y, r: ex.r, life: 0.35, max: 0.35, blood });
+        this.addDecal(ex.x, ex.y, ex.r * 0.8, blood ? 'red' : 'bile');
         this.addLight(ex.x, ex.y, ex.r * 2.2, 1, 0.3);
-        this.burst(ex.x, ex.y, '#b9c94a', 18, 260);
-        OO.Audio.play('explode');
-        this.shake(5);
-        if (U.dist2(ex.x, ex.y, p.x, p.y) < (ex.r + p.r) ** 2) this.hurtPlayer(ex.dmg, true);
+        this.burst(ex.x, ex.y, blood ? '#c0262a' : '#b9c94a', 18, 260);
+        const near = U.dist2(ex.x, ex.y, p.x, p.y) < this.spawnRadius * this.spawnRadius;
+        if (near) { OO.Audio.play('explode'); this.shake(blood ? 7 : 5); }
+        // Cover blocks blasts: no damage if an obstacle sits between you and the explosion.
+        if (U.dist2(ex.x, ex.y, p.x, p.y) < (ex.r + p.r) ** 2 && !this.world.blocked(ex.x, ex.y, p.x, p.y)) this.hurtPlayer(ex.dmg, !blood);   // burster hits respect i-frames
         this.grid.query(ex.x, ex.y, ex.r + 32, buf);
         for (const o of buf) {
           if (o.dead) continue;
+          if (ex.kind === 'blood' && o.def.burster) continue;   // one burster can't set off the whole row
           const dx = o.x - ex.x, dy = o.y - ex.y, d = Math.hypot(dx, dy) || 1;
           if (d < ex.r + o.r) this.damageEnemy(o, ex.enemyDmg, (dx / d) * 220, (dy / d) * 220, null);
         }
       }
+    }
+
+    // ------------------------------------------------------------ burster stampedes
+    updateStampedes(dt) {
+      const p = this.player, S = OO.CONFIG.STAMPEDE;
+      for (const st of this.stampedes) {
+        st.t -= dt;
+        if (!st.locked) {
+          // the lane follows you until it locks
+          st.ax = U.lerp(st.ax, p.x, Math.min(1, dt * 4));
+          st.ay = U.lerp(st.ay, p.y, Math.min(1, dt * 4));
+          if (st.t <= S.lockAt) { st.locked = true; OO.Audio.play('shriek', 1); }
+        }
+        if (!st.shrieked && st.t <= st.warn * 0.55) { st.shrieked = true; OO.Audio.play('shriek', 0.5); }
+        const k = 1 - Math.max(0, st.t) / st.warn;
+        this.shake(1 + k * 3.5);
+        if (st.t <= 0) { this.launchStampede(st); st.dead = true; }
+      }
+      compact(this.stampedes);
+    }
+
+    /** Geometry shared by the simulation and the renderer. */
+    stampedeLane(st) {
+      const ca = Math.cos(st.a), sa = Math.sin(st.a);
+      const back = this.spawnRadius + 140;
+      return {
+        dx: -ca, dy: -sa,                 // travel direction
+        nx: sa, ny: -ca,                  // across the row
+        sx: st.ax + ca * back, sy: st.ay + sa * back,   // where the row starts
+        back, width: st.count * OO.CONFIG.STAMPEDE.spacing,
+      };
+    }
+
+    launchStampede(st) {
+      const L = this.stampedeLane(st), sp = OO.CONFIG.STAMPEDE.spacing;
+      for (let r = 0; r < st.ranks; r++) {
+        for (let j = 0; j < st.count; j++) {
+          if (j === st.gap || j === st.gap + 1) continue;
+          const off = (j - (st.count - 1) / 2) * sp;
+          const x = L.sx + L.nx * off - L.dx * r * 60, y = L.sy + L.ny * off - L.dy * r * 60;
+          const e = this.spawnEnemy('burster', x, y);
+          e.ai.dx = L.dx; e.ai.dy = L.dy; e.ai.travel = 0;
+          e.ai.max = L.back * 2 + 260 + r * 60;
+          e.a = Math.atan2(L.dy, L.dx);
+        }
+      }
+      OO.Audio.play('stampede');
+    }
+
+    updateBurster(e, dt) {
+      const p = this.player, ai = e.ai;
+      let cur = Math.atan2(ai.dy, ai.dx);
+      let diff = Math.atan2(p.y - e.y, p.x - e.x) - cur;
+      while (diff > Math.PI) diff -= U.TAU;
+      while (diff < -Math.PI) diff += U.TAU;
+      if (Math.abs(diff) < 0.8) cur += U.clamp(diff, -OO.CONFIG.STAMPEDE.homing * dt, OO.CONFIG.STAMPEDE.homing * dt);
+      ai.dx = Math.cos(cur); ai.dy = Math.sin(cur); e.a = cur;
+      const step = e.speed * dt;
+      e.x += ai.dx * step + e.kbx * dt; e.y += ai.dy * step + e.kby * dt;
+      e.kbx *= 0.85; e.kby *= 0.85;
+      ai.travel += step;
+      if (Math.random() < 0.25) this.particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, life: 0.35, max: 0.35, color: '#5e0f0c', size: 3 });
+      // Far from you they scramble over wrecks; close in, they slam into whatever is in the way.
+      const pd2 = U.dist2(e.x, e.y, p.x, p.y);
+      if (pd2 < (e.r + p.r) ** 2 || (pd2 < 320 * 320 && this.world.hitCircle(e.x, e.y, e.r))) { this.detonate(e); return; }
+      if (ai.travel > ai.max) e.dead = true;    // ran off the far side
+    }
+
+    detonate(e) {
+      e.dead = true;
+      const b = e.def.burster;
+      this.pendingExplosions.push({ x: e.x, y: e.y, r: b.r, dmg: b.dmg * this.enemyDmgScale(), enemyDmg: b.enemyDmg, kind: 'blood' });
     }
 
     /** Damage multiplier for enemy attacks at the current time. */
