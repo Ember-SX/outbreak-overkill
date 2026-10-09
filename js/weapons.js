@@ -44,13 +44,15 @@
 
     levelUp() { this.level++; this._stats = null; }
 
+    get behaviour() { return Behaviours[this.def.behaviour || this.id]; }
+
     update(dt, game) {
-      const b = Behaviours[this.id];
+      const b = this.behaviour;
       if (b) b.update(this, this.getStats(game.player), dt, game);
     }
 
     draw(ctx, game) {
-      const b = Behaviours[this.id];
+      const b = this.behaviour;
       if (b && b.draw) b.draw(this, this.getStats(game.player), ctx, game);
     }
   }
@@ -92,16 +94,17 @@
       if (st.queue && st.queue.length) {
         st.qt -= dt;
         if (st.qt <= 0) {
-          const side = st.queue.shift();
-          st.qt = 0.12;
-          this.slash(w, s, g, p.faceAngle + (side < 0 ? Math.PI : 0));
+          const off = st.queue.shift();
+          st.qt = s.omni ? 0.03 : 0.12;
+          this.slash(w, s, g, p.faceAngle + off);
         }
       }
       w.timer -= dt;
       if (w.timer <= 0) {
         w.timer = s.cd;
         st.queue = [];
-        for (let i = 0; i < s.amount; i++) st.queue.push(i % 2 === 0 ? 1 : -1);
+        // normal: front, back, front...  omni (Bloodletter): evenly around you
+        for (let i = 0; i < s.amount; i++) st.queue.push(s.omni ? (i / s.amount) * U.TAU : (i % 2 === 0 ? 0 : Math.PI));
         st.qt = 0;
       }
     },
@@ -143,6 +146,7 @@
           x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16,
           vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
           dmg: s.dmg, pierce: s.pierce, life: s.duration * U.rand(0.9, 1.1), r: 3, kind: 'pellet', kb: s.kb, weapon: w,
+          ignite: s.ignite || 0,
         });
       }
       g.addLight(p.x + Math.cos(base) * 24, p.y + Math.sin(base) * 24, 120, 0.9, 0.08);
@@ -196,6 +200,7 @@
           }
         }
         OO.Audio.play('saw');
+        if (st.hits.size > 400) for (const [id, t] of st.hits) if (g.time - t > s.hitCd) st.hits.delete(id);
         if (st.active <= 0) { w.timer = s.cd; st.hits.clear(); }
       } else {
         w.timer -= dt;

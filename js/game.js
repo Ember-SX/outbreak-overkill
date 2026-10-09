@@ -140,13 +140,36 @@
       this.player.weapons.push(new OO.Weapon(id));
     }
 
-    getWeapon(id) { return this.player.weapons.find((w) => w.id === id); }
+    /** Owned weapon by id, also matching its evolved form (so an evolved pistol still counts as 'pistol'). */
+    getWeapon(id) { return this.player.weapons.find((w) => w.id === id || w.def.from === id); }
+
+    /** First owned weapon that is ready to evolve, or null. */
+    findEvolution() {
+      const p = this.player;
+      for (const w of p.weapons) {
+        const E = OO.EVOLUTIONS[w.id];
+        if (E && w.level >= w.maxLevel && p.passives[E.needs]) return w;
+      }
+      return null;
+    }
+
+    evolve(w) {
+      const E = OO.EVOLUTIONS[w.id];
+      const nw = new OO.Weapon(E.into);
+      nw.damageDealt = w.damageDealt; nw.kills = w.kills;
+      const list = this.player.weapons;
+      list[list.indexOf(w)] = nw;
+      this.ui.banner(w.def.name + ' evolved into ' + nw.def.name, 'good');
+      OO.Audio.play('evolve');
+      this.flashWhite = Math.max(this.flashWhite, 0.4);
+      return nw;
+    }
 
     rollUpgrades(n) {
       const p = this.player, C = OO.CONFIG, pool = [];
       for (const w of p.weapons) if (w.level < w.maxLevel) pool.push({ kind: 'weapon', id: w.id, weight: 1.5 });
       if (p.weapons.length < C.MAX_WEAPONS) {
-        for (const id in OO.WEAPONS) if (!this.getWeapon(id)) pool.push({ kind: 'weapon', id, weight: 1 });
+        for (const id in OO.WEAPONS) if (!OO.WEAPONS[id].evolved && !this.getWeapon(id)) pool.push({ kind: 'weapon', id, weight: 1 });
       }
       for (const id of p.passiveOrder) if (p.passives[id] < OO.PASSIVES[id].max) pool.push({ kind: 'passive', id, weight: 1 });
       if (p.passiveOrder.length < C.MAX_PASSIVES) {
@@ -167,7 +190,10 @@
         const def = OO.WEAPONS[opt.id], w = this.getWeapon(opt.id);
         if (!w) return { icon: def.icon, name: def.name, badge: 'New', isNew: true, text: def.desc, type: 'Weapon' };
         const next = w.level + 1;
-        return { icon: def.icon, name: def.name, badge: next === w.maxLevel ? 'Lv ' + next + ' · Max' : 'Lv ' + next, text: def.levels[w.level - 1].text, type: 'Weapon' };
+        let text = def.levels[w.level - 1].text;
+        const E = OO.EVOLUTIONS[w.id];
+        if (next === w.maxLevel && E) text += ' Evolves with ' + OO.PASSIVES[E.needs].name + ' from a supply case.';
+        return { icon: def.icon, name: def.name, badge: next === w.maxLevel ? 'Lv ' + next + ' · Max' : 'Lv ' + next, text, type: 'Weapon' };
       }
       if (opt.kind === 'passive') {
         const def = OO.PASSIVES[opt.id], lv = this.player.passives[opt.id] || 0;
@@ -223,7 +249,13 @@
 
     openChest(big) {
       const p = this.player, results = [];
-      const rolls = big ? 3 : 1;
+      let rolls = big ? 3 : 1;
+      const ready = this.findEvolution();
+      if (ready) {
+        const nw = this.evolve(ready);
+        results.push({ icon: nw.def.icon, name: nw.def.name, badge: 'Evolved', text: nw.def.desc, type: 'Evolution', evolved: true });
+        rolls--;
+      }
       for (let i = 0; i < rolls; i++) {
         const cands = [];
         for (const w of p.weapons) if (w.level < w.maxLevel) cands.push({ kind: 'weapon', id: w.id });
@@ -524,7 +556,11 @@
 
     killEnemy(e, weapon) {
       e.dead = true;
-      if (weapon) weapon.kills++;
+      if (weapon) {
+        weapon.kills++;
+        const ls = weapon.def.base.lifesteal;
+        if (ls) this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + ls);
+      }
       if (e.def.crate) {
         this.crateLoot(e);
         this.burst(e.x, e.y, '#8a6a3e', 12, 170);
@@ -747,6 +783,9 @@
           pr.hit.add(e.id);
           const sp = Math.hypot(pr.vx, pr.vy) || 1;
           this.damageEnemy(e, pr.dmg, (pr.vx / sp) * pr.kb, (pr.vy / sp) * pr.kb, pr.weapon);
+          if (pr.ignite && Math.random() < pr.ignite && this.zones.length < 60) {
+            this.zones.push({ x: e.x, y: e.y, r: 26, life: 1.4, max: 1.4, dmg: 5 * this.player.stats.might, tick: 0.3, tickT: 0, kind: 'fire', weapon: pr.weapon, seed: Math.random() * 100 });
+          }
           if (--pr.pierce <= 0) { pr.dead = true; break; }
         }
       }

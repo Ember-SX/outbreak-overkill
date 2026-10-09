@@ -120,7 +120,7 @@
     showChest(results, credits) {
       const ul = $('chest-list');
       ul.innerHTML = results.map((d) => `
-        <li><img src="${OO.Icons.url(d.icon, 28, '#e3a33b')}" alt="">
+        <li class="${d.evolved ? 'evo' : ''}"><img src="${OO.Icons.url(d.icon, 28, d.evolved ? '#ff6f4a' : '#e3a33b')}" alt="">
           <span><strong>${esc(d.name)}</strong> <em>${esc(d.badge)}</em><br>${esc(d.text)}</span></li>`).join('')
         + `<li><img src="${OO.Icons.url('credits', 28, '#e3a33b')}" alt=""><span><strong>+${credits} credits</strong></span></li>`;
       this.lockUntil = performance.now() + 400;
@@ -130,9 +130,16 @@
     // ------------------------------------------------------------ pause
     showPause() {
       const p = this.g.player;
-      const rows = p.weapons.map((w) => `<li><img src="${OO.Icons.url(w.def.icon, 24, '#e3a33b')}" alt=""><span>${esc(w.def.name)}</span><b>Lv ${w.level}</b></li>`)
+      const rows = p.weapons.map((w) => `<li><img src="${OO.Icons.url(w.def.icon, 24, w.def.evolved ? '#ff6f4a' : '#e3a33b')}" alt=""><span>${esc(w.def.name)}</span><b>${w.def.evolved ? 'Evolved' : 'Lv ' + w.level}</b></li>`)
         .concat(p.passiveOrder.map((id) => `<li><img src="${OO.Icons.url(OO.PASSIVES[id].icon, 24, '#56d6c0')}" alt=""><span>${esc(OO.PASSIVES[id].name)}</span><b>Lv ${p.passives[id]}</b></li>`));
       $('pause-build').innerHTML = rows.join('');
+      // Field manual: evolution recipes for the weapons you carry
+      const recipes = p.weapons.filter((w) => OO.EVOLUTIONS[w.id]).map((w) => {
+        const E = OO.EVOLUTIONS[w.id], gear = OO.PASSIVES[E.needs];
+        const haveMax = w.level >= w.maxLevel, haveGear = !!p.passives[E.needs];
+        return `<li><span class="${haveMax ? 'ok' : ''}">${esc(w.def.name)} Lv ${w.maxLevel}</span> + <span class="${haveGear ? 'ok' : ''}">${esc(gear.name)}</span> → <strong>${esc(OO.WEAPONS[E.into].name)}</strong>${haveMax && haveGear ? ' <em>Ready: open a supply case</em>' : ''}</li>`;
+      });
+      $('pause-evo').innerHTML = recipes.length ? recipes.join('') : '<li>Every weapon you carry has evolved.</li>';
       const s = p.stats;
       $('pause-stats').innerHTML = [
         ['Max HP', Math.round(s.maxHp)], ['Armor', s.armor], ['Damage', Math.round(s.might * 100) + '%'],
@@ -152,7 +159,7 @@
         ['Survived', U.formatTime(r.time)], ['Level', r.level], ['Kills', r.kills], ['Credits', r.credits],
       ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
       const rows = r.weapons.slice().sort((a, b) => b.dmg - a.dmg).map((w) => `
-        <tr><td><img src="${OO.Icons.url(OO.WEAPONS[w.id].icon, 20, '#e3a33b')}" alt=""> ${esc(w.name)}</td>
+        <tr><td><img src="${OO.Icons.url(OO.WEAPONS[w.id].icon, 20, OO.WEAPONS[w.id].evolved ? '#ff6f4a' : '#e3a33b')}" alt=""> ${esc(w.name)}</td>
         <td>${w.level}</td><td>${w.dmg.toLocaleString()}</td><td>${w.kills}</td></tr>`).join('');
       $('res-weapons').innerHTML = `<thead><tr><th>Weapon</th><th>Lv</th><th>Damage</th><th>Kills</th></tr></thead><tbody>${rows}</tbody>`;
       this.lockUntil = performance.now() + 600;

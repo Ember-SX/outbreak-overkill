@@ -355,6 +355,7 @@ kbd {
 
 /* ------------------------------------------------------------------ chest, pause, results */
 .chest-list, .build-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.build-list { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 18px; }
 .chest-list li {
   display: grid;
   grid-template-columns: 28px 1fr;
@@ -423,6 +424,24 @@ kbd {
 .res-table td:first-child { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .res-table td:not(:first-child), .res-table th:not(:first-child) { text-align: right; }
 .res-table img { width: 20px; height: 20px; }
+
+.chest-list li.evo strong { color: #ff6f4a; }
+.chest-list li.evo em { color: #ff6f4a; }
+
+.manual { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.manual-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.evo-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; color: #b3ac9b; }
+.evo-list .ok { color: var(--dna); }
+.evo-list strong { color: #ff6f4a; font-weight: normal; }
+.evo-list em { font-style: normal; font-family: var(--font-mono); font-size: 11px; color: var(--amber); }
 
 /* ------------------------------------------------------------------ HUD extras */
 .hud-buttons {

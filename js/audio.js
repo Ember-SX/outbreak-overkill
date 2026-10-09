@@ -127,6 +127,10 @@
       case 'stampede':
         noise({ dur: 1.1, vol: 0.3, freq: 300, f2: 1400, type: 'bandpass', q: 1 });
         break;
+      case 'evolve':
+        [262, 392, 523, 784, 1046].forEach((f, i) => tone({ type: 'sawtooth', f, dur: 0.3, vol: 0.06, delay: i * 0.06 }));
+        noise({ dur: 0.6, vol: 0.15, freq: 4000, f2: 800, type: 'bandpass', q: 1 });
+        break;
       case 'gurgle':
         if (!throttle(name, 160)) return;
         tone({ type: 'sine', f: 110, f2: 300, dur: 0.5, vol: 0.07 });

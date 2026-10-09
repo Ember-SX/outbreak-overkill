@@ -129,6 +129,53 @@
     },
   };
 
+  // ---------------------------------------------------------------- EVOLUTIONS
+  // A max-level weapon + the listed gear (any level) evolves when you open a supply case.
+  // Evolved forms reuse the base weapon's behaviour with much stronger stats and one twist.
+  const EVOLVED = {
+    twinpistols: {
+      from: 'pistol', name: 'Twin Auto Pistols', icon: 'pistol',
+      desc: 'Two guns, armour-piercing rounds, barely any reload.',
+      base: { dmg: 22, cd: 0.5, amount: 4, speed: 680, pierce: 3, duration: 1.2, kb: 50 },
+    },
+    dragonsbreath: {
+      from: 'shotgun', name: "Dragon's Breath", icon: 'shotgun',
+      desc: 'Incendiary shells. Pellets that hit can set the ground alight.',
+      base: { dmg: 16, cd: 1.0, amount: 11, speed: 700, pierce: 3, duration: 0.42, spread: 0.85, kb: 260, ignite: 0.25 },
+    },
+    bloodletter: {
+      from: 'knife', name: 'Bloodletter', icon: 'knife',
+      desc: 'Slashes in every direction at once. Heals 1 HP per kill.',
+      base: { dmg: 34, cd: 0.8, amount: 4, area: 1.45, kb: 170, omni: 1, lifesteal: 1 },
+    },
+    napalm: {
+      from: 'grenade', name: 'Napalm Canister', icon: 'grenade',
+      desc: 'Four canisters, huge pools, long burn.',
+      base: { dmg: 13, cd: 2.4, amount: 4, area: 1.9, duration: 4.5, tick: 0.25 },
+    },
+    buzzhalo: {
+      from: 'saw', name: 'Buzzsaw Halo', icon: 'saw',
+      desc: 'Six blades that never stop spinning.',
+      base: { dmg: 20, cd: 0.05, amount: 6, area: 1.35, speed: 4.6, duration: 1e9, hitCd: 0.3, kb: 120 },
+    },
+    arcstorm: {
+      from: 'tesla', name: 'Arc Storm', icon: 'tesla',
+      desc: 'Near-constant chain lightning across the horde.',
+      base: { dmg: 30, cd: 0.75, amount: 3, area: 1.4, chains: 6 },
+    },
+  };
+  for (const id in EVOLVED) {
+    OO.WEAPONS[id] = Object.assign({ evolved: true, behaviour: EVOLVED[id].from, levels: [] }, EVOLVED[id]);
+  }
+  OO.EVOLUTIONS = {
+    pistol:  { into: 'twinpistols',   needs: 'amount' },
+    shotgun: { into: 'dragonsbreath', needs: 'might' },
+    knife:   { into: 'bloodletter',   needs: 'speed' },
+    grenade: { into: 'napalm',        needs: 'area' },
+    saw:     { into: 'buzzhalo',      needs: 'cooldown' },
+    tesla:   { into: 'arcstorm',      needs: 'magnet' },
+  };
+
   // ---------------------------------------------------------------- PASSIVES
   OO.PASSIVES = {
     might:    { name: 'Hollow Points',  icon: 'might',    max: 5, text: '+10% damage for all weapons.' },

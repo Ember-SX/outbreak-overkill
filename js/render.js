@@ -955,7 +955,7 @@
           ctx.fillRect(x + 3 + i * pip, y + slot - 4, Math.max(1, pip - 1), 2);
         }
       };
-      p.weapons.forEach((w, i) => drawSlot(x0 + i * (slot + gap), top + 22, w.def.icon, w.level, w.maxLevel, '#e3a33b'));
+      p.weapons.forEach((w, i) => drawSlot(x0 + i * (slot + gap), top + 22, w.def.icon, w.level, w.maxLevel, w.def.evolved ? '#ff6f4a' : '#e3a33b'));
       p.passiveOrder.forEach((id, i) => drawSlot(x0 + i * (slot + gap), top + 22 + slot + gap, OO.PASSIVES[id].icon, p.passives[id], OO.PASSIVES[id].max, '#56d6c0'));
 
       // Stampede origin arrows at the screen edge
