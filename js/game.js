@@ -18,7 +18,8 @@
       this.grid = new U.SpatialHash(64);
       this._sepBuf = []; this._prBuf = []; this._exBuf = []; this._zoneBuf = [];
       this.records = U.storage.get('oo.records', { bestTime: 0, bestKills: 0, runs: 0, wins: 0 });
-      this.settings = U.storage.get('oo.settings', { muted: false, damageNumbers: true });
+      this.settings = Object.assign({ muted: false, damageNumbers: true, shake: true, difficulty: 'standard' }, U.storage.get('oo.settings', {}));
+      this.meta = Object.assign({ bank: 0, ranks: {} }, U.storage.get('oo.meta', {}));
       OO.Audio.setMuted(this.settings.muted);
       this.reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -61,6 +62,7 @@
         x: 0, y: 0, r: P.radius, hp: 1, level: 1, xp: 0, xpNext: OO.CONFIG.xpToNext(1),
         faceAngle: 0, aimAngle: 0, aimT: 0, moving: false, walk: 0, iframes: 0, hurt: 0,
         weapons: [], passives: {}, passiveOrder: [], stats: {}, statsVersion: 0, char: ch, pendingLevels: 0,
+        rerolls: 1 + this.rank('reroll'), revives: this.rank('revive'),
       };
       this.world = new OO.World(Math.floor(Math.random() * 1e9));
       this.world.update(0, 0);
@@ -77,6 +79,11 @@
     endRun(victory) {
       if (this.state === 'results') return;
       this.state = 'results';
+      // Run payout goes into the Armory bank.
+      const payout = Math.round((this.credits + Math.floor(this.kills / 20) + Math.floor(this.time / 60) * 5 + (victory ? 100 : 0))
+        * (1 + this.rank('greed') * 0.1) * this.difficulty.credits);
+      this.meta.bank += payout;
+      this.saveMeta();
       const r = this.records;
       r.runs++; if (victory) r.wins++;
       r.bestTime = Math.max(r.bestTime, Math.floor(this.time));
@@ -85,7 +92,8 @@
       OO.Audio.play(victory ? 'victory' : 'gameover');
       this.ui.setHud(false);
       this.ui.showResults({
-        victory, time: this.time, level: this.player.level, kills: this.kills, credits: this.credits,
+        victory, time: this.time, level: this.player.level, kills: this.kills, credits: this.credits, payout, bank: this.meta.bank,
+        difficulty: this.difficulty.name,
         weapons: this.player.weapons.map((w) => ({ id: w.id, name: w.def.name, level: w.level, dmg: Math.round(w.damageDealt), kills: w.kills })),
       });
     }
@@ -116,21 +124,47 @@
       this.ui.updateMute();
     }
 
+    // ------------------------------------------------------------ armory (meta progression)
+    rank(id) { return this.meta.ranks[id] || 0; }
+    saveMeta() { U.storage.set('oo.meta', this.meta); }
+
+    buyArmory(id) {
+      const item = OO.ARMORY.find((a) => a.id === id);
+      const r = this.rank(id);
+      if (!item || r >= item.max || this.meta.bank < item.cost[r]) return false;
+      this.meta.bank -= item.cost[r];
+      this.meta.ranks[id] = r + 1;
+      this.saveMeta();
+      return true;
+    }
+
+    refundArmory() {
+      for (const item of OO.ARMORY) {
+        for (let i = 0; i < this.rank(item.id); i++) this.meta.bank += item.cost[i];
+      }
+      this.meta.ranks = {};
+      this.saveMeta();
+    }
+
+    get difficulty() { return OO.DIFFICULTY[this.settings.difficulty] || OO.DIFFICULTY.standard; }
+
     // ------------------------------------------------------------ player build
     recalcStats() {
       const p = this.player, b = p.char.bonus, P = OO.CONFIG.PLAYER;
       const lv = (id) => p.passives[id] || 0;
       const prevMax = p.stats.maxHp || 0;
+      const m = (id) => this.rank(id);     // armory ranks
       p.stats = {
-        might: 1 + (b.might || 0) + lv('might') * 0.1,
-        armor: (b.armor || 0) + lv('armor'),
-        speed: P.speed * (1 + (b.speed || 0) + lv('speed') * 0.08),
+        might: 1 + (b.might || 0) + lv('might') * 0.1 + m('power') * 0.05,
+        armor: (b.armor || 0) + lv('armor') + m('plating'),
+        speed: P.speed * (1 + (b.speed || 0) + lv('speed') * 0.08 + m('stride') * 0.05),
         area: 1 + lv('area') * 0.1,
         cooldown: 1 - lv('cooldown') * 0.08,
-        magnet: P.pickupRange * (1 + (b.magnet || 0) + lv('magnet') * 0.3),
-        maxHp: P.maxHp + (b.maxHp || 0) + lv('maxhp') * 20,
+        magnet: P.pickupRange * (1 + (b.magnet || 0) + lv('magnet') * 0.3 + m('collector') * 0.15),
+        maxHp: P.maxHp + (b.maxHp || 0) + lv('maxhp') * 20 + m('vitality') * 10,
         regen: lv('maxhp') * 0.25,
         amount: lv('amount'),
+        growth: 1 + m('growth') * 0.08,
       };
       if (prevMax && p.stats.maxHp > prevMax) p.hp += p.stats.maxHp - prevMax;
       p.statsVersion++;
@@ -235,7 +269,24 @@
       p.pendingLevels--;
       this.state = 'levelup';
       OO.Audio.play('levelup');
-      this.ui.showLevelUp(this.rollUpgrades(3), p.level - p.pendingLevels);
+      this.luLevel = p.level - p.pendingLevels;
+      this.ui.showLevelUp(this.rollUpgrades(3), this.luLevel);
+    }
+
+    reroll() {
+      const p = this.player;
+      if (this.state !== 'levelup' || p.rerolls <= 0) return;
+      p.rerolls--;
+      OO.Audio.play('select');
+      this.ui.showLevelUp(this.rollUpgrades(3), this.luLevel);
+    }
+
+    skipLevel() {
+      if (this.state !== 'levelup') return;
+      this.credits += 15;
+      this.state = 'playing';
+      this.ui.hideAll();
+      if (this.player.pendingLevels > 0) this.openLevelUp();
     }
 
     chooseUpgrade(opt) {
@@ -601,7 +652,28 @@
       this.shake(5);
       OO.Audio.play('hurt');
       this.addText(p.x, p.y - 22, d, 'hurt');
-      if (p.hp <= 0) { p.hp = 0; this.endRun(false); }
+      if (p.hp <= 0) {
+        if (p.revives > 0) { this.secondWind(); return; }
+        p.hp = 0;
+        this.endRun(false);
+      }
+    }
+
+    /** Armory revive: back on your feet at half HP, with a shockwave to clear space. */
+    secondWind() {
+      const p = this.player;
+      p.revives--;
+      p.hp = p.stats.maxHp * 0.5;
+      p.iframes = 2;
+      this.flashWhite = 0.7;
+      this.shake(12);
+      for (const e of this.enemies) {
+        if (e.dead || e.def.crate) continue;
+        const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
+        if (d < 240) this.damageEnemy(e, e.def.boss ? 150 : 60, (dx / d) * 600, (dy / d) * 600, null);
+      }
+      this.ui.banner('Second Wind', 'good');
+      OO.Audio.play('evolve');
     }
 
     processExplosions() {
@@ -871,7 +943,7 @@
       g.dead = true;
       switch (g.kind) {
         case 'xp':
-          p.xp += g.value;
+          p.xp += g.value * p.stats.growth;
           this.xpCombo = this.xpComboT > 0 ? this.xpCombo + 1 : 0;
           this.xpComboT = 0.4;
           OO.Audio.play('xp', this.xpCombo);

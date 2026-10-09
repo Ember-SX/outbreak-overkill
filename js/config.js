@@ -188,6 +188,26 @@
     amount:   { name: 'Extended Mag',   icon: 'amount',   max: 2, text: '+1 projectile, blade or bolt for every weapon.' },
   };
 
+  // ---------------------------------------------------------------- THREAT LEVELS
+  OO.DIFFICULTY = {
+    standard:  { name: 'Standard',  hp: 1,    dmg: 1,    count: 1,    credits: 1,   text: 'The intended experience.' },
+    nightmare: { name: 'Nightmare', hp: 1.35, dmg: 1.25, count: 1.25, credits: 1.6, text: 'Tougher, hungrier infected. Credits x1.6.' },
+  };
+
+  // ---------------------------------------------------------------- ARMORY (meta progression)
+  // Permanent upgrades bought between runs with banked credits. cost[i] = price of rank i+1.
+  OO.ARMORY = [
+    { id: 'vitality', name: 'Vitality Serum',      icon: 'maxhp',    max: 5, cost: [60, 100, 150, 220, 300], text: '+10 max HP per rank.' },
+    { id: 'power',    name: 'Hollow-Point Stock',  icon: 'might',    max: 5, cost: [80, 130, 190, 260, 350], text: '+5% damage per rank.' },
+    { id: 'plating',  name: 'Trauma Plates',       icon: 'armor',    max: 3, cost: [150, 260, 400],          text: '+1 armor per rank.' },
+    { id: 'stride',   name: 'Field Training',      icon: 'speed',    max: 3, cost: [70, 130, 200],           text: '+5% move speed per rank.' },
+    { id: 'collector',name: 'Sample Collector',    icon: 'magnet',   max: 3, cost: [50, 90, 140],            text: '+15% pickup range per rank.' },
+    { id: 'growth',   name: 'Lab Notes',           icon: 'dna',      max: 3, cost: [90, 160, 250],           text: '+8% XP from DNA samples per rank.' },
+    { id: 'reroll',   name: 'Requisition Forms',   icon: 'reroll',   max: 3, cost: [100, 180, 280],          text: '+1 level-up reroll per run.' },
+    { id: 'greed',    name: 'Black Market Contact', icon: 'credits', max: 3, cost: [60, 120, 200],           text: '+10% credits banked per rank.' },
+    { id: 'revive',   name: 'Second Wind',         icon: 'herb',     max: 1, cost: [500],                    text: 'Once per run, get back up at 50% HP.' },
+  ];
+
   // ---------------------------------------------------------------- OPERATIVES
   OO.CHARACTERS = {
     mara: {

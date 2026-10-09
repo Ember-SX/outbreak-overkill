@@ -13,10 +13,15 @@
       this.lockUntil = 0;
       this.selectedChar = U.storage.get('oo.char', 'mara');
       if (!OO.CHARACTERS[this.selectedChar]) this.selectedChar = 'mara';
-      this.screens = ['screen-menu', 'screen-levelup', 'screen-chest', 'screen-pause', 'screen-results'];
+      this.screens = ['screen-menu', 'screen-levelup', 'screen-chest', 'screen-pause', 'screen-results', 'screen-armory'];
 
       this.buildMenu();
       $('btn-start').addEventListener('click', () => this.startRun());
+      $('btn-armory').addEventListener('click', () => this.showArmory());
+      $('armory-back').addEventListener('click', () => this.showMenu());
+      $('armory-refund').addEventListener('click', () => { this.g.refundArmory(); this.showArmory(); });
+      $('btn-reroll').addEventListener('click', () => this.g.reroll());
+      $('btn-skip').addEventListener('click', () => { if (performance.now() >= this.lockUntil) this.g.skipLevel(); });
       $('btn-resume').addEventListener('click', () => this.g.resume());
       $('btn-quit').addEventListener('click', () => this.g.quitToMenu());
       $('btn-retry').addEventListener('click', () => this.startRun());
@@ -84,11 +89,45 @@
       $('btn-mute').setAttribute('aria-pressed', String(!m));
     }
 
+    // ------------------------------------------------------------ armory
+    showArmory() {
+      this.hideAll();
+      const g = this.g;
+      $('armory-bank').textContent = g.meta.bank.toLocaleString();
+      const list = $('armory-list');
+      list.innerHTML = '';
+      for (const item of OO.ARMORY) {
+        const r = g.rank(item.id), maxed = r >= item.max, cost = maxed ? 0 : item.cost[r];
+        const row = document.createElement('div');
+        row.className = 'armory-item' + (maxed ? ' maxed' : '');
+        const pips = Array.from({ length: item.max }, (_, i) => `<i class="${i < r ? 'on' : ''}"></i>`).join('');
+        row.innerHTML = `
+          <img src="${OO.Icons.url(item.icon, 28, '#e3a33b')}" alt="">
+          <div class="armory-body">
+            <span class="armory-name">${esc(item.name)}</span>
+            <span class="armory-text">${esc(item.text)}</span>
+            <span class="pips" aria-label="Rank ${r} of ${item.max}">${pips}</span>
+          </div>`;
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn-small btn-buy';
+        b.textContent = maxed ? 'Maxed' : cost + ' cr';
+        b.disabled = maxed || g.meta.bank < cost;
+        b.addEventListener('click', () => { if (g.buyArmory(item.id)) { OO.Audio.init(); OO.Audio.play('chest'); this.showArmory(); } });
+        row.appendChild(b);
+        list.appendChild(row);
+      }
+      $('screen-armory').hidden = false;
+    }
+
     // ------------------------------------------------------------ level up
     showLevelUp(options, level) {
       this.options = options;
       this.lockUntil = performance.now() + 350;   // stop a held key or stray tap from picking blind
       $('lu-level').textContent = level;
+      const rr = this.g.player.rerolls;
+      $('reroll-n').textContent = '(' + rr + ' left)';
+      $('btn-reroll').disabled = rr <= 0;
       const wrap = $('lu-cards');
       wrap.innerHTML = '';
       options.forEach((opt, i) => {
@@ -155,6 +194,7 @@
       $('res-eyebrow').textContent = r.victory ? 'Extraction confirmed' : 'Signal lost';
       $('res-title').textContent = r.victory ? 'You made the chopper' : 'You were overrun';
       $('screen-results').classList.toggle('won', r.victory);
+      $('res-payout').innerHTML = `Banked <strong>+${r.payout.toLocaleString()}</strong> credits for the Armory (${r.bank.toLocaleString()} total) · ${esc(r.difficulty)}`;
       $('res-stats').innerHTML = [
         ['Survived', U.formatTime(r.time)], ['Level', r.level], ['Kills', r.kills], ['Credits', r.credits],
       ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
@@ -183,11 +223,14 @@
       const s = this.g.state;
       const locked = performance.now() < this.lockUntil;
       if (s === 'levelup') {
+        if (e.repeat) return;
         const n = parseInt(e.key, 10);
         if (n >= 1 && n <= this.options.length) this.pick(n - 1);
+        else if (!locked && (e.key === 'r' || e.key === 'R')) this.g.reroll();
+        else if (!locked && (e.key === 'x' || e.key === 'X')) this.g.skipLevel();
       } else if (s === 'chest') {
         if (!locked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.g.closeChest(); }
-      } else if (s === 'menu') {
+      } else if (s === 'menu' && !$('screen-menu').hidden) {
         if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') this.startRun();
         const ids = Object.keys(OO.CHARACTERS);
         if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
