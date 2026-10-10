@@ -231,6 +231,23 @@ kbd {
 }
 .records { color: #b3ac9b; font-variant-numeric: tabular-nums; }
 
+.threat { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.threat-btn {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  text-align: left;
+  background: rgba(8, 10, 9, 0.6);
+  border: 2px solid var(--line);
+}
+.threat-btn[aria-pressed="true"] { border-color: var(--amber); background: rgba(227, 163, 59, 0.08); }
+.threat-nightmare[aria-pressed="true"] { border-color: var(--blood); background: rgba(163, 32, 27, 0.14); }
+.threat-name { font-family: var(--font-display); font-weight: 800; font-size: 20px; text-transform: uppercase; line-height: 1.1; }
+.threat-nightmare .threat-name { color: #ff5a4a; }
+.threat-text { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+
+.settings { display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* ------------------------------------------------------------------ buttons */
 .btn {
   padding: 12px 28px;
@@ -355,6 +372,7 @@ kbd {
 
 /* ------------------------------------------------------------------ chest, pause, results */
 .chest-list, .build-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.build-list { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 18px; }
 .chest-list li {
   display: grid;
   grid-template-columns: 28px 1fr;
@@ -423,6 +441,67 @@ kbd {
 .res-table td:first-child { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .res-table td:not(:first-child), .res-table th:not(:first-child) { text-align: right; }
 .res-table img { width: 20px; height: 20px; }
+
+.chest-list li.evo strong { color: #ff6f4a; }
+.chest-list li.evo em { color: #ff6f4a; }
+
+.manual { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.manual-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.evo-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; color: #b3ac9b; }
+.evo-list .ok { color: var(--dna); }
+.evo-list strong { color: #ff6f4a; font-weight: normal; }
+.evo-list em { font-style: normal; font-family: var(--font-mono); font-size: 11px; color: var(--amber); }
+
+.btn-small {
+  padding: 7px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--bone);
+  background: rgba(8, 10, 9, 0.7);
+  border: 1px solid var(--line);
+}
+.btn-small:hover:not(:disabled) { border-color: var(--muted); }
+.btn-small:disabled { opacity: 0.4; cursor: default; }
+.btn-small kbd { margin-left: 4px; }
+
+.lu-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.lu-actions .hint { margin-left: auto; }
+
+.panel-armory { width: min(680px, 100%); }
+.armory-bank { margin: -4px 0 0; font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+.armory-bank strong { font-family: var(--font-display); font-size: 28px; color: var(--amber); margin-left: 6px; font-variant-numeric: tabular-nums; }
+.armory-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+.armory-item {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--line);
+}
+.armory-item img { width: 28px; height: 28px; }
+.armory-body { display: grid; gap: 2px; min-width: 0; }
+.armory-name { font-family: var(--font-display); font-weight: 800; font-size: 18px; line-height: 1.1; text-transform: uppercase; }
+.armory-text { font-size: 12px; color: #b3ac9b; line-height: 1.35; }
+.pips { display: flex; gap: 3px; margin-top: 3px; }
+.pips i { width: 14px; height: 4px; background: rgba(235, 226, 207, 0.15); }
+.pips i.on { background: var(--amber); }
+.armory-item.maxed .armory-name { color: var(--amber); }
+.btn-buy { min-width: 74px; font-variant-numeric: tabular-nums; }
+
+.res-payout { margin: 0; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.res-payout strong { color: var(--amber); }
 
 /* ------------------------------------------------------------------ HUD extras */
 .hud-buttons {

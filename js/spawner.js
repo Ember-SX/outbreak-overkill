@@ -35,13 +35,19 @@
       if (this.timer <= 0) {
         this.timer = w.interval;
         const alive = g.enemies.length;
+        const target = w.target * g.difficulty.count;
         // Top up toward the wave's target quickly, trickle a little past it, then hold.
         let n = 0;
-        if (alive < w.target) n = w.batch + Math.ceil((w.target - alive) * 0.25);
-        else if (alive < w.target * 1.3) n = w.batch;
+        if (alive < target) n = w.batch + Math.ceil((target - alive) * 0.25);
+        else if (alive < target * 1.3) n = w.batch;
+        let spitters = 0;
+        for (const e of g.enemies) if (e.def.ranged && !e.dead) spitters++;
+        const spitCap = OO.CONFIG.spitterCap(g.time / 60);
         for (let i = 0; i < n && g.enemies.length < OO.CONFIG.MAX_ENEMIES; i++) {
           const [x, y] = this.ringPos(g.spawnRadius + U.rand(0, 80));
-          g.spawnEnemy(U.weightedPick(w.pool), x, y);
+          let type = U.weightedPick(w.pool);
+          if (OO.ENEMIES[type].ranged && spitters++ >= spitCap) type = 'shambler';
+          g.spawnEnemy(type, x, y);
         }
       }
 
@@ -50,9 +56,11 @@
         this.crateTimer = U.rand(18, 28);
         let crates = 0;
         for (const e of g.enemies) if (e.def.crate) crates++;
-        if (crates < 4) {
+        for (let tries = 0; crates < 4 && tries < 8; tries++) {
           const [x, y] = this.ringPos(U.rand(260, 480));
+          if (g.world.hitCircle(x, y, 22)) continue;   // not inside a wreck
           g.spawnEnemy('crate', x, y);
+          break;
         }
       }
     }
@@ -74,6 +82,9 @@
           }
           break;
         }
+        case 'stampede':
+          this.stampede(ev);
+          break;
         case 'elite':
         case 'boss':
           for (let i = 0; i < ev.count; i++) {
@@ -85,6 +96,22 @@
       }
     }
   }
+
+  /**
+   * Start a Burster stampede. Phases: 'warn' (rumble, shrieks, a lane that tracks you),
+   * locked for the last STAMPEDE.lockAt seconds, then the row launches across the lane.
+   */
+  Director.prototype.stampede = function (ev) {
+    const g = this.g, p = g.player, S = OO.CONFIG.STAMPEDE;
+    const count = ev.count || 9;
+    const gap = U.randInt(1, Math.max(1, count - 3));    // two empty slots somewhere in the row
+    g.stampedes.push({
+      a: U.rand(0, U.TAU), ax: p.x, ay: p.y, t: S.warn, warn: S.warn, locked: false,
+      count, ranks: ev.ranks || 1, gap, shrieked: false,
+    });
+    if (!ev.text) g.ui.banner('Stampede! Get behind cover', 'boss');
+    OO.Audio.play('rumble');
+  };
 
   OO.Director = Director;
 })(window.OO = window.OO || {});

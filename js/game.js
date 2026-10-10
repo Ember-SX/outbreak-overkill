@@ -18,7 +18,8 @@
       this.grid = new U.SpatialHash(64);
       this._sepBuf = []; this._prBuf = []; this._exBuf = []; this._zoneBuf = [];
       this.records = U.storage.get('oo.records', { bestTime: 0, bestKills: 0, runs: 0, wins: 0 });
-      this.settings = U.storage.get('oo.settings', { muted: false, damageNumbers: true });
+      this.settings = Object.assign({ muted: false, damageNumbers: true, shake: true, difficulty: 'standard' }, U.storage.get('oo.settings', {}));
+      this.meta = Object.assign({ bank: 0, ranks: {} }, U.storage.get('oo.meta', {}));
       OO.Audio.setMuted(this.settings.muted);
       this.reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -54,13 +55,17 @@
       this.enemies = []; this.projectiles = []; this.pickups = []; this.zones = []; this.lobs = [];
       this.effects = []; this.particles = []; this.decals = []; this.texts = []; this.lights = [];
       this.pendingExplosions = [];
+      this.enemyShots = []; this.hazards = []; this.stampedes = [];
       this.overflowGem = null; this.gemCount = 0;
       this.shakeAmt = 0; this.flashWhite = 0; this.xpCombo = 0; this.xpComboT = 0; this.heartT = 0;
       this.player = {
         x: 0, y: 0, r: P.radius, hp: 1, level: 1, xp: 0, xpNext: OO.CONFIG.xpToNext(1),
         faceAngle: 0, aimAngle: 0, aimT: 0, moving: false, walk: 0, iframes: 0, hurt: 0,
         weapons: [], passives: {}, passiveOrder: [], stats: {}, statsVersion: 0, char: ch, pendingLevels: 0,
+        rerolls: 1 + this.rank('reroll'), revives: this.rank('revive'),
       };
+      this.world = new OO.World(Math.floor(Math.random() * 1e9));
+      this.world.update(0, 0);
       this.recalcStats();
       this.player.hp = this.player.stats.maxHp;
       this.addWeapon(ch.weapon);
@@ -74,6 +79,11 @@
     endRun(victory) {
       if (this.state === 'results') return;
       this.state = 'results';
+      // Run payout goes into the Armory bank.
+      const payout = Math.round((this.credits + Math.floor(this.kills / 20) + Math.floor(this.time / 60) * 5 + (victory ? 100 : 0))
+        * (1 + this.rank('greed') * 0.1) * this.difficulty.credits);
+      this.meta.bank += payout;
+      this.saveMeta();
       const r = this.records;
       r.runs++; if (victory) r.wins++;
       r.bestTime = Math.max(r.bestTime, Math.floor(this.time));
@@ -82,7 +92,8 @@
       OO.Audio.play(victory ? 'victory' : 'gameover');
       this.ui.setHud(false);
       this.ui.showResults({
-        victory, time: this.time, level: this.player.level, kills: this.kills, credits: this.credits,
+        victory, time: this.time, level: this.player.level, kills: this.kills, credits: this.credits, payout, bank: this.meta.bank,
+        difficulty: this.difficulty.name,
         weapons: this.player.weapons.map((w) => ({ id: w.id, name: w.def.name, level: w.level, dmg: Math.round(w.damageDealt), kills: w.kills })),
       });
     }
@@ -106,6 +117,17 @@
       this.ui.hideAll();
     }
 
+    toggleSetting(key) {
+      this.settings[key] = !this.settings[key];
+      U.storage.set('oo.settings', this.settings);
+    }
+
+    setDifficulty(id) {
+      if (!OO.DIFFICULTY[id]) return;
+      this.settings.difficulty = id;
+      U.storage.set('oo.settings', this.settings);
+    }
+
     toggleMute() {
       this.settings.muted = !this.settings.muted;
       OO.Audio.setMuted(this.settings.muted);
@@ -113,21 +135,47 @@
       this.ui.updateMute();
     }
 
+    // ------------------------------------------------------------ armory (meta progression)
+    rank(id) { return this.meta.ranks[id] || 0; }
+    saveMeta() { U.storage.set('oo.meta', this.meta); }
+
+    buyArmory(id) {
+      const item = OO.ARMORY.find((a) => a.id === id);
+      const r = this.rank(id);
+      if (!item || r >= item.max || this.meta.bank < item.cost[r]) return false;
+      this.meta.bank -= item.cost[r];
+      this.meta.ranks[id] = r + 1;
+      this.saveMeta();
+      return true;
+    }
+
+    refundArmory() {
+      for (const item of OO.ARMORY) {
+        for (let i = 0; i < this.rank(item.id); i++) this.meta.bank += item.cost[i];
+      }
+      this.meta.ranks = {};
+      this.saveMeta();
+    }
+
+    get difficulty() { return OO.DIFFICULTY[this.settings.difficulty] || OO.DIFFICULTY.standard; }
+
     // ------------------------------------------------------------ player build
     recalcStats() {
       const p = this.player, b = p.char.bonus, P = OO.CONFIG.PLAYER;
       const lv = (id) => p.passives[id] || 0;
       const prevMax = p.stats.maxHp || 0;
+      const m = (id) => this.rank(id);     // armory ranks
       p.stats = {
-        might: 1 + (b.might || 0) + lv('might') * 0.1,
-        armor: (b.armor || 0) + lv('armor'),
-        speed: P.speed * (1 + (b.speed || 0) + lv('speed') * 0.08),
+        might: 1 + (b.might || 0) + lv('might') * 0.1 + m('power') * 0.05,
+        armor: (b.armor || 0) + lv('armor') + m('plating'),
+        speed: P.speed * (1 + (b.speed || 0) + lv('speed') * 0.08 + m('stride') * 0.05),
         area: 1 + lv('area') * 0.1,
         cooldown: 1 - lv('cooldown') * 0.08,
-        magnet: P.pickupRange * (1 + (b.magnet || 0) + lv('magnet') * 0.3),
-        maxHp: P.maxHp + (b.maxHp || 0) + lv('maxhp') * 20,
+        magnet: P.pickupRange * (1 + (b.magnet || 0) + lv('magnet') * 0.3 + m('collector') * 0.15),
+        maxHp: P.maxHp + (b.maxHp || 0) + lv('maxhp') * 20 + m('vitality') * 10,
         regen: lv('maxhp') * 0.25,
         amount: lv('amount'),
+        growth: 1 + m('growth') * 0.08,
       };
       if (prevMax && p.stats.maxHp > prevMax) p.hp += p.stats.maxHp - prevMax;
       p.statsVersion++;
@@ -137,13 +185,36 @@
       this.player.weapons.push(new OO.Weapon(id));
     }
 
-    getWeapon(id) { return this.player.weapons.find((w) => w.id === id); }
+    /** Owned weapon by id, also matching its evolved form (so an evolved pistol still counts as 'pistol'). */
+    getWeapon(id) { return this.player.weapons.find((w) => w.id === id || w.def.from === id); }
+
+    /** First owned weapon that is ready to evolve, or null. */
+    findEvolution() {
+      const p = this.player;
+      for (const w of p.weapons) {
+        const E = OO.EVOLUTIONS[w.id];
+        if (E && w.level >= w.maxLevel && p.passives[E.needs]) return w;
+      }
+      return null;
+    }
+
+    evolve(w) {
+      const E = OO.EVOLUTIONS[w.id];
+      const nw = new OO.Weapon(E.into);
+      nw.damageDealt = w.damageDealt; nw.kills = w.kills;
+      const list = this.player.weapons;
+      list[list.indexOf(w)] = nw;
+      this.ui.banner(w.def.name + ' evolved into ' + nw.def.name, 'good');
+      OO.Audio.play('evolve');
+      this.flashWhite = Math.max(this.flashWhite, 0.4);
+      return nw;
+    }
 
     rollUpgrades(n) {
       const p = this.player, C = OO.CONFIG, pool = [];
       for (const w of p.weapons) if (w.level < w.maxLevel) pool.push({ kind: 'weapon', id: w.id, weight: 1.5 });
       if (p.weapons.length < C.MAX_WEAPONS) {
-        for (const id in OO.WEAPONS) if (!this.getWeapon(id)) pool.push({ kind: 'weapon', id, weight: 1 });
+        for (const id in OO.WEAPONS) if (!OO.WEAPONS[id].evolved && !this.getWeapon(id)) pool.push({ kind: 'weapon', id, weight: 1 });
       }
       for (const id of p.passiveOrder) if (p.passives[id] < OO.PASSIVES[id].max) pool.push({ kind: 'passive', id, weight: 1 });
       if (p.passiveOrder.length < C.MAX_PASSIVES) {
@@ -164,7 +235,10 @@
         const def = OO.WEAPONS[opt.id], w = this.getWeapon(opt.id);
         if (!w) return { icon: def.icon, name: def.name, badge: 'New', isNew: true, text: def.desc, type: 'Weapon' };
         const next = w.level + 1;
-        return { icon: def.icon, name: def.name, badge: next === w.maxLevel ? 'Lv ' + next + ' · Max' : 'Lv ' + next, text: def.levels[w.level - 1].text, type: 'Weapon' };
+        let text = def.levels[w.level - 1].text;
+        const E = OO.EVOLUTIONS[w.id];
+        if (next === w.maxLevel && E) text += ' Evolves with ' + OO.PASSIVES[E.needs].name + ' from a supply case.';
+        return { icon: def.icon, name: def.name, badge: next === w.maxLevel ? 'Lv ' + next + ' · Max' : 'Lv ' + next, text, type: 'Weapon' };
       }
       if (opt.kind === 'passive') {
         const def = OO.PASSIVES[opt.id], lv = this.player.passives[opt.id] || 0;
@@ -206,7 +280,24 @@
       p.pendingLevels--;
       this.state = 'levelup';
       OO.Audio.play('levelup');
-      this.ui.showLevelUp(this.rollUpgrades(3), p.level - p.pendingLevels);
+      this.luLevel = p.level - p.pendingLevels;
+      this.ui.showLevelUp(this.rollUpgrades(3), this.luLevel);
+    }
+
+    reroll() {
+      const p = this.player;
+      if (this.state !== 'levelup' || p.rerolls <= 0) return;
+      p.rerolls--;
+      OO.Audio.play('select');
+      this.ui.showLevelUp(this.rollUpgrades(3), this.luLevel);
+    }
+
+    skipLevel() {
+      if (this.state !== 'levelup') return;
+      this.credits += 15;
+      this.state = 'playing';
+      this.ui.hideAll();
+      if (this.player.pendingLevels > 0) this.openLevelUp();
     }
 
     chooseUpgrade(opt) {
@@ -220,7 +311,13 @@
 
     openChest(big) {
       const p = this.player, results = [];
-      const rolls = big ? 3 : 1;
+      let rolls = big ? 3 : 1;
+      const ready = this.findEvolution();
+      if (ready) {
+        const nw = this.evolve(ready);
+        results.push({ icon: nw.def.icon, name: nw.def.name, badge: 'Evolved', text: nw.def.desc, type: 'Evolution', evolved: true });
+        rolls--;
+      }
       for (let i = 0; i < rolls; i++) {
         const cands = [];
         for (const w of p.weapons) if (w.level < w.maxLevel) cands.push({ kind: 'weapon', id: w.id });
@@ -298,17 +395,21 @@
       // Player movement
       const ax = Input.axis.x, ay = Input.axis.y;
       p.moving = ax !== 0 || ay !== 0;
+      p.vx = ax * p.stats.speed; p.vy = ay * p.stats.speed;
       if (p.moving) {
         p.x += ax * p.stats.speed * dt;
         p.y += ay * p.stats.speed * dt;
         p.faceAngle = Math.atan2(ay, ax);
         p.walk += dt * 10 * Math.hypot(ax, ay);
       }
+      this.world.update(p.x, p.y);
+      this.world.resolveCircle(p, p.r);
       p.iframes -= dt; p.hurt -= dt; p.aimT -= dt;
       if (p.aimT <= 0) p.aimAngle = p.faceAngle;
       if (p.stats.regen) p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.regen * dt);
 
       this.director.update(dt);
+      this.updateStampedes(dt);
       this.updateEnemies(dt);
 
       this.grid.clear();
@@ -318,6 +419,8 @@
       for (const w of p.weapons) w.update(dt, this);
       this.updateProjectiles(dt);
       this.updateLobs(dt);
+      this.updateEnemyShots(dt);
+      this.updateHazards(dt);
       this.updateZones(dt);
       this.processExplosions();
       this.updatePickups(dt);
@@ -335,14 +438,16 @@
     // ------------------------------------------------------------ enemies
     spawnEnemy(type, x, y) {
       const d = OO.ENEMIES[type], m = this.time / 60;
-      const hpMul = d.crate ? 1 : d.boss ? 1 + m * 0.1 : 1 + m * 0.12;
+      const diff = this.difficulty;
+      const hpMul = d.crate ? 1 : (d.boss ? 1 + m * 0.12 : 1 + m * 0.15) * diff.hp;
       const e = {
         id: ++this.nextId, type, def: d, x, y,
         hp: d.hp * hpMul, maxHp: d.hp * hpMul,
         speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)),
-        dmg: d.dmg * (1 + m * 0.04), r: d.r, mass: d.mass,
+        dmg: d.dmg * (1 + m * 0.05) * diff.dmg, r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
+      if (!d.crate && !d.burster && this.world) this.world.resolveCircle(e, e.r);
       this.enemies.push(e);
       return e;
     }
@@ -353,6 +458,7 @@
         if (e.dead) continue;
         e.flash -= dt; e.t += dt;
         if (e.def.crate) continue;
+        if (e.def.burster) { this.updateBurster(e, dt); continue; }
         const dx = p.x - e.x, dy = p.y - e.y;
         const d = Math.hypot(dx, dy) || 1;
 
@@ -379,16 +485,52 @@
           } else if (ai.timer <= 0 && d < 520) {
             ai.mode = 'wind'; ai.timer = 0.7;
           }
+        } else if (e.def.ranged) {
+          // Spitter: hold a firing distance, strafe, wind up, spit.
+          const R = e.def.ranged, ai = e.ai;
+          if (ai.cd === undefined) { ai.cd = U.rand(1, 2); ai.wind = 0; ai.strafe = U.chance(0.5) ? 1 : -1; }
+          if (ai.wind > 0) {
+            spd = 0;
+            ai.wind -= dt;
+            if (ai.wind <= 0) this.spit(e);
+          } else {
+            if (d < R.min) { mx = -mx; my = -my; spd *= 0.85; }
+            else if (d <= R.max) { const tx = -my * ai.strafe, ty = mx * ai.strafe; mx = tx; my = ty; spd *= 0.55; }
+            ai.cd -= dt;
+            if (ai.cd <= 0 && d < R.max + 60) {
+              ai.wind = R.windup;
+              ai.cd = U.rand(R.cd[0], R.cd[1]);
+              OO.Audio.play('gurgle');
+            }
+          }
         } else if (e.type === 'shambler') {
           const wob = Math.sin(e.t * 1.7 + e.id) * 0.35;
           const c = Math.cos(wob), s = Math.sin(wob);
           const nx = mx * c - my * s; my = mx * s + my * c; mx = nx;
+        }
+        // Obstacle avoidance: if something solid is just ahead, slide around it
+        // (the side is remembered briefly so they don't dither in front of a wall).
+        if (spd > 0) {
+          const ahead = e.r + 24;
+          const o = this.world.hitCircle(e.x + mx * ahead, e.y + my * ahead, e.r);
+          const ai = e.ai;
+          if (ai.sideT > 0) ai.sideT -= dt;
+          if (o) {
+            let tx = -(e.y - o.y), ty = e.x - o.x;
+            if (!(ai.sideT > 0)) { ai.side = tx * mx + ty * my >= 0 ? 1 : -1; ai.sideT = 1.2; }
+            tx *= ai.side; ty *= ai.side;
+            const tl = Math.hypot(tx, ty) || 1;
+            mx = mx * 0.35 + tx / tl; my = my * 0.35 + ty / tl;
+            const ml = Math.hypot(mx, my) || 1;
+            mx /= ml; my /= ml;
+          }
         }
         e.a = Math.atan2(my, mx);
         e.x += mx * spd * dt + e.kbx * dt;
         e.y += my * spd * dt + e.kby * dt;
         const k = Math.max(0, 1 - dt * 9);
         e.kbx *= k; e.kby *= k;
+        if (e.def.ranged) e.a = Math.atan2(dy, dx);   // always faces you, even while backing off
 
         if (d < e.r + p.r) this.hurtPlayer(e.dmg);
       }
@@ -397,10 +539,10 @@
     separate() {
       const buf = this._sepBuf;
       for (const e of this.enemies) {
-        if (e.dead || e.def.crate) continue;
+        if (e.dead || e.def.crate || e.def.burster) continue;
         this.grid.query(e.x, e.y, e.r + 32, buf);
         for (const o of buf) {
-          if (o === e || o.dead) continue;
+          if (o === e || o.dead || o.def.burster) continue;   // bursters plough straight through
           if (!o.def.crate && o.id < e.id) continue;   // each enemy pair handled once
           let dx = e.x - o.x, dy = e.y - o.y;
           const min = e.r + o.r;
@@ -415,6 +557,7 @@
           o.x -= nx * push * (e.mass / tm); o.y -= ny * push * (e.mass / tm);
         }
       }
+      for (const e of this.enemies) if (!e.dead && !e.def.crate && !e.def.burster) this.world.resolveCircle(e, e.r);
     }
 
     nearestEnemy(x, y, maxD, exclude) {
@@ -426,6 +569,24 @@
         if (d < bd) { bd = d; best = e; }
       }
       return best;
+    }
+
+    /** Nearest enemy with a clear line of fire (obstacles block bullets). */
+    nearestVisible(x, y, maxD) {
+      const first = this.nearestEnemy(x, y, maxD);
+      if (!first || !this.world.blocked(x, y, first.x, first.y)) return first;
+      const md = maxD * maxD, cands = [];
+      for (const e of this.enemies) {
+        if (e.dead || e.def.crate) continue;
+        const d = U.dist2(x, y, e.x, e.y);
+        if (d < md) cands.push([d, e]);
+      }
+      cands.sort((a, b) => a[0] - b[0]);
+      for (let i = 0; i < cands.length && i < 10; i++) {
+        const e = cands[i][1];
+        if (!this.world.blocked(x, y, e.x, e.y)) return e;
+      }
+      return null;
     }
 
     randomEnemyNear(x, y, maxD, exclude) {
@@ -458,7 +619,11 @@
 
     killEnemy(e, weapon) {
       e.dead = true;
-      if (weapon) weapon.kills++;
+      if (weapon) {
+        weapon.kills++;
+        const ls = weapon.def.base.lifesteal;
+        if (ls) this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + ls);
+      }
       if (e.def.crate) {
         this.crateLoot(e);
         this.burst(e.x, e.y, '#8a6a3e', 12, 170);
@@ -470,7 +635,8 @@
       const bile = e.def.blood === 'bile';
       this.addDecal(e.x, e.y, e.r * U.rand(1.4, 2.1), bile ? 'bile' : 'red');
       this.burst(e.x, e.y, bile ? '#a8b83a' : '#8f1712', e.def.boss ? 50 : 7, e.def.boss ? 280 : 140);
-      if (e.def.explode) this.pendingExplosions.push({ x: e.x, y: e.y, r: e.def.explode.r, dmg: e.def.explode.dmg, enemyDmg: e.def.explode.enemyDmg });
+      if (e.def.explode) this.pendingExplosions.push({ x: e.x, y: e.y, r: e.def.explode.r, dmg: e.def.explode.dmg * this.enemyDmgScale(), enemyDmg: e.def.explode.enemyDmg, kind: 'bile' });
+      if (e.def.burster) this.detonate(e);
       if (e.def.elite) this.addPickup('case', e.x, e.y, { big: false });
       if (e.def.boss) {
         this.addPickup('case', e.x, e.y, { big: true });
@@ -478,7 +644,7 @@
         this.shake(12);
         OO.Audio.play('explode');
       }
-      if (U.chance(0.004)) this.addPickup('herb', e.x + 12, e.y);
+      if (U.chance(0.007)) this.addPickup('herb', e.x + 12, e.y);
       OO.Audio.play('kill');
     }
 
@@ -498,7 +664,28 @@
       this.shake(5);
       OO.Audio.play('hurt');
       this.addText(p.x, p.y - 22, d, 'hurt');
-      if (p.hp <= 0) { p.hp = 0; this.endRun(false); }
+      if (p.hp <= 0) {
+        if (p.revives > 0) { this.secondWind(); return; }
+        p.hp = 0;
+        this.endRun(false);
+      }
+    }
+
+    /** Armory revive: back on your feet at half HP, with a shockwave to clear space. */
+    secondWind() {
+      const p = this.player;
+      p.revives--;
+      p.hp = p.stats.maxHp * 0.5;
+      p.iframes = 2;
+      this.flashWhite = 0.7;
+      this.shake(12);
+      for (const e of this.enemies) {
+        if (e.dead || e.def.crate) continue;
+        const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
+        if (d < 240) this.damageEnemy(e, e.def.boss ? 150 : 60, (dx / d) * 600, (dy / d) * 600, null);
+      }
+      this.ui.banner('Second Wind', 'good');
+      OO.Audio.play('evolve');
     }
 
     processExplosions() {
@@ -506,20 +693,138 @@
       const p = this.player, buf = this._exBuf;
       while (this.pendingExplosions.length && n++ < 40) {
         const ex = this.pendingExplosions.shift();
-        this.addEffect({ kind: 'burst', x: ex.x, y: ex.y, r: ex.r, life: 0.35, max: 0.35 });
-        this.addDecal(ex.x, ex.y, ex.r * 0.8, 'bile');
+        const blood = ex.kind === 'blood';
+        this.addEffect({ kind: 'burst', x: ex.x, y: ex.y, r: ex.r, life: 0.35, max: 0.35, blood });
+        this.addDecal(ex.x, ex.y, ex.r * 0.8, blood ? 'red' : 'bile');
         this.addLight(ex.x, ex.y, ex.r * 2.2, 1, 0.3);
-        this.burst(ex.x, ex.y, '#b9c94a', 18, 260);
-        OO.Audio.play('explode');
-        this.shake(5);
-        if (U.dist2(ex.x, ex.y, p.x, p.y) < (ex.r + p.r) ** 2) this.hurtPlayer(ex.dmg, true);
+        this.burst(ex.x, ex.y, blood ? '#c0262a' : '#b9c94a', 18, 260);
+        const near = U.dist2(ex.x, ex.y, p.x, p.y) < this.spawnRadius * this.spawnRadius;
+        if (near) { OO.Audio.play('explode'); this.shake(blood ? 7 : 5); }
+        // Cover blocks blasts: no damage if an obstacle sits between you and the explosion.
+        if (U.dist2(ex.x, ex.y, p.x, p.y) < (ex.r + p.r) ** 2 && !this.world.blocked(ex.x, ex.y, p.x, p.y)) this.hurtPlayer(ex.dmg, !blood);   // burster hits respect i-frames
         this.grid.query(ex.x, ex.y, ex.r + 32, buf);
         for (const o of buf) {
           if (o.dead) continue;
+          if (ex.kind === 'blood' && o.def.burster) continue;   // one burster can't set off the whole row
           const dx = o.x - ex.x, dy = o.y - ex.y, d = Math.hypot(dx, dy) || 1;
           if (d < ex.r + o.r) this.damageEnemy(o, ex.enemyDmg, (dx / d) * 220, (dy / d) * 220, null);
         }
       }
+    }
+
+    // ------------------------------------------------------------ burster stampedes
+    updateStampedes(dt) {
+      const p = this.player, S = OO.CONFIG.STAMPEDE;
+      for (const st of this.stampedes) {
+        st.t -= dt;
+        if (!st.locked) {
+          // the lane follows you until it locks
+          st.ax = U.lerp(st.ax, p.x, Math.min(1, dt * 4));
+          st.ay = U.lerp(st.ay, p.y, Math.min(1, dt * 4));
+          if (st.t <= S.lockAt) { st.locked = true; OO.Audio.play('shriek', 1); }
+        }
+        if (!st.shrieked && st.t <= st.warn * 0.55) { st.shrieked = true; OO.Audio.play('shriek', 0.5); }
+        const k = 1 - Math.max(0, st.t) / st.warn;
+        this.shake(1 + k * 3.5);
+        if (st.t <= 0) { this.launchStampede(st); st.dead = true; }
+      }
+      compact(this.stampedes);
+    }
+
+    /** Geometry shared by the simulation and the renderer. */
+    stampedeLane(st) {
+      const ca = Math.cos(st.a), sa = Math.sin(st.a);
+      const back = this.spawnRadius + 140;
+      return {
+        dx: -ca, dy: -sa,                 // travel direction
+        nx: sa, ny: -ca,                  // across the row
+        sx: st.ax + ca * back, sy: st.ay + sa * back,   // where the row starts
+        back, width: st.count * OO.CONFIG.STAMPEDE.spacing,
+      };
+    }
+
+    launchStampede(st) {
+      const L = this.stampedeLane(st), sp = OO.CONFIG.STAMPEDE.spacing;
+      for (let r = 0; r < st.ranks; r++) {
+        for (let j = 0; j < st.count; j++) {
+          if (j === st.gap || j === st.gap + 1) continue;
+          const off = (j - (st.count - 1) / 2) * sp;
+          const x = L.sx + L.nx * off - L.dx * r * 60, y = L.sy + L.ny * off - L.dy * r * 60;
+          const e = this.spawnEnemy('burster', x, y);
+          e.ai.dx = L.dx; e.ai.dy = L.dy; e.ai.travel = 0;
+          e.ai.max = L.back * 2 + 260 + r * 60;
+          e.a = Math.atan2(L.dy, L.dx);
+        }
+      }
+      OO.Audio.play('stampede');
+    }
+
+    updateBurster(e, dt) {
+      const p = this.player, ai = e.ai;
+      let cur = Math.atan2(ai.dy, ai.dx);
+      let diff = Math.atan2(p.y - e.y, p.x - e.x) - cur;
+      while (diff > Math.PI) diff -= U.TAU;
+      while (diff < -Math.PI) diff += U.TAU;
+      if (Math.abs(diff) < 0.8) cur += U.clamp(diff, -OO.CONFIG.STAMPEDE.homing * dt, OO.CONFIG.STAMPEDE.homing * dt);
+      ai.dx = Math.cos(cur); ai.dy = Math.sin(cur); e.a = cur;
+      const step = e.speed * dt;
+      e.x += ai.dx * step + e.kbx * dt; e.y += ai.dy * step + e.kby * dt;
+      e.kbx *= 0.85; e.kby *= 0.85;
+      ai.travel += step;
+      if (Math.random() < 0.25) this.particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, life: 0.35, max: 0.35, color: '#5e0f0c', size: 3 });
+      // Far from you they scramble over wrecks; close in, they slam into whatever is in the way.
+      const pd2 = U.dist2(e.x, e.y, p.x, p.y);
+      if (pd2 < (e.r + p.r) ** 2 || (pd2 < 320 * 320 && this.world.hitCircle(e.x, e.y, e.r))) { this.detonate(e); return; }
+      if (ai.travel > ai.max) e.dead = true;    // ran off the far side
+    }
+
+    detonate(e) {
+      e.dead = true;
+      const b = e.def.burster;
+      this.pendingExplosions.push({ x: e.x, y: e.y, r: b.r, dmg: b.dmg * this.enemyDmgScale(), enemyDmg: b.enemyDmg, kind: 'blood' });
+    }
+
+    /** Damage multiplier for enemy attacks at the current time. */
+    enemyDmgScale() { return (1 + (this.time / 60) * 0.05) * this.difficulty.dmg; }
+
+    spit(e) {
+      const p = this.player, R = e.def.ranged;
+      const lead = R.flight * 0.5;      // aims where you're going, but only half-committed
+      const tx = p.x + (p.vx || 0) * lead + U.rand(-14, 14);
+      const ty = p.y + (p.vy || 0) * lead + U.rand(-14, 14);
+      this.enemyShots.push({ x0: e.x, y0: e.y, x1: tx, y1: ty, t: 0, dur: R.flight, r: R.splash,
+        impact: R.impact * this.enemyDmgScale(), pool: R.pool });
+      OO.Audio.play('spit');
+    }
+
+    updateEnemyShots(dt) {
+      const p = this.player;
+      for (const s of this.enemyShots) {
+        s.t += dt;
+        if (s.t < s.dur) continue;
+        s.dead = true;
+        if (U.dist2(p.x, p.y, s.x1, s.y1) < (s.r + p.r) ** 2) this.hurtPlayer(s.impact);
+        this.hazards.push({ x: s.x1, y: s.y1, r: s.pool.r, life: s.pool.life, max: s.pool.life, tick: s.pool.tick, tickT: 0.1,
+          dmg: s.pool.dmg * this.enemyDmgScale(), seed: Math.random() * 100 });
+        this.burst(s.x1, s.y1, '#a8d84a', 10, 150);
+        this.addDecal(s.x1, s.y1, s.r * 0.7, 'bile');
+        OO.Audio.play('splat');
+      }
+      compact(this.enemyShots);
+    }
+
+    updateHazards(dt) {
+      const p = this.player;
+      for (const h of this.hazards) {
+        h.life -= dt;
+        if (h.life <= 0) { h.dead = true; continue; }
+        h.tickT -= dt;
+        if (h.tickT <= 0) {
+          h.tickT = h.tick;
+          if (U.dist2(p.x, p.y, h.x, h.y) < (h.r + p.r * 0.4) ** 2) this.hurtPlayer(h.dmg);
+        }
+      }
+      compact(this.hazards);
     }
 
     airstrike() {
@@ -550,6 +855,11 @@
         pr.x += pr.vx * dt; pr.y += pr.vy * dt;
         pr.life -= dt;
         if (pr.life <= 0) { pr.dead = true; continue; }
+        if (this.world.hitCircle(pr.x, pr.y, pr.r)) {
+          pr.dead = true;
+          this.burst(pr.x, pr.y, '#ffd98a', 3, 90);
+          continue;
+        }
         this.grid.query(pr.x, pr.y, pr.r + 32, buf);
         for (const e of buf) {
           if (e.dead || pr.hit.has(e.id)) continue;
@@ -557,6 +867,9 @@
           pr.hit.add(e.id);
           const sp = Math.hypot(pr.vx, pr.vy) || 1;
           this.damageEnemy(e, pr.dmg, (pr.vx / sp) * pr.kb, (pr.vy / sp) * pr.kb, pr.weapon);
+          if (pr.ignite && Math.random() < pr.ignite && this.zones.length < 60) {
+            this.zones.push({ x: e.x, y: e.y, r: 26, life: 1.4, max: 1.4, dmg: 5 * this.player.stats.might, tick: 0.3, tickT: 0, kind: 'fire', weapon: pr.weapon, seed: Math.random() * 100 });
+          }
           if (--pr.pierce <= 0) { pr.dead = true; break; }
         }
       }
@@ -642,7 +955,7 @@
       g.dead = true;
       switch (g.kind) {
         case 'xp':
-          p.xp += g.value;
+          p.xp += g.value * p.stats.growth;
           this.xpCombo = this.xpComboT > 0 ? this.xpCombo + 1 : 0;
           this.xpComboT = 0.4;
           OO.Audio.play('xp', this.xpCombo);
@@ -666,7 +979,7 @@
     // ------------------------------------------------------------ effects
     addEffect(fx) { if (this.effects.length < 120) this.effects.push(fx); }
     addLight(x, y, r, i, life) { if (this.lights.length < 40) this.lights.push({ x, y, r, i, life: life || 0.05, max: life || 0.05 }); }
-    shake(a) { if (!this.reducedMotion) this.shakeAmt = Math.max(this.shakeAmt, a); }
+    shake(a) { if (!this.reducedMotion && this.settings.shake) this.shakeAmt = Math.max(this.shakeAmt, a); }
 
     addText(x, y, val, kind) {
       if (this.texts.length > 90) this.texts.shift();

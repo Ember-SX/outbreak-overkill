@@ -6,15 +6,19 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.1.0';
+  OO.VERSION = '0.2.0';
 
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory)
-    MAX_ENEMIES: 450,
+    MAX_ENEMIES: 500,
     MAX_GEMS: 320,                // past this, new XP merges into one overflow gem
     MAX_WEAPONS: 6,
     MAX_PASSIVES: 6,
     LIGHT_RADIUS: 330,            // flashlight radius in world units
+    // Burster stampede: warning time, when the lane locks (seconds before launch), row spacing.
+    STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44, homing: 0.12 },
+    // Spitters hang back and are easy to ignore, so cap how many can be alive: 1 + 0.5/min, max 7.
+    spitterCap(minute) { return Math.min(7, 1 + Math.floor(minute * 0.5)); },
     PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.45 },
     xpToNext(level) {
       if (level < 20) return 5 + (level - 1) * 8;
@@ -26,13 +30,20 @@
   // ---------------------------------------------------------------- ENEMIES
   // hp/dmg scale with time in game.spawnEnemy(). r = collision radius. mass = knockback resistance.
   OO.ENEMIES = {
-    shambler: { name: 'Shambler',    hp: 12,   speed: 36, dmg: 8,  r: 13, xp: 1,   mass: 1,   body: '#56613f', skin: '#7f8b61', eye: '#ffd24a', blood: 'red' },
-    hound:    { name: 'Rot Hound',   hp: 8,    speed: 96, dmg: 6,  r: 11, xp: 1,   mass: 0.6, body: '#4d2a22', skin: '#8b4b3a', eye: '#ff5a2a', blood: 'red' },
-    skinner:  { name: 'Skinner',     hp: 32,   speed: 70, dmg: 12, r: 13, xp: 3,   mass: 1.2, body: '#7a211d', skin: '#b8473d', eye: '#fff0e8', blood: 'red' },
+    shambler: { name: 'Shambler',    hp: 12,   speed: 40, dmg: 8,  r: 13, xp: 1,   mass: 1,   body: '#56613f', skin: '#7f8b61', eye: '#ffd24a', blood: 'red' },
+    hound:    { name: 'Rot Hound',   hp: 9,    speed: 100, dmg: 7,  r: 11, xp: 1,   mass: 0.6, body: '#4d2a22', skin: '#8b4b3a', eye: '#ff5a2a', blood: 'red' },
+    skinner:  { name: 'Skinner',     hp: 36,   speed: 72, dmg: 12, r: 13, xp: 3,   mass: 1.2, body: '#7a211d', skin: '#b8473d', eye: '#fff0e8', blood: 'red' },
     bloater:  { name: 'Bloater',     hp: 70,   speed: 25, dmg: 14, r: 22, xp: 5,   mass: 3,   body: '#666e2c', skin: '#a2ad48', eye: '#eaff7a', blood: 'bile',
                 explode: { r: 78, dmg: 16, enemyDmg: 45 } },
-    brute:    { name: 'Brute',       hp: 450,  speed: 42, dmg: 22, r: 26, xp: 25,  mass: 10,  body: '#3c3e46', skin: '#6c707c', eye: '#ff3a30', blood: 'red', elite: true },
-    stalker:  { name: 'The Stalker', hp: 4000, speed: 56, dmg: 30, r: 32, xp: 120, mass: 40,  body: '#1b1620', skin: '#3b2d45', eye: '#ff2444', blood: 'red', boss: true },
+    spitter:  { name: 'Spitter',     hp: 28,   speed: 52, dmg: 6,  r: 13, xp: 3,   mass: 1,   body: '#33502a', skin: '#86b542', eye: '#e2ff6a', blood: 'bile',
+                // Keeps its distance, swells up, then lobs acid where you're heading. The pool lingers.
+                ranged: { min: 150, max: 240, cd: [3.0, 4.2], windup: 0.6, flight: 0.85, splash: 34, impact: 10,
+                          pool: { r: 40, life: 3.6, tick: 0.35, dmg: 5 } } },
+    burster:  { name: 'Burster',     hp: 6,    speed: 430, dmg: 0, r: 10, xp: 1,   mass: 0.5, body: '#6a1830', skin: '#c94f6c', eye: '#ffe6e6', blood: 'red',
+                // Only arrive in stampedes (see OO.EVENTS kind 'stampede'). Explode on contact with you or cover.
+                burster: { r: 64, dmg: 42, enemyDmg: 90 } },
+    brute:    { name: 'Brute',       hp: 450,  speed: 42, dmg: 18, r: 26, xp: 25,  mass: 10,  body: '#3c3e46', skin: '#6c707c', eye: '#ff3a30', blood: 'red', elite: true },
+    stalker:  { name: 'The Stalker', hp: 4800, speed: 58, dmg: 30, r: 32, xp: 120, mass: 40,  body: '#1b1620', skin: '#3b2d45', eye: '#ff2444', blood: 'red', boss: true },
     crate:    { name: 'Supply Crate', hp: 1,   speed: 0,  dmg: 0,  r: 15, xp: 0,   mass: 999, crate: true },
   };
 
@@ -120,6 +131,53 @@
     },
   };
 
+  // ---------------------------------------------------------------- EVOLUTIONS
+  // A max-level weapon + the listed gear (any level) evolves when you open a supply case.
+  // Evolved forms reuse the base weapon's behaviour with much stronger stats and one twist.
+  const EVOLVED = {
+    twinpistols: {
+      from: 'pistol', name: 'Twin Auto Pistols', icon: 'pistol',
+      desc: 'Two guns, armour-piercing rounds, barely any reload.',
+      base: { dmg: 22, cd: 0.5, amount: 4, speed: 680, pierce: 3, duration: 1.2, kb: 50 },
+    },
+    dragonsbreath: {
+      from: 'shotgun', name: "Dragon's Breath", icon: 'shotgun',
+      desc: 'Incendiary shells. Pellets that hit can set the ground alight.',
+      base: { dmg: 16, cd: 1.0, amount: 11, speed: 700, pierce: 3, duration: 0.42, spread: 0.85, kb: 260, ignite: 0.25 },
+    },
+    bloodletter: {
+      from: 'knife', name: 'Bloodletter', icon: 'knife',
+      desc: 'Slashes in every direction at once. Heals 1 HP per kill.',
+      base: { dmg: 34, cd: 0.8, amount: 4, area: 1.45, kb: 170, omni: 1, lifesteal: 1 },
+    },
+    napalm: {
+      from: 'grenade', name: 'Napalm Canister', icon: 'grenade',
+      desc: 'Four canisters, huge pools, long burn.',
+      base: { dmg: 13, cd: 2.4, amount: 4, area: 1.9, duration: 4.5, tick: 0.25 },
+    },
+    buzzhalo: {
+      from: 'saw', name: 'Buzzsaw Halo', icon: 'saw',
+      desc: 'Six blades that never stop spinning.',
+      base: { dmg: 20, cd: 0.05, amount: 6, area: 1.35, speed: 4.6, duration: 1e9, hitCd: 0.3, kb: 120 },
+    },
+    arcstorm: {
+      from: 'tesla', name: 'Arc Storm', icon: 'tesla',
+      desc: 'Near-constant chain lightning across the horde.',
+      base: { dmg: 30, cd: 0.75, amount: 3, area: 1.4, chains: 6 },
+    },
+  };
+  for (const id in EVOLVED) {
+    OO.WEAPONS[id] = Object.assign({ evolved: true, behaviour: EVOLVED[id].from, levels: [] }, EVOLVED[id]);
+  }
+  OO.EVOLUTIONS = {
+    pistol:  { into: 'twinpistols',   needs: 'amount' },
+    shotgun: { into: 'dragonsbreath', needs: 'might' },
+    knife:   { into: 'bloodletter',   needs: 'speed' },
+    grenade: { into: 'napalm',        needs: 'area' },
+    saw:     { into: 'buzzhalo',      needs: 'cooldown' },
+    tesla:   { into: 'arcstorm',      needs: 'magnet' },
+  };
+
   // ---------------------------------------------------------------- PASSIVES
   OO.PASSIVES = {
     might:    { name: 'Hollow Points',  icon: 'might',    max: 5, text: '+10% damage for all weapons.' },
@@ -131,6 +189,26 @@
     maxhp:    { name: 'Field Medkit',   icon: 'maxhp',    max: 5, text: '+20 max HP and slow regeneration.' },
     amount:   { name: 'Extended Mag',   icon: 'amount',   max: 2, text: '+1 projectile, blade or bolt for every weapon.' },
   };
+
+  // ---------------------------------------------------------------- THREAT LEVELS
+  OO.DIFFICULTY = {
+    standard:  { name: 'Standard',  hp: 1,    dmg: 1,    count: 1,    credits: 1,   text: 'The intended experience.' },
+    nightmare: { name: 'Nightmare', hp: 1.35, dmg: 1.25, count: 1.25, credits: 1.6, text: 'Tougher, hungrier infected. Credits x1.6.' },
+  };
+
+  // ---------------------------------------------------------------- ARMORY (meta progression)
+  // Permanent upgrades bought between runs with banked credits. cost[i] = price of rank i+1.
+  OO.ARMORY = [
+    { id: 'vitality', name: 'Vitality Serum',      icon: 'maxhp',    max: 5, cost: [60, 100, 150, 220, 300], text: '+10 max HP per rank.' },
+    { id: 'power',    name: 'Hollow-Point Stock',  icon: 'might',    max: 5, cost: [80, 130, 190, 260, 350], text: '+5% damage per rank.' },
+    { id: 'plating',  name: 'Trauma Plates',       icon: 'armor',    max: 3, cost: [150, 260, 400],          text: '+1 armor per rank.' },
+    { id: 'stride',   name: 'Field Training',      icon: 'speed',    max: 3, cost: [70, 130, 200],           text: '+5% move speed per rank.' },
+    { id: 'collector',name: 'Sample Collector',    icon: 'magnet',   max: 3, cost: [50, 90, 140],            text: '+15% pickup range per rank.' },
+    { id: 'growth',   name: 'Lab Notes',           icon: 'dna',      max: 3, cost: [90, 160, 250],           text: '+8% XP from DNA samples per rank.' },
+    { id: 'reroll',   name: 'Requisition Forms',   icon: 'reroll',   max: 3, cost: [100, 180, 280],          text: '+1 level-up reroll per run.' },
+    { id: 'greed',    name: 'Black Market Contact', icon: 'credits', max: 3, cost: [60, 120, 200],           text: '+10% credits banked per rank.' },
+    { id: 'revive',   name: 'Second Wind',         icon: 'herb',     max: 1, cost: [500],                    text: 'Once per run, get back up at 50% HP.' },
+  ];
 
   // ---------------------------------------------------------------- OPERATIVES
   OO.CHARACTERS = {
@@ -151,22 +229,23 @@
   // ---------------------------------------------------------------- WAVES
   // One entry per minute. pool = weighted enemy types. target = on-field count the
   // director tops up to. interval/batch = steady trickle on top of that.
+  // v0.2: minutes 0-2 match v0.1; the horde then grows to +10% (3-5), +20% (6-9) and +30% (10+).
   OO.WAVES = [
     { pool: [['shambler', 1]],                                                   target: 18,  interval: 1.2, batch: 2 },
     { pool: [['shambler', 7], ['hound', 3]],                                     target: 40,  interval: 1.0, batch: 3 },
-    { pool: [['shambler', 6], ['hound', 4]],                                     target: 60,  interval: 1.0, batch: 3 },
-    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3]],                     target: 80,  interval: 0.9, batch: 3 },
-    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3], ['bloater', 1]],     target: 100, interval: 0.9, batch: 4 },
-    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 1]],                   target: 110, interval: 0.9, batch: 4 },
-    { pool: [['skinner', 6], ['hound', 3], ['bloater', 1]],                      target: 140, interval: 0.8, batch: 4 },
-    { pool: [['shambler', 4], ['bloater', 3], ['skinner', 3]],                   target: 160, interval: 0.8, batch: 5 },
-    { pool: [['hound', 6], ['skinner', 3], ['bloater', 1]],                      target: 200, interval: 0.7, batch: 5 },
-    { pool: [['shambler', 3], ['hound', 3], ['skinner', 3], ['bloater', 1]],     target: 230, interval: 0.7, batch: 6 },
-    { pool: [['skinner', 5], ['bloater', 2], ['hound', 3]],                      target: 260, interval: 0.6, batch: 6 },
-    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 2]],                   target: 290, interval: 0.6, batch: 7 },
-    { pool: [['hound', 4], ['skinner', 4], ['bloater', 2]],                      target: 320, interval: 0.5, batch: 7 },
-    { pool: [['skinner', 5], ['bloater', 3], ['hound', 2]],                      target: 350, interval: 0.5, batch: 8 },
-    { pool: [['shambler', 2], ['hound', 3], ['skinner', 4], ['bloater', 3]],     target: 400, interval: 0.4, batch: 9 },
+    { pool: [['shambler', 6], ['hound', 4], ['spitter', 1]],                     target: 60,  interval: 1.0, batch: 3 },
+    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3], ['spitter', 1]],     target: 88,  interval: 0.86, batch: 4 },
+    { pool: [['shambler', 5], ['hound', 2], ['skinner', 3], ['bloater', 1], ['spitter', 1]], target: 110, interval: 0.86, batch: 5 },
+    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 1], ['spitter', 1.5]], target: 121, interval: 0.86, batch: 5 },
+    { pool: [['skinner', 6], ['hound', 3], ['bloater', 1], ['spitter', 1.5]],    target: 168, interval: 0.73, batch: 5 },
+    { pool: [['shambler', 4], ['bloater', 3], ['skinner', 3], ['spitter', 2]],   target: 192, interval: 0.73, batch: 6 },
+    { pool: [['hound', 6], ['skinner', 3], ['bloater', 1], ['spitter', 1.5]],    target: 240, interval: 0.64, batch: 6 },
+    { pool: [['shambler', 3], ['hound', 3], ['skinner', 3], ['bloater', 1], ['spitter', 2]], target: 276, interval: 0.64, batch: 7 },
+    { pool: [['skinner', 5], ['bloater', 2], ['hound', 3], ['spitter', 2]],      target: 338, interval: 0.53, batch: 7 },
+    { pool: [['shambler', 4], ['skinner', 4], ['bloater', 2], ['spitter', 2.5]], target: 377, interval: 0.53, batch: 8 },
+    { pool: [['hound', 4], ['skinner', 4], ['bloater', 2], ['spitter', 2.5]],    target: 416, interval: 0.44, batch: 8 },
+    { pool: [['skinner', 5], ['bloater', 3], ['hound', 2], ['spitter', 3]],      target: 455, interval: 0.44, batch: 9 },
+    { pool: [['shambler', 2], ['hound', 3], ['skinner', 4], ['bloater', 3], ['spitter', 3]], target: 520, interval: 0.35, batch: 10 },
   ];
 
   // Scripted moments. kinds: pack (clustered rush), ring (encirclement), elite, boss, banner.
@@ -174,18 +253,30 @@
     { t: 60,  kind: 'banner', text: 'Rot Hounds are on your scent' },
     { t: 90,  kind: 'pack',  enemy: 'hound',    count: 20 },
     { t: 150, kind: 'elite', enemy: 'brute',    count: 1, text: 'Brute sighted' },
+    { t: 135, kind: 'banner', text: 'Spitters: keep moving, the acid lingers' },
+    { t: 165, kind: 'stampede', count: 7,  text: 'Stampede! Get behind cover' },
     { t: 210, kind: 'ring',  enemy: 'shambler', count: 40, text: 'They have you surrounded' },
     { t: 240, kind: 'elite', enemy: 'brute',    count: 1 },
     { t: 300, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'Warning: The Stalker is hunting you' },
-    { t: 390, kind: 'pack',  enemy: 'hound',    count: 35 },
+    { t: 285, kind: 'stampede', count: 9,  text: 'Bursters again. Find cover' },
+    { t: 330, kind: 'elite', enemy: 'brute',    count: 1 },
+    { t: 360, kind: 'pack',  enemy: 'spitter',  count: 5, text: 'A nest of Spitters' },
+    { t: 390, kind: 'pack',  enemy: 'hound',    count: 40 },
+    { t: 405, kind: 'stampede', count: 11 },
     { t: 420, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 480, kind: 'ring',  enemy: 'bloater',  count: 18, text: 'Bloaters closing in. Keep your distance' },
+    { t: 510, kind: 'stampede', count: 11, ranks: 2, text: 'Double stampede' },
     { t: 540, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 600, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'The Stalker is back, and angrier' },
-    { t: 660, kind: 'pack',  enemy: 'hound',    count: 50 },
+    { t: 645, kind: 'stampede', count: 13, ranks: 2 },
+    { t: 660, kind: 'pack',  enemy: 'hound',    count: 60 },
+    { t: 690, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 720, kind: 'ring',  enemy: 'skinner',  count: 70, text: 'Skinners in the walls' },
+    { t: 735, kind: 'stampede', count: 13, ranks: 2 },
     { t: 780, kind: 'elite', enemy: 'brute',    count: 3 },
+    { t: 815, kind: 'stampede', count: 15, ranks: 2 },
     { t: 840, kind: 'boss',  enemy: 'stalker',  count: 2, text: 'Two Stalkers. Evac is one minute out' },
     { t: 870, kind: 'banner', text: 'Evac helicopter inbound. Hold on' },
+    { t: 880, kind: 'stampede', count: 15, ranks: 2, text: 'One last stampede' },
   ];
 })(window.OO = window.OO || {});

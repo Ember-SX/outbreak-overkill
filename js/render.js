@@ -10,8 +10,8 @@
   const TAU = Math.PI * 2;
   const FONT_DISPLAY = '"Big Shoulders Stencil Display", Impact, "Arial Narrow", sans-serif';
   const FONT_MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
-  const HEAD = { shambler: 0.45, hound: 1.45, skinner: 0.35, bloater: 0.6, brute: 0.55, stalker: 0.5 };
-  const ANIM = { shambler: 5, hound: 16, skinner: 9, bloater: 4, brute: 3, stalker: 4 };   // anim speed (rad/s)
+  const HEAD = { burster: 0.9, spitter: 0.3, shambler: 0.45, hound: 1.45, skinner: 0.35, bloater: 0.6, brute: 0.55, stalker: 0.5 };
+  const ANIM = { burster: 18, spitter: 6, shambler: 5, hound: 16, skinner: 9, bloater: 4, brute: 3, stalker: 4 };   // anim speed (rad/s)
   const FRAMES = 8;
   const SPRITE_SCALE = 2;
 
@@ -156,6 +156,7 @@
       ctx.fillRect(camX - 40, camY - 40, g.viewW + 80, g.viewH + 80);
       this.drawDecals(ctx);
       this.drawZones(ctx);
+      this.drawObstacles(ctx);
       this.drawEnemies(ctx);
       this.drawPlayer(ctx);
       for (const w of p.weapons) w.draw(ctx, g);
@@ -168,8 +169,12 @@
 
       // Things that should read through the dark: eyes, loot, tracers, lightning, numbers.
       world();
+      this.drawObstacleEdges(ctx);
       this.drawEyes(ctx);
       this.drawPickups(ctx);
+      this.drawStampedeLanes(ctx);
+      this.drawHazards(ctx);
+      this.drawEnemyShots(ctx);
       this.drawProjectiles(ctx);
       this.drawEffects(ctx, true);
       this.drawTexts(ctx);
@@ -250,6 +255,118 @@
       }
     }
 
+    // ---------------------------------------------------------------- obstacles
+    drawObstacles(ctx) {
+      for (const o of this.g.world.list) {
+        if (!this.inView(o.x, o.y, Math.max(o.maxX - o.minX, o.maxY - o.minY))) continue;
+        const spr = o.spr || (o.spr = this.obstacleSprite(o));
+        ctx.drawImage(spr, o.x - spr.hw, o.y - spr.hh, spr.hw * 2, spr.hh * 2);
+      }
+    }
+
+    /** Faint rim on every obstacle, drawn over the darkness so cover is readable in the dark. */
+    drawObstacleEdges(ctx) {
+      ctx.strokeStyle = 'rgba(235,226,207,0.13)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (const o of this.g.world.list) {
+        if (!this.inView(o.x, o.y, 100)) continue;
+        if (o.kind === 'circle') { ctx.moveTo(o.x + o.r, o.y); ctx.arc(o.x, o.y, o.r, 0, TAU); }
+        else ctx.rect(o.minX, o.minY, o.maxX - o.minX, o.maxY - o.minY);
+      }
+      ctx.stroke();
+    }
+
+    /** Pre-renders one obstacle (with its drop shadow) into its own little canvas. */
+    obstacleSprite(o) {
+      const pad = 12;
+      const hw = (o.kind === 'circle' ? o.r : o.hw) + pad, hh = (o.kind === 'circle' ? o.r : o.hh) + pad;
+      const c = document.createElement('canvas');
+      c.width = Math.ceil(hw * 2 * SPRITE_SCALE); c.height = Math.ceil(hh * 2 * SPRITE_SCALE);
+      const x = c.getContext('2d');
+      x.scale(SPRITE_SCALE, SPRITE_SCALE);
+      x.translate(hw, hh);
+      let seed = Math.floor(o.seed * 1e6);
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      const rrect = (X, Y, W, H, r) => { x.beginPath(); x.roundRect ? x.roundRect(X, Y, W, H, r) : x.rect(X, Y, W, H); };
+
+      // shadow
+      x.fillStyle = 'rgba(0,0,0,0.5)';
+      if (o.kind === 'circle') { x.beginPath(); x.arc(5, 7, o.r, 0, TAU); x.fill(); }
+      else { rrect(-o.hw + 5, -o.hh + 7, o.hw * 2, o.hh * 2, 6); x.fill(); }
+
+      // vehicles are drawn lying along x, then rotated if the obstacle is vertical
+      const vertical = o.kind === 'rect' && o.hh > o.hw;
+      if (vertical) x.rotate(Math.PI / 2);
+      const L = vertical ? o.hh : o.hw, Wd = vertical ? o.hw : o.hh;
+
+      switch (o.type) {
+        case 'car':
+        case 'bus': {
+          const pal = [['#5b3b2c', '#3e2a20'], ['#33424f', '#232e37'], ['#2a2724', '#191715'], ['#5e5a3c', '#3c3926']][o.tint || 0];
+          const bus = o.type === 'bus';
+          x.fillStyle = bus ? '#5c5031' : pal[0]; rrect(-L, -Wd, L * 2, Wd * 2, bus ? 5 : 9); x.fill();
+          x.fillStyle = bus ? '#423a24' : pal[1]; rrect(-L * (bus ? 0.92 : 0.45), -Wd * 0.72, L * (bus ? 1.84 : 0.95), Wd * 1.44, 5); x.fill();
+          x.fillStyle = '#162026';
+          if (bus) {
+            for (let i = -5; i <= 5; i++) { x.fillRect(i * L * 0.16 - 5, -Wd + 3, 10, 5); x.fillRect(i * L * 0.16 - 5, Wd - 8, 10, 5); }
+          } else {
+            x.beginPath(); x.moveTo(L * 0.5, -Wd * 0.72); x.lineTo(L * 0.7, -Wd * 0.6); x.lineTo(L * 0.7, Wd * 0.6); x.lineTo(L * 0.5, Wd * 0.72); x.fill();
+            x.beginPath(); x.moveTo(-L * 0.45, -Wd * 0.72); x.lineTo(-L * 0.62, -Wd * 0.6); x.lineTo(-L * 0.62, Wd * 0.6); x.lineTo(-L * 0.45, Wd * 0.72); x.fill();
+            x.fillStyle = '#c9c0a0'; x.fillRect(L - 4, -Wd + 4, 3, 6); x.fillRect(L - 4, Wd - 10, 3, 6);
+          }
+          // scorch and rust
+          for (let i = 0; i < 4; i++) {
+            x.fillStyle = `rgba(${rnd() < 0.5 ? '15,12,10' : '110,52,24'},${0.25 + rnd() * 0.3})`;
+            x.beginPath(); x.arc((rnd() - 0.5) * L * 1.6, (rnd() - 0.5) * Wd * 1.4, 4 + rnd() * 9, 0, TAU); x.fill();
+          }
+          x.strokeStyle = 'rgba(0,0,0,0.5)'; x.lineWidth = 1.5;
+          x.beginPath(); x.moveTo(-L * 0.1, -Wd); x.lineTo(-L * 0.1, Wd); x.stroke();
+          break;
+        }
+        case 'barrier': {
+          x.fillStyle = '#6f6d64'; rrect(-L, -Wd, L * 2, Wd * 2, 3); x.fill();
+          x.fillStyle = '#8b897f'; x.fillRect(-L + 3, -Wd * 0.35, L * 2 - 6, Wd * 0.7);
+          for (const end of [-1, 1]) {
+            for (let i = 0; i < 3; i++) {
+              x.fillStyle = i % 2 ? '#1b1a17' : '#c9a227';
+              x.fillRect(end * (L - 6 - i * 7) - 3.5, -Wd, 7, Wd * 2);
+            }
+          }
+          x.strokeStyle = 'rgba(0,0,0,0.45)'; x.lineWidth = 1;
+          x.beginPath(); x.moveTo((rnd() - 0.5) * L, -Wd); x.lineTo((rnd() - 0.5) * L, Wd); x.stroke();
+          break;
+        }
+        case 'dumpster': {
+          x.fillStyle = '#2d4633'; rrect(-L, -Wd, L * 2, Wd * 2, 3); x.fill();
+          x.fillStyle = '#3a5a41'; x.fillRect(-L + 3, -Wd + 3, L - 4, Wd * 2 - 6); x.fillRect(1, -Wd + 3, L - 4, Wd * 2 - 6);
+          x.fillStyle = 'rgba(110,52,24,0.5)';
+          for (let i = 0; i < 3; i++) { x.beginPath(); x.arc((rnd() - 0.5) * L * 1.6, (rnd() - 0.5) * Wd * 1.4, 3 + rnd() * 5, 0, TAU); x.fill(); }
+          break;
+        }
+        case 'pillar': {
+          x.fillStyle = '#5f5d56'; x.beginPath(); x.arc(0, 0, o.r, 0, TAU); x.fill();
+          x.fillStyle = '#76746b'; x.beginPath(); x.arc(-2, -2, o.r * 0.78, 0, TAU); x.fill();
+          x.fillStyle = '#3a3833';
+          for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU; x.fillRect(Math.cos(a) * o.r * 0.45 - 1.5, Math.sin(a) * o.r * 0.45 - 1.5, 3, 3); }
+          break;
+        }
+        case 'barrels': {
+          x.fillStyle = '#9c8228'; x.beginPath(); x.arc(0, 0, o.r, 0, TAU); x.fill();
+          x.strokeStyle = '#5c4c16'; x.lineWidth = 2; x.beginPath(); x.arc(0, 0, o.r * 0.78, 0, TAU); x.stroke();
+          x.fillStyle = '#1b1a17';
+          for (let i = 0; i < 3; i++) {
+            const a = (i / 3) * TAU - Math.PI / 2;
+            x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, o.r * 0.55, a - 0.38, a + 0.38); x.closePath(); x.fill();
+          }
+          x.fillStyle = '#9c8228'; x.beginPath(); x.arc(0, 0, o.r * 0.16, 0, TAU); x.fill();
+          break;
+        }
+      }
+      c.hw = hw; c.hh = hh;
+      return c;
+    }
+
     drawEnemies(ctx) {
       const list = this.g.enemies;
       for (const e of list) if (e.def.crate && !e.dead && this.inView(e.x, e.y, 30)) this.drawCrate(ctx, e);
@@ -325,6 +442,12 @@
       ctx.drawImage(spr, -spr.half, -spr.half, spr.half * 2, spr.half * 2);
       ctx.restore();
 
+      if (e.def.ranged && e.ai.wind > 0) {
+        const k = 1 - e.ai.wind / e.def.ranged.windup;
+        const sx = e.x + Math.cos(e.a) * r * 0.65, sy = e.y + Math.sin(e.a) * r * 0.65;
+        ctx.fillStyle = `rgba(190,240,90,${0.55 + k * 0.4})`;
+        circle(ctx, sx, sy, r * (0.45 + k * 0.45));
+      }
       if (e.type === 'stalker' && e.ai.mode === 'wind') {
         ctx.strokeStyle = `rgba(255,40,60,${0.5 + Math.sin(e.t * 40) * 0.4})`;
         ctx.lineWidth = 3;
@@ -391,6 +514,34 @@
           ctx.fillStyle = fl ? '#fff' : '#e8909c'; circle(ctx, r * 0.35, 0, r * 0.55);
           ctx.strokeStyle = fl ? '#fff' : '#b35a68'; ctx.lineWidth = 1.2;
           ctx.beginPath(); ctx.moveTo(r * 0.1, 0); ctx.lineTo(r * 0.75, 0); ctx.stroke();
+          break;
+        }
+        case 'burster': {
+          const leg = Math.sin(t * 18) * r * 0.5;
+          ctx.strokeStyle = body; ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(r * 0.3, -r * 0.5); ctx.lineTo(r * 0.3 + leg, -r * 1.1);
+          ctx.moveTo(r * 0.3, r * 0.5); ctx.lineTo(r * 0.3 - leg, r * 1.1);
+          ctx.moveTo(-r * 0.6, -r * 0.5); ctx.lineTo(-r * 0.6 - leg, -r * 1.1);
+          ctx.moveTo(-r * 0.6, r * 0.5); ctx.lineTo(-r * 0.6 + leg, r * 1.1);
+          ctx.stroke();
+          ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(0, 0, r * 1.3, r * 0.8, 0, 0, TAU); ctx.fill();
+          ctx.fillStyle = fl ? '#fff' : '#ff6b5a';
+          circle(ctx, -r * 0.35, -r * 0.25, r * 0.38); circle(ctx, -r * 0.2, r * 0.3, r * 0.32); circle(ctx, -r * 0.75, 0, r * 0.3);
+          ctx.fillStyle = skin; circle(ctx, r * 0.9, 0, r * 0.45);
+          break;
+        }
+        case 'spitter': {
+          const pulse = Math.sin(t * 6) * 0.06;
+          ctx.fillStyle = body;
+          ctx.beginPath(); ctx.ellipse(-r * 0.15, 0, r * 1.05, r * 0.9, 0, 0, TAU); ctx.fill();
+          ctx.fillStyle = fl ? '#fff' : '#22361b';
+          for (let i = 0; i < 4; i++) circle(ctx, -r * 0.9 + i * r * 0.3, 0, r * 0.14);
+          ctx.fillStyle = fl ? '#fff' : '#b8e070';
+          circle(ctx, r * 0.55, 0, r * (0.5 + pulse));
+          ctx.fillStyle = skin; circle(ctx, r * 0.2, 0, r * 0.42);
+          ctx.fillStyle = fl ? '#fff' : '#1b2a12';
+          ctx.beginPath(); ctx.ellipse(r * 0.95, 0, r * 0.16, r * 0.3, 0, 0, TAU); ctx.fill();
           break;
         }
         case 'brute': {
@@ -540,6 +691,75 @@
       return c;
     }
 
+    /**
+     * Stampede warning lane, drawn over the darkness: a red band with chevrons running in the
+     * direction of travel. The two-slot gap in the row is left unshaded. Pulses faster once locked.
+     */
+    drawStampedeLanes(ctx) {
+      const g = this.g, t = g.time, sp = OO.CONFIG.STAMPEDE.spacing;
+      for (const st of g.stampedes) {
+        const L = g.stampedeLane(st), ang = Math.atan2(L.dy, L.dx);
+        const len = L.back * 2;
+        const k = 1 - st.t / st.warn;
+        const pulse = st.locked ? 0.5 + 0.5 * Math.sin(t * 30) : 0.5 + 0.5 * Math.sin(t * 8);
+        ctx.save();
+        ctx.translate(L.sx, L.sy);
+        ctx.rotate(ang);
+        // one band per row slot (local x = direction of travel, local y = across the row)
+        for (let j = 0; j < st.count; j++) {
+          if (j === st.gap || j === st.gap + 1) continue;
+          const y = (j - (st.count - 1) / 2) * sp;
+          ctx.fillStyle = `rgba(210,30,25,${(0.05 + k * 0.1) + pulse * 0.06})`;
+          ctx.fillRect(0, y - sp / 2, len, sp);
+        }
+        // chevrons
+        ctx.strokeStyle = `rgba(255,80,60,${0.18 + k * 0.3 + (st.locked ? pulse * 0.3 : 0)})`;
+        ctx.lineWidth = 3;
+        const half = L.width / 2, step = 90, shift = (t * 260) % step;
+        ctx.beginPath();
+        for (let x = shift; x < len; x += step) {
+          ctx.moveTo(x, -half * 0.5); ctx.lineTo(x + 26, 0); ctx.lineTo(x, half * 0.5);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    /** Acid pools: drawn over the darkness so you can always see where not to stand. */
+    drawHazards(ctx) {
+      const t = this.g.time;
+      for (const h of this.g.hazards) {
+        if (!this.inView(h.x, h.y, h.r)) continue;
+        const a = Math.min(1, h.life / 0.6, (h.max - h.life) / 0.15 + 0.2);
+        const gr = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.r);
+        gr.addColorStop(0, `rgba(150,210,60,${0.5 * a})`);
+        gr.addColorStop(0.7, `rgba(110,170,40,${0.38 * a})`);
+        gr.addColorStop(1, 'rgba(80,120,20,0)');
+        ctx.fillStyle = gr; circle(ctx, h.x, h.y, h.r);
+        ctx.fillStyle = `rgba(210,255,140,${0.6 * a})`;
+        for (let i = 0; i < 4; i++) {
+          const ph = (t * 1.3 + h.seed + i * 0.37) % 1;
+          const ang = h.seed * 7 + i * 2.1, rr = h.r * 0.55 * ((i * 0.31 + h.seed) % 1);
+          circle(ctx, h.x + Math.cos(ang) * rr, h.y + Math.sin(ang) * rr, 1 + ph * 3.5);
+        }
+      }
+    }
+
+    /** Spitter globs in flight, plus a closing reticle on the landing spot. */
+    drawEnemyShots(ctx) {
+      for (const s of this.g.enemyShots) {
+        const k = U.clamp(s.t / s.dur, 0, 1);
+        ctx.strokeStyle = `rgba(190,240,90,${0.25 + k * 0.55})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath(); ctx.arc(s.x1, s.y1, s.r * (1.5 - k * 0.5), 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+        const x = U.lerp(s.x0, s.x1, k), y = U.lerp(s.y0, s.y1, k) - Math.sin(k * Math.PI) * 80;
+        ctx.fillStyle = 'rgba(150,210,60,0.35)'; circle(ctx, x, y, 9);
+        ctx.fillStyle = '#c6f06a'; circle(ctx, x, y, 5);
+      }
+    }
+
     drawProjectiles(ctx) {
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
@@ -581,8 +801,8 @@
           ctx.restore();
         } else if (f.kind === 'burst' && !overDark) {
           const r = f.r * (1.1 - a * 0.6);
-          ctx.fillStyle = `rgba(185,201,74,${0.45 * a})`; circle(ctx, f.x, f.y, r);
-          ctx.strokeStyle = `rgba(230,255,140,${0.8 * a})`; ctx.lineWidth = 3;
+          ctx.fillStyle = f.blood ? `rgba(200,40,30,${0.5 * a})` : `rgba(185,201,74,${0.45 * a})`; circle(ctx, f.x, f.y, r);
+          ctx.strokeStyle = f.blood ? `rgba(255,170,120,${0.85 * a})` : `rgba(230,255,140,${0.8 * a})`; ctx.lineWidth = 3;
           ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.stroke();
         } else if (f.kind === 'bolt' && overDark) {
           ctx.globalCompositeOperation = 'lighter';
@@ -710,7 +930,10 @@
       ctx.fillText(U.formatTime(g.time), W / 2, top + 20);
       ctx.font = `500 10px ${FONT_MONO}`;
       ctx.fillStyle = '#8f8a7d';
-      ctx.fillText('EVAC IN ' + U.formatTime(remaining), W / 2, top + 58);
+      ctx.fillText('EVAC IN ' + U.formatTime(remaining) + (g.settings.difficulty === 'nightmare' ? ' · NIGHTMARE' : ''), W / 2, top + 58);
+
+      // Off-screen markers: bosses, elites and supply cases you can't see yet
+      this.drawOffscreenMarkers();
 
       // Kills and credits (left of the DOM pause/mute buttons)
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
@@ -735,8 +958,30 @@
           ctx.fillRect(x + 3 + i * pip, y + slot - 4, Math.max(1, pip - 1), 2);
         }
       };
-      p.weapons.forEach((w, i) => drawSlot(x0 + i * (slot + gap), top + 22, w.def.icon, w.level, w.maxLevel, '#e3a33b'));
+      p.weapons.forEach((w, i) => drawSlot(x0 + i * (slot + gap), top + 22, w.def.icon, w.level, w.maxLevel, w.def.evolved ? '#ff6f4a' : '#e3a33b'));
       p.passiveOrder.forEach((id, i) => drawSlot(x0 + i * (slot + gap), top + 22 + slot + gap, OO.PASSIVES[id].icon, p.passives[id], OO.PASSIVES[id].max, '#56d6c0'));
+
+      // Stampede origin arrows at the screen edge
+      for (const st of g.stampedes) {
+        const L = g.stampedeLane(st);
+        const ang = Math.atan2(L.sy - p.y, L.sx - p.x);
+        const cx = W / 2, cy = this.h / 2, m = 46;
+        const tx = Math.cos(ang), ty = Math.sin(ang);
+        const s = Math.min((cx - m) / Math.max(Math.abs(tx), 1e-3), (cy - m) / Math.max(Math.abs(ty), 1e-3));
+        const ex = cx + tx * s, ey = cy + ty * s;
+        const pulse = 0.55 + 0.45 * Math.sin(g.time * (st.locked ? 30 : 10));
+        ctx.save();
+        ctx.translate(ex, ey); ctx.rotate(ang + Math.PI);
+        ctx.fillStyle = `rgba(255,60,45,${pulse})`;
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath(); ctx.moveTo(-14 + i * 12, -14); ctx.lineTo(i * 12, 0); ctx.lineTo(-14 + i * 12, 14); ctx.lineTo(-8 + i * 12, 0); ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+        ctx.font = `800 16px ${FONT_DISPLAY}`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = `rgba(255,90,70,${pulse})`;
+        ctx.fillText(st.locked ? 'INCOMING' : 'STAMPEDE', ex - tx * 46, ey - ty * 46);
+      }
 
       // Boss health
       const bosses = g.bosses;
@@ -753,6 +998,31 @@
         ctx.fillStyle = '#d4291f'; ctx.fillRect(bx, by + 1, bw * (hp / max), 6);
       }
       ctx.textBaseline = 'alphabetic';
+    }
+
+    drawOffscreenMarkers() {
+      const g = this.g, ctx = this.ctx, z = g.zoom, W = this.w, H = this.h;
+      const marks = [];
+      for (const e of g.enemies) {
+        if (e.dead || !(e.def.boss || e.def.elite)) continue;
+        marks.push([e.x, e.y, e.def.boss ? '#ff3b2f' : '#ff8a3a', e.def.boss ? 13 : 9]);
+      }
+      for (const k of g.pickups) if (k.kind === 'case' && !k.dead) marks.push([k.x, k.y, '#e3a33b', 9]);
+      const cx = W / 2, cy = H / 2, mx = 22, myTop = 100, myBot = 22;
+      for (const [wx, wy, col, size] of marks) {
+        const sx = (wx - this.cam.x) * z, sy = (wy - this.cam.y) * z;
+        if (sx > 0 && sx < W && sy > 0 && sy < H) continue;
+        const a = Math.atan2(sy - cy, sx - cx), tx = Math.cos(a), ty = Math.sin(a);
+        const kx = (cx - mx) / Math.max(Math.abs(tx), 1e-3);
+        const ky = ty < 0 ? (cy - myTop) / Math.max(-ty, 1e-3) : (cy - myBot) / Math.max(ty, 1e-3);
+        const k = Math.min(kx, ky), px = cx + tx * k, py = cy + ty * k;
+        ctx.save();
+        ctx.translate(px, py); ctx.rotate(a);
+        ctx.fillStyle = col;
+        ctx.globalAlpha = 0.75 + Math.sin(g.time * 6) * 0.2;
+        ctx.beginPath(); ctx.moveTo(size, 0); ctx.lineTo(-size * 0.7, -size * 0.75); ctx.lineTo(-size * 0.35, 0); ctx.lineTo(-size * 0.7, size * 0.75); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
     }
 
     drawStick() {

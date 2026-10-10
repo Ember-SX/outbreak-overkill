@@ -37,11 +37,30 @@
       <h2 class="section-label">Choose operative</h2>
       <div id="char-list" class="chars"></div>
 
+      <h2 class="section-label">Threat level</h2>
+      <div id="diff-list" class="threat"></div>
+
       <div class="menu-actions">
         <button id="btn-start" class="btn btn-primary" type="button">Deploy</button>
+        <button id="btn-armory" class="btn btn-ghost" type="button">Armory</button>
       </div>
       <p class="controls"><kbd>WASD</kbd> or arrows or drag to move · <kbd>Esc</kbd> pause · <kbd>M</kbd> mute · <kbd>`</kbd> debug</p>
       <p id="records" class="records"></p>
+    </div>
+  </section>
+
+  <!-- Armory -->
+  <section id="screen-armory" class="screen screen-dim" hidden>
+    <div class="panel panel-armory">
+      <p class="eyebrow">Between deployments</p>
+      <h2 class="panel-title">Armory</h2>
+      <p class="armory-bank">Banked credits <strong id="armory-bank">0</strong></p>
+      <div id="armory-list" class="armory-list"></div>
+      <div class="panel-actions">
+        <button id="armory-back" class="btn btn-primary" type="button">Back</button>
+        <button id="armory-refund" class="btn btn-ghost" type="button">Refund all</button>
+      </div>
+      <p class="hint">Every run banks the credits you picked up, plus a payout for kills and time survived.</p>
     </div>
   </section>
 
@@ -51,7 +70,11 @@
       <p class="eyebrow">Field upgrade</p>
       <h2 class="panel-title">Level <span id="lu-level">2</span></h2>
       <div id="lu-cards" class="cards"></div>
-      <p class="hint">Press 1, 2 or 3, or tap a card</p>
+      <div class="lu-actions">
+        <button id="btn-reroll" class="btn-small" type="button">Reroll <span id="reroll-n">(1 left)</span> <kbd>R</kbd></button>
+        <button id="btn-skip" class="btn-small" type="button">Skip for 15 credits <kbd>X</kbd></button>
+        <p class="hint">Press 1, 2 or 3, or tap a card</p>
+      </div>
     </div>
   </section>
 
@@ -71,7 +94,15 @@
       <p class="eyebrow">Holding position</p>
       <h2 class="panel-title">Paused</h2>
       <ul id="pause-build" class="build-list"></ul>
+      <div class="manual">
+        <h3 class="manual-title">Field manual: evolutions</h3>
+        <ul id="pause-evo" class="evo-list"></ul>
+      </div>
       <dl id="pause-stats" class="stat-grid"></dl>
+      <div class="settings">
+        <button id="set-shake" class="btn-small" type="button"></button>
+        <button id="set-numbers" class="btn-small" type="button"></button>
+      </div>
       <div class="panel-actions">
         <button id="btn-resume" class="btn btn-primary" type="button">Resume</button>
         <button id="btn-quit" class="btn btn-ghost" type="button">Abandon run</button>
@@ -85,6 +116,7 @@
       <p id="res-eyebrow" class="eyebrow"></p>
       <h2 id="res-title" class="panel-title"></h2>
       <dl id="res-stats" class="stat-grid stat-grid-big"></dl>
+      <p id="res-payout" class="res-payout"></p>
       <div class="table-wrap"><table id="res-weapons" class="res-table"></table></div>
       <div class="panel-actions">
         <button id="btn-retry" class="btn btn-primary" type="button">Deploy again</button>
@@ -99,6 +131,7 @@
   <script src="js/audio.js"></script>
   <script src="js/input.js"></script>
   <script src="js/icons.js"></script>
+  <script src="js/world.js"></script>
   <script src="js/weapons.js"></script>
   <script src="js/spawner.js"></script>
   <script src="js/render.js"></script>

@@ -115,6 +115,23 @@
         ctx.globalCompositeOperation = 'destination-out';
         ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(16, 16, 6, 0.8, Math.PI * 2 - 0.8); ctx.stroke();
         break;
+      case 'dna':
+        ctx.lineWidth = 2.6;
+        for (const ph of [0, Math.PI]) {
+          ctx.beginPath();
+          for (let y = 3; y <= 29; y += 1) ctx.lineTo(16 + Math.sin(y * 0.38 + ph) * 8, y);
+          ctx.stroke();
+        }
+        ctx.lineWidth = 1.6;
+        for (let y = 6; y <= 27; y += 4.2) {
+          ctx.beginPath(); ctx.moveTo(16 + Math.sin(y * 0.38) * 8, y); ctx.lineTo(16 + Math.sin(y * 0.38 + Math.PI) * 8, y); ctx.stroke();
+        }
+        break;
+      case 'reroll':
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(16, 16, 10, -0.3, Math.PI * 1.35); ctx.stroke();
+        poly(ctx, [26, 4, 28, 14, 18, 11]); ctx.fill();
+        break;
       case 'skull':
         ctx.beginPath(); ctx.arc(16, 14, 10, 0, Math.PI * 2); ctx.fill();
         ctx.fillRect(10, 18, 12, 9);

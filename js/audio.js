@@ -109,6 +109,42 @@
         if (!throttle(name, 90)) return;
         noise({ dur: 0.4, vol: 0.25, freq: 900, f2: 200 });
         break;
+      case 'rumble':
+        // the ground starts shaking: long sub-bass swell
+        noise({ dur: 3.0, vol: 0.5, freq: 60, f2: 300, q: 3 });
+        tone({ type: 'sine', f: 30, f2: 52, dur: 3.0, vol: 0.38 });
+        tone({ type: 'triangle', f: 41, f2: 70, dur: 3.0, vol: 0.12 });
+        break;
+      case 'shriek': {
+        // distant screaming pack; opt = loudness 0..1
+        const v = opt || 0.6;
+        for (let i = 0; i < 3; i++) {
+          tone({ type: 'sawtooth', f: 700 + i * 170, f2: 1500 + i * 220, dur: 0.38, vol: 0.035 * v, delay: i * 0.07 });
+        }
+        noise({ dur: 0.4, vol: 0.12 * v, freq: 2600, type: 'bandpass', q: 3 });
+        break;
+      }
+      case 'stampede':
+        noise({ dur: 1.1, vol: 0.3, freq: 300, f2: 1400, type: 'bandpass', q: 1 });
+        break;
+      case 'evolve':
+        [262, 392, 523, 784, 1046].forEach((f, i) => tone({ type: 'sawtooth', f, dur: 0.3, vol: 0.06, delay: i * 0.06 }));
+        noise({ dur: 0.6, vol: 0.15, freq: 4000, f2: 800, type: 'bandpass', q: 1 });
+        break;
+      case 'gurgle':
+        if (!throttle(name, 160)) return;
+        tone({ type: 'sine', f: 110, f2: 300, dur: 0.5, vol: 0.07 });
+        noise({ dur: 0.45, vol: 0.05, freq: 500, f2: 1400, type: 'bandpass', q: 4 });
+        break;
+      case 'spit':
+        if (!throttle(name, 90)) return;
+        noise({ dur: 0.18, vol: 0.18, freq: 1600, f2: 400, type: 'bandpass', q: 2 });
+        tone({ type: 'sine', f: 320, f2: 140, dur: 0.14, vol: 0.08 });
+        break;
+      case 'splat':
+        if (!throttle(name, 90)) return;
+        noise({ dur: 0.28, vol: 0.2, freq: 900, f2: 160 });
+        break;
       case 'saw':
         if (!throttle(name, 400)) return;
         tone({ type: 'sawtooth', f: 90, f2: 140, dur: 0.3, vol: 0.03 });
