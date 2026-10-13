@@ -109,7 +109,7 @@
       a: U.rand(0, U.TAU), ax: p.x, ay: p.y, t: S.warn, warn: S.warn, locked: false,
       count, ranks: ev.ranks || 1, gap, shrieked: false,
     });
-    if (!ev.text) g.ui.banner('Stampede! Get behind cover', 'boss');
+    if (!ev.text) g.ui.banner("Stampede! Bursters can't be stopped. Get behind cover", 'boss');
     OO.Audio.play('rumble');
   };
 

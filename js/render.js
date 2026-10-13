@@ -528,7 +528,14 @@
           ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(0, 0, r * 1.3, r * 0.8, 0, 0, TAU); ctx.fill();
           ctx.fillStyle = fl ? '#fff' : '#ff6b5a';
           circle(ctx, -r * 0.35, -r * 0.25, r * 0.38); circle(ctx, -r * 0.2, r * 0.3, r * 0.32); circle(ctx, -r * 0.75, 0, r * 0.3);
+          // bone carapace: overlapping plates down the back (why nothing gets through)
+          ctx.fillStyle = '#d9d0bd'; ctx.strokeStyle = '#6b6252'; ctx.lineWidth = 1;
+          for (let i = 0; i < 4; i++) {
+            const px = r * 0.55 - i * r * 0.5;
+            ctx.beginPath(); ctx.ellipse(px, 0, r * 0.32, r * 0.62 - i * r * 0.06, 0, -Math.PI / 2, Math.PI / 2); ctx.fill(); ctx.stroke();
+          }
           ctx.fillStyle = skin; circle(ctx, r * 0.9, 0, r * 0.45);
+          ctx.fillStyle = '#d9d0bd'; ctx.beginPath(); ctx.ellipse(r * 0.95, 0, r * 0.32, r * 0.42, 0, -Math.PI / 2, Math.PI / 2); ctx.fill();
           break;
         }
         case 'spitter': {
@@ -594,6 +601,9 @@
         const w = e.r * 2;
         ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w, 4);
         ctx.fillStyle = '#c62a22'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w * Math.max(0, e.hp / e.maxHp), 4);
+        ctx.font = `700 9px ${FONT_MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillStyle = '#ff8a3a'; ctx.fillText('LV ' + e.level, e.x, e.y - e.r - 14);
+        ctx.textBaseline = 'alphabetic';
       }
     }
 
@@ -839,7 +849,7 @@
       ctx.font = `700 12px ${FONT_MONO}`;
       for (const t of this.g.texts) {
         ctx.globalAlpha = Math.min(1, t.life / t.max * 1.6);
-        const col = t.kind === 'hurt' ? '#ff5a4a' : t.kind === 'heal' ? '#7ddc6a' : t.kind === 'credit' ? '#e3a33b' : '#ebe2cf';
+        const col = t.kind === 'hurt' ? '#ff5a4a' : t.kind === 'heal' ? '#7ddc6a' : t.kind === 'credit' ? '#e3a33b' : t.kind === 'immune' ? '#9fd4ff' : '#ebe2cf';
         ctx.fillStyle = 'rgba(0,0,0,0.8)';
         ctx.fillText(t.val, t.x + 1, t.y + 1);
         ctx.fillStyle = col;
@@ -930,7 +940,15 @@
       ctx.fillText(U.formatTime(g.time), W / 2, top + 20);
       ctx.font = `500 10px ${FONT_MONO}`;
       ctx.fillStyle = '#8f8a7d';
-      ctx.fillText('EVAC IN ' + U.formatTime(remaining) + (g.settings.difficulty === 'nightmare' ? ' · NIGHTMARE' : ''), W / 2, top + 58);
+      ctx.fillText('EVAC IN ' + U.formatTime(remaining) + (g.difficulty !== OO.DIFFICULTY.standard ? ' · ' + g.difficulty.name.toUpperCase() : ''), W / 2, top + 58);
+
+      // Strain level (enemy leveling). Colour climbs with the level; ADAPTING shows while the
+      // dynamic part is rising because too many kills are one-hit kills.
+      const S = g.strain, sl = S.level;
+      ctx.font = `700 11px ${FONT_MONO}`;
+      ctx.fillStyle = sl >= 12 ? '#ff5a4a' : sl >= 6 ? '#e3a33b' : '#ebe2cf';
+      const strainText = 'STRAIN LV ' + sl + (S.rising > 0 ? '  \u25B2 ADAPTING' : '');
+      ctx.fillText(strainText, W / 2, top + 72);
 
       // Off-screen markers: bosses, elites and supply cases you can't see yet
       this.drawOffscreenMarkers();
@@ -988,7 +1006,7 @@
       if (bosses.length) {
         let hp = 0, max = 0;
         for (const b of bosses) { hp += Math.max(0, b.hp); max += b.maxHp; }
-        const bw = Math.min(440, W - 40), bx = (W - bw) / 2, by = top + (W < 560 ? 116 : 92);
+        const bw = Math.min(440, W - 40), bx = (W - bw) / 2, by = top + (W < 560 ? 122 : 106);
         ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
         ctx.font = `800 15px ${FONT_DISPLAY}`;
         ctx.fillStyle = '#ff5a4a';
@@ -1042,11 +1060,13 @@
         'enemies ' + g.enemies.length + '  projectiles ' + g.projectiles.length,
         'pickups ' + g.pickups.length + '  particles ' + g.particles.length,
         'wave ' + Math.floor(g.time / 60) + '  zoom ' + g.zoom.toFixed(2),
-        '[L] level  [T] +1 min  [H] heal  [B] boss',
+        'strain ' + g.strain.level + ' = time ' + g.strain.timeLevel.toFixed(1) + ' + adapt ' + g.strain.adapt.toFixed(2) +
+          '  one-hit ' + Math.round(g.strain.oneShot * 100) + '%  shambler hp ' + Math.round(OO.ENEMIES.shambler.hp * g.enemyHpMul(OO.ENEMIES.shambler, g.strain.level)),
+        '[L] level  [T] +1 min  [H] heal  [B] boss  [J] +1 strain',
       ];
       ctx.font = `500 11px ${FONT_MONO}`;
       ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(8, this.h - 18 * lines.length - 16, 300, 18 * lines.length + 8);
+      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(8, this.h - 18 * lines.length - 16, 560, 18 * lines.length + 8);
       ctx.fillStyle = '#9ee05a';
       lines.forEach((l, i) => ctx.fillText(l, 14, this.h - 18 * lines.length - 12 + i * 18));
       ctx.textBaseline = 'alphabetic';

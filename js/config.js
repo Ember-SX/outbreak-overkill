@@ -6,7 +6,7 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.2.0';
+  OO.VERSION = '0.3.0';
 
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory)
@@ -15,6 +15,25 @@
     MAX_WEAPONS: 6,
     MAX_PASSIVES: 6,
     LIGHT_RADIUS: 330,            // flashlight radius in world units
+    // Enemy leveling ("strain level"). Every infected spawns at the current strain level, and its
+    // HP is multiplied by (1 + hpGrowth)^level on top of the threat level's HP multiplier.
+    // level = floor(minutes * perMinute + adapt). `adapt` is the dynamic part: it climbs while too
+    // many kills are one-hit kills (one-hit share above `target`) and slowly falls back when the
+    // infected start soaking hits again. It never goes below 0 or above `max`.
+    LEVELING: {
+      perMinute: 1,
+      hpGrowth: { normal: 0.14, elite: 0.12, boss: 0.10 },
+      adapt: {
+        target: 0.4,     // aim for at most ~40% of regular kills being one-hit kills
+        gain: 0.06,      // levels per second per unit of one-hit share above target
+        decay: 0.02,     // levels per second lost while one-hit share is well under target
+        max: 10,
+        smoothing: 0.03, // weight of each new kill in the rolling one-hit share
+        grace: 60,       // seconds before adaptation starts
+        minSamples: 20,
+      },
+      announceEvery: 5,  // banner at strain level 5, 10, 15...
+    },
     // Burster stampede: warning time, when the lane locks (seconds before launch), row spacing.
     STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44, homing: 0.12 },
     // Spitters hang back and are easy to ignore, so cap how many can be alive: 1 + 0.5/min, max 7.
@@ -39,8 +58,10 @@
                 // Keeps its distance, swells up, then lobs acid where you're heading. The pool lingers.
                 ranged: { min: 150, max: 240, cd: [3.0, 4.2], windup: 0.6, flight: 0.85, splash: 34, impact: 10,
                           pool: { r: 40, life: 3.6, tick: 0.35, dmg: 5 } } },
-    burster:  { name: 'Burster',     hp: 6,    speed: 430, dmg: 0, r: 10, xp: 1,   mass: 0.5, body: '#6a1830', skin: '#c94f6c', eye: '#ffe6e6', blood: 'red',
+    burster:  { name: 'Burster',     hp: 6,    speed: 430, dmg: 0, r: 10, xp: 0,   mass: 0.5, body: '#6a1830', skin: '#c94f6c', eye: '#ffe6e6', blood: 'red',
                 // Only arrive in stampedes (see OO.EVENTS kind 'stampede'). Explode on contact with you or cover.
+                // Invulnerable: nothing damages them, auto-aim ignores them, bullets glance off. Cover is the answer.
+                invulnerable: true,
                 burster: { r: 64, dmg: 42, enemyDmg: 90 } },
     brute:    { name: 'Brute',       hp: 450,  speed: 42, dmg: 18, r: 26, xp: 25,  mass: 10,  body: '#3c3e46', skin: '#6c707c', eye: '#ff3a30', blood: 'red', elite: true },
     stalker:  { name: 'The Stalker', hp: 4800, speed: 58, dmg: 30, r: 32, xp: 120, mass: 40,  body: '#1b1620', skin: '#3b2d45', eye: '#ff2444', blood: 'red', boss: true },
@@ -191,9 +212,13 @@
   };
 
   // ---------------------------------------------------------------- THREAT LEVELS
+  // v0.3: what used to be Nightmare (x1.35 HP, x1.25 damage, x1.25 horde size) is now the
+  // Standard baseline. Nightmare is locked until it gets its own, harder tuning; its numbers
+  // below are placeholders and are never applied while `locked` is true.
   OO.DIFFICULTY = {
-    standard:  { name: 'Standard',  hp: 1,    dmg: 1,    count: 1,    credits: 1,   text: 'The intended experience.' },
-    nightmare: { name: 'Nightmare', hp: 1.35, dmg: 1.25, count: 1.25, credits: 1.6, text: 'Tougher, hungrier infected. Credits x1.6.' },
+    standard:  { name: 'Standard',  hp: 1.35, dmg: 1.25, count: 1.25, credits: 1,   text: 'The intended experience.' },
+    nightmare: { name: 'Nightmare', hp: 1.35, dmg: 1.25, count: 1.25, credits: 1.6, locked: true,
+                 text: 'Locked. Coming in a future update.' },
   };
 
   // ---------------------------------------------------------------- ARMORY (meta progression)
@@ -254,7 +279,7 @@
     { t: 90,  kind: 'pack',  enemy: 'hound',    count: 20 },
     { t: 150, kind: 'elite', enemy: 'brute',    count: 1, text: 'Brute sighted' },
     { t: 135, kind: 'banner', text: 'Spitters: keep moving, the acid lingers' },
-    { t: 165, kind: 'stampede', count: 7,  text: 'Stampede! Get behind cover' },
+    { t: 165, kind: 'stampede', count: 7,  text: "Stampede! Bursters can't be stopped. Get behind cover" },
     { t: 210, kind: 'ring',  enemy: 'shambler', count: 40, text: 'They have you surrounded' },
     { t: 240, kind: 'elite', enemy: 'brute',    count: 1 },
     { t: 300, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'Warning: The Stalker is hunting you' },

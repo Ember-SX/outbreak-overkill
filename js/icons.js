@@ -132,6 +132,13 @@
         ctx.beginPath(); ctx.arc(16, 16, 10, -0.3, Math.PI * 1.35); ctx.stroke();
         poly(ctx, [26, 4, 28, 14, 18, 11]); ctx.fill();
         break;
+      case 'lock':
+        ctx.lineWidth = 3.2;
+        ctx.beginPath(); ctx.arc(16, 13, 6.5, Math.PI, 0); ctx.lineTo(22.5, 16); ctx.moveTo(9.5, 16); ctx.lineTo(9.5, 13); ctx.stroke();
+        ctx.fillRect(6, 15, 20, 14);
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillRect(14.6, 19, 2.8, 6);
+        break;
       case 'skull':
         ctx.beginPath(); ctx.arc(16, 14, 10, 0, Math.PI * 2); ctx.fill();
         ctx.fillRect(10, 18, 12, 9);

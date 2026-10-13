@@ -1,7 +1,7 @@
 // Headless balance runner: plays full runs with two simple bots and reports survival times.
 //
 //   npm run sim                      Standard, 2 runs per operative per bot
-//   npm run sim -- nightmare 3       threat level, runs per combination
+//   npm run sim -- standard 3        threat level, runs per combination (locked levels fall back to Standard)
 //
 // Bots: "random" picks upgrades at random; "smart" prefers owned weapons and evolution
 // partners, and runs behind the nearest obstacle when a stampede is coming.

@@ -245,6 +245,9 @@ kbd {
 .threat-name { font-family: var(--font-display); font-weight: 800; font-size: 20px; text-transform: uppercase; line-height: 1.1; }
 .threat-nightmare .threat-name { color: #ff5a4a; }
 .threat-text { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.threat-btn:disabled { cursor: not-allowed; border-style: dashed; background: rgba(8, 10, 9, 0.35); }
+.threat-btn:disabled .threat-name { color: var(--muted); }
+.threat-lock { width: 16px; height: 16px; margin-right: 6px; vertical-align: -2px; }
 
 .settings { display: flex; flex-wrap: wrap; gap: 8px; }
 

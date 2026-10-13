@@ -2,6 +2,20 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
+## [0.3.0] - 2026-10-13
+
+Branch `feature/enemy-leveling`.
+
+### Added
+- **Strain level (enemy leveling).** Infected spawn at the current strain level; HP grows 14% per level (12% elites, 10% The Stalker), compounding. Strain = minutes survived + an adaptive bonus that climbs while more than 40% of kills are one-hit kills (cap +10) and eases off when they aren't. HUD readout with an ADAPTING indicator, banners every 5 levels, elite level tags, peak level on the results screen, debug overlay breakdown and a J debug key.
+- Locked Nightmare button on the menu.
+
+### Changed
+- **Standard now uses v0.2's Nightmare numbers**: x1.35 enemy HP, x1.25 enemy damage, x1.25 horde size. Credits stay x1.
+- Enemy HP no longer scales linearly with time; the strain level replaces it.
+- **Bursters are invincible**: no source of damage affects them, auto-aim skips them, projectiles glance off with an IMMUNE tag, and they give no XP. They carry visible bone plates. Cover is the way through a stampede.
+- Nightmare is locked; v0.2 saves with Nightmare selected fall back to Standard.
+
 ## [0.2.0] - 2026-10-10
 
 Branch `feature/v0.2-escalation`.
