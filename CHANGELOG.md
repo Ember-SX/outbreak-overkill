@@ -2,6 +2,25 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
+## [0.4.0] - 2026-10-13
+
+Branch `feature/v0.4-coop`.
+
+### Added
+- **2-player online co-op.** The Co-op screen has Host/Join with a 3-digit room code, using PeerJS signalling plus a WebRTC data channel (PeerJS 1.5.5 vendored).
+  - The host simulates the run and streams snapshots at 15 Hz. The client predicts its own movement.
+  - Pooled XP with per-player level-up picks, nearest-player targeting, x2 enemy HP while a partner is connected.
+  - Down and revive (3s next to your partner), supply-case toasts, shared pause, per-player payouts, back-to-lobby between runs.
+  - Disconnect handling with an 8s keepalive. Set `?peer=host:port` to use a self-hosted signalling server.
+- **Late-game surge.** From 6:00, enemy HP +20% and damage +12% per minute, compounding (`OO.CONFIG.SURGE`). The Stalker gets half the HP rate; Burster blasts are exempt from the damage surge. HUD readout and a 5:58 banner.
+
+### Fixed
+- **Pickups stopped dropping mid-run.** After 320 uncollected DNA samples, every new drop was merged into one far-away overflow gem. Ground items now despawn (samples 60s, other items 45s, supply cases never) and blink before they go. Caps recycle the oldest item instead: an old gem's XP moves into the new drop, so no XP is lost.
+
+### Changed
+- The simulation now runs over a list of players, and weapons belong to an owner. Solo play is unchanged.
+- `tools/balance-sim.mjs` is updated to the new API.
+
 ## [0.3.0] - 2026-10-13
 
 Branch `feature/enemy-leveling`.

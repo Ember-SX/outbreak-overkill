@@ -44,7 +44,7 @@ const results = await page.evaluate(({ difficulty, runs }) => {
     let best = null, bs = -1;
     for (const o of opts) {
       let s = Math.random() * 0.5;
-      if (o.kind === 'weapon') s += g.getWeapon(o.id) ? 4 : (g.player.weapons.length < 4 ? 3 : 1);
+      if (o.kind === 'weapon') s += g.getWeapon(g.player, o.id) ? 4 : (g.player.weapons.length < 4 ? 3 : 1);
       if (o.kind === 'passive') {
         s += 2 + (8 - PREF.indexOf(o.id)) * 0.2;
         for (const w of g.player.weapons) { const E = OO.EVOLUTIONS[w.id]; if (E && E.needs === o.id) s += 1.5; }
@@ -102,11 +102,11 @@ const results = await page.evaluate(({ difficulty, runs }) => {
         while (g.state !== 'results' && steps++ < 60 * 60 * 16) {
           steer(bot);
           if (g.state === 'playing') g.update(1 / 60);
-          else if (g.state === 'levelup') g.chooseUpgrade(bot === 'smart' ? smartPick(g.ui.options) : g.ui.options[Math.floor(Math.random() * g.ui.options.length)]);
+          else if (g.state === 'levelup') { const opts = g.player.luOptions; g.chooseUpgrade(g.player, bot === 'smart' ? opts.indexOf(smartPick(opts)) : Math.floor(Math.random() * opts.length)); }
           else if (g.state === 'chest') g.closeChest();
         }
         out.push({
-          ch, bot, won: g.time >= OO.CONFIG.RUN_LENGTH, time: Math.round(g.time), level: g.player.level, kills: g.kills,
+          ch, bot, won: g.time >= OO.CONFIG.RUN_LENGTH, time: Math.round(g.time), level: g.team.level, kills: g.kills,
           weapons: g.player.weapons.map((w) => w.id + (w.def.evolved ? '*' : w.level)).join(' '),
           damage: Object.entries(src).map(([k, v]) => k.replace(/^(update|process)/, '') + ' ' + Math.round(v)).join(', '),
         });

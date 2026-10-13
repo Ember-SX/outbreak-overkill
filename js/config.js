@@ -6,12 +6,21 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.3.0';
+  OO.VERSION = '0.4.0';
 
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory)
     MAX_ENEMIES: 500,
-    MAX_GEMS: 320,                // past this, new XP merges into one overflow gem
+    // Ground items. Every pickup has a lifetime (seconds; 0 = never despawns) and blinks for the
+    // last `blink` seconds. Past maxGems, the oldest DNA sample on the ground is recycled and its
+    // XP rides along with the new drop, so no XP is lost to the cap. Past maxOther, the oldest
+    // non-gem pickup (herb, credits, scanner, flare) is removed. Supply cases never despawn.
+    PICKUPS: {
+      maxGems: 320,
+      maxOther: 60,
+      life: { xp: 60, herb: 45, credit: 45, magnet: 45, bomb: 45, case: 0 },
+      blink: 5,
+    },
     MAX_WEAPONS: 6,
     MAX_PASSIVES: 6,
     LIGHT_RADIUS: 330,            // flashlight radius in world units
@@ -33,6 +42,24 @@
         minSamples: 20,
       },
       announceEvery: 5,  // banner at strain level 5, 10, 15...
+    },
+    // Late-game surge. From `start` minutes on, enemy HP and damage compound every minute on top of
+    // the strain level, so late builds stop deleting the horde before it reaches you.
+    // HP x(1 + hpPerMin)^(minutes past start), damage x(1 + dmgPerMin)^(minutes past start).
+    // The Stalker gets hpPerMin * bossHpScale. Burster blasts skip the damage surge (they're
+    // already lethal and can't be fought).
+    SURGE: { start: 6, hpPerMin: 0.20, dmgPerMin: 0.12, bossHpScale: 0.5 },
+    // Co-op (2 players over P2P). Enemy HP is multiplied while a partner is connected.
+    // A player at 0 HP goes down; standing within reviveRadius of them for reviveTime seconds
+    // brings them back at reviveHp of max HP. The run ends when both are down.
+    COOP: {
+      enemyHp: 2.0,          // 200% enemy health while a partner is connected
+      reviveTime: 3,
+      reviveRadius: 70,
+      reviveHp: 0.35,
+      snapshotHz: 15,        // host -> client world updates per second
+      inputHz: 30,           // client -> host position updates per second
+      peerPrefix: 'outbreak-overkill-v1-',   // room 427 is peer id outbreak-overkill-v1-427
     },
     // Burster stampede: warning time, when the lane locks (seconds before launch), row spacing.
     STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44, homing: 0.12 },
@@ -285,6 +312,7 @@
     { t: 300, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'Warning: The Stalker is hunting you' },
     { t: 285, kind: 'stampede', count: 9,  text: 'Bursters again. Find cover' },
     { t: 330, kind: 'elite', enemy: 'brute',    count: 1 },
+    { t: 358, kind: 'banner', text: 'The strain is surging. They get stronger every minute now' },
     { t: 360, kind: 'pack',  enemy: 'spitter',  count: 5, text: 'A nest of Spitters' },
     { t: 390, kind: 'pack',  enemy: 'hound',    count: 40 },
     { t: 405, kind: 'stampede', count: 11 },

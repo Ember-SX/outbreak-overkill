@@ -55,7 +55,7 @@
       this.list = [];
       this.cells = new Map();
       this.stamp = 0;
-      this.lcx = null; this.lcy = null;
+      this.sig = null;
     }
 
     generate(cx, cy) {
@@ -83,23 +83,36 @@
       return out;
     }
 
-    /** Call every frame with the player position; rebuilds the active set when the chunk changes. */
-    update(px, py) {
-      const cx = Math.floor(px / CHUNK), cy = Math.floor(py / CHUNK);
-      if (cx === this.lcx && cy === this.lcy) return;
-      this.lcx = cx; this.lcy = cy;
+    /**
+     * Call every frame with the player position(s): update(x, y) or update([{x, y}, ...]).
+     * Rebuilds the active set when any player changes chunk; with two players the active set
+     * is the union of the chunks around each of them.
+     */
+    update(points, py) {
+      if (typeof points === 'number') points = [{ x: points, y: py }];
+      const centres = points.map((p) => Math.floor(p.x / CHUNK) + ',' + Math.floor(p.y / CHUNK));
+      const sig = centres.join('|');
+      if (sig === this.sig) return;
+      this.sig = sig;
+      const want = new Set();
+      for (const c of centres) {
+        const [cx, cy] = c.split(',').map(Number);
+        for (let dx = -KEEP; dx <= KEEP; dx++) for (let dy = -KEEP; dy <= KEEP; dy++) want.add((cx + dx) + ',' + (cy + dy));
+      }
       this.list = [];
-      for (let dx = -KEEP; dx <= KEEP; dx++) {
-        for (let dy = -KEEP; dy <= KEEP; dy++) {
-          const k = (cx + dx) + ',' + (cy + dy);
-          let c = this.chunks.get(k);
-          if (!c) { c = this.generate(cx + dx, cy + dy); this.chunks.set(k, c); }
-          for (const o of c) this.list.push(o);
-        }
+      for (const k of want) {
+        let c = this.chunks.get(k);
+        if (!c) { const [kx, ky] = k.split(',').map(Number); c = this.generate(kx, ky); this.chunks.set(k, c); }
+        for (const o of c) this.list.push(o);
       }
       for (const [k] of this.chunks) {
         const [kx, ky] = k.split(',').map(Number);
-        if (Math.abs(kx - cx) > KEEP + 2 || Math.abs(ky - cy) > KEEP + 2) this.chunks.delete(k);
+        let near = false;
+        for (const c of centres) {
+          const [cx, cy] = c.split(',').map(Number);
+          if (Math.abs(kx - cx) <= KEEP + 2 && Math.abs(ky - cy) <= KEEP + 2) { near = true; break; }
+        }
+        if (!near) this.chunks.delete(k);
       }
       this.cells.clear();
       for (const o of this.list) {

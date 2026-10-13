@@ -1,4 +1,4 @@
-/* DOM screens: main menu, level-up cards, supply case, pause, results, and the warning banner. */
+/* DOM screens: main menu, co-op lobby, level-up cards, supply case, pause, results, toasts and the warning banner. */
 (function (OO) {
   'use strict';
 
@@ -13,7 +13,7 @@
       this.lockUntil = 0;
       this.selectedChar = U.storage.get('oo.char', 'mara');
       if (!OO.CHARACTERS[this.selectedChar]) this.selectedChar = 'mara';
-      this.screens = ['screen-menu', 'screen-levelup', 'screen-chest', 'screen-pause', 'screen-results', 'screen-armory'];
+      this.screens = ['screen-menu', 'screen-levelup', 'screen-chest', 'screen-pause', 'screen-results', 'screen-armory', 'screen-coop'];
 
       this.buildMenu();
       this.buildDifficulty();
@@ -22,17 +22,18 @@
       $('btn-armory').addEventListener('click', () => this.showArmory());
       $('armory-back').addEventListener('click', () => this.showMenu());
       $('armory-refund').addEventListener('click', () => { this.g.refundArmory(); this.showArmory(); });
-      $('btn-reroll').addEventListener('click', () => this.g.reroll());
+      $('btn-reroll').addEventListener('click', () => { if (performance.now() >= this.lockUntil) this.g.requestReroll(); });
       $('set-shake').addEventListener('click', () => { this.g.toggleSetting('shake'); this.updateSettings(); });
       $('set-numbers').addEventListener('click', () => { this.g.toggleSetting('damageNumbers'); this.updateSettings(); });
-      $('btn-skip').addEventListener('click', () => { if (performance.now() >= this.lockUntil) this.g.skipLevel(); });
+      $('btn-skip').addEventListener('click', () => { if (performance.now() >= this.lockUntil) this.g.requestSkip(); });
       $('btn-resume').addEventListener('click', () => this.g.resume());
       $('btn-quit').addEventListener('click', () => this.g.quitToMenu());
-      $('btn-retry').addEventListener('click', () => this.startRun());
+      $('btn-retry').addEventListener('click', () => this.retry());
       $('btn-menu').addEventListener('click', () => this.g.quitToMenu());
       $('chest-ok').addEventListener('click', () => this.g.closeChest());
       $('btn-pause').addEventListener('click', () => (this.g.state === 'paused' ? this.g.resume() : this.g.pause()));
       $('btn-mute').addEventListener('click', () => { OO.Audio.init(); this.g.toggleMute(); });
+      this.bindCoop();
       window.addEventListener('keydown', (e) => this.onKey(e));
       this.updateMute();
       this.showMenu();
@@ -42,6 +43,67 @@
       OO.Audio.init();
       OO.Audio.play('select');
       this.g.start(this.selectedChar);
+    }
+
+    /** Results screen 'Deploy again': solo restarts; co-op goes back to the shared lobby. */
+    retry() {
+      if (this.g.coop && this.g.net) { this.g.backToLobby(); return; }
+      this.startRun();
+    }
+
+    // ------------------------------------------------------------ co-op lobby
+    bindCoop() {
+      $('btn-coop').addEventListener('click', () => { OO.Audio.init(); this.renderCoop({ view: 'choose' }); });
+      $('coop-host').addEventListener('click', () => this.g.hostSession(this.selectedChar));
+      $('coop-join').addEventListener('click', () => this.joinFromInput());
+      $('coop-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') this.joinFromInput(); });
+      $('coop-code').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 3); });
+      $('coop-deploy').addEventListener('click', () => this.g.coopDeploy());
+      $('coop-leave').addEventListener('click', () => { this.g.leaveSession(); this.renderCoop({ view: 'choose' }); });
+      $('coop-back').addEventListener('click', () => { this.g.leaveSession(); this.showMenu(); });
+    }
+
+    joinFromInput() {
+      const code = $('coop-code').value.trim();
+      if (!/^\d{3}$/.test(code)) { this.renderCoop({ view: 'choose', error: 'Room codes are 3 digits, like 427.' }); return; }
+      this.g.joinSession(code, this.selectedChar);
+    }
+
+    /**
+     * view: 'choose' (Host or Join) | 'room' (code, status, roster).
+     * Other fields: code, status, roster [{tag, name, you}], canDeploy, isHost, error, busy.
+     */
+    renderCoop(v) {
+      this.hideAll();
+      $('coop-choose').hidden = v.view !== 'choose';
+      $('coop-room').hidden = v.view !== 'room';
+      $('coop-error').hidden = !v.error;
+      $('coop-error').textContent = v.error || '';
+      $('coop-host').disabled = !!v.busy;
+      $('coop-join').disabled = !!v.busy;
+      if (v.view === 'choose' && v.status) { $('coop-error').hidden = false; $('coop-error').textContent = v.status; }
+      if (v.view === 'room') {
+        $('coop-room-code').textContent = v.code || '---';
+        $('coop-status').textContent = v.status || '';
+        $('coop-roster').innerHTML = (v.roster || []).map((r) =>
+          `<li><b class="tag-${esc(r.tag)}">${esc(r.tag)}</b> ${esc(r.name)}${r.you ? ' <em>(you)</em>' : ''}${r.host ? ' <em>host</em>' : ''}</li>`).join('');
+        $('coop-deploy').hidden = !v.isHost;
+        $('coop-deploy').disabled = !v.canDeploy;
+      }
+      $('coop-selected').textContent = OO.CHARACTERS[this.selectedChar].name;
+      $('screen-coop').hidden = false;
+    }
+
+    /** Co-op supply case: a toast instead of a pause screen, so your partner keeps playing. */
+    chestToast(results, credits) {
+      const el = $('toast');
+      el.innerHTML = '<p class="toast-title">Supply case</p>' + results.map((d) =>
+        `<p class="${d.evolved ? 'evo' : ''}"><img src="${OO.Icons.url(d.icon, 20, d.evolved ? '#ff6f4a' : '#e3a33b')}" alt=""> <strong>${esc(d.name)}</strong> <em>${esc(d.badge)}</em></p>`).join('')
+        + `<p><img src="${OO.Icons.url('credits', 20, '#e3a33b')}" alt=""> <strong>+${credits} credits</strong></p>`;
+      el.hidden = false;
+      el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+      clearTimeout(this._toastT);
+      this._toastT = setTimeout(() => { el.hidden = true; }, 4500);
     }
 
     // ------------------------------------------------------------ menu
@@ -153,17 +215,20 @@
     }
 
     // ------------------------------------------------------------ level up
-    showLevelUp(options, level) {
-      this.options = options;
+    /** descs: already-described options (from Game.describeUpgrade, or sent by the co-op host). */
+    showLevelUp(descs, level, rerolls) {
+      this.options = descs;
+      this.waiting = false;
       this.lockUntil = performance.now() + 350;   // stop a held key or stray tap from picking blind
       $('lu-level').textContent = level;
-      const rr = this.g.player.rerolls;
-      $('reroll-n').textContent = '(' + rr + ' left)';
-      $('btn-reroll').disabled = rr <= 0;
+      $('reroll-n').textContent = '(' + rerolls + ' left)';
+      $('btn-reroll').disabled = rerolls <= 0;
+      $('lu-cards').hidden = false;
+      $('lu-actions').hidden = false;
+      $('lu-wait').hidden = true;
       const wrap = $('lu-cards');
       wrap.innerHTML = '';
-      options.forEach((opt, i) => {
-        const d = this.g.describeUpgrade(opt);
+      descs.forEach((d, i) => {
         const b = document.createElement('button');
         b.className = 'card' + (d.isNew ? ' card-new' : '');
         b.innerHTML = `
@@ -182,9 +247,18 @@
     }
 
     pick(i) {
-      if (performance.now() < this.lockUntil) return;
-      const opt = this.options[i];
-      if (opt) this.g.chooseUpgrade(opt);
+      if (performance.now() < this.lockUntil || this.waiting) return;
+      if (this.options[i]) this.g.pickUpgrade(i);
+    }
+
+    /** Co-op: you've chosen; the game resumes once your partner has too. */
+    showLevelWait(name) {
+      this.waiting = true;
+      $('lu-cards').hidden = true;
+      $('lu-actions').hidden = true;
+      $('lu-wait').textContent = name ? 'Waiting for ' + name + ' to choose…' : 'Waiting for your partner to choose…';
+      $('lu-wait').hidden = false;
+      $('screen-levelup').hidden = false;
     }
 
     // ------------------------------------------------------------ supply case
@@ -212,6 +286,7 @@
       });
       $('pause-evo').innerHTML = recipes.length ? recipes.join('') : '<li>Every weapon you carry has evolved.</li>';
       const s = p.stats;
+      $('pause-coop').hidden = !this.g.coop;
       $('pause-stats').innerHTML = [
         ['Max HP', Math.round(s.maxHp)], ['Armor', s.armor], ['Damage', Math.round(s.might * 100) + '%'],
         ['Area', Math.round(s.area * 100) + '%'], ['Cooldown', Math.round(s.cooldown * 100) + '%'],
@@ -226,7 +301,9 @@
       $('res-eyebrow').textContent = r.victory ? 'Extraction confirmed' : 'Signal lost';
       $('res-title').textContent = r.victory ? 'You made the chopper' : 'You were overrun';
       $('screen-results').classList.toggle('won', r.victory);
-      $('res-payout').innerHTML = `Banked <strong>+${r.payout.toLocaleString()}</strong> credits for the Armory (${r.bank.toLocaleString()} total) · ${esc(r.difficulty)}`;
+      const team = r.coop && r.team ? ' · Co-op: ' + r.team.map((t) => esc(t.tag + ' ' + t.name)).join(', ') : '';
+      $('res-payout').innerHTML = `Banked <strong>+${r.payout.toLocaleString()}</strong> credits for the Armory (${r.bank.toLocaleString()} total) · ${esc(r.difficulty)}${team}`;
+      $('btn-retry').textContent = r.coop && this.g.net ? 'Back to lobby' : 'Deploy again';
       $('res-stats').innerHTML = [
         ['Survived', U.formatTime(r.time)], ['Level', r.level], ['Kills', r.kills], ['Credits', r.credits], ['Strain', 'LV ' + r.strain],
       ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
@@ -258,8 +335,8 @@
         if (e.repeat) return;
         const n = parseInt(e.key, 10);
         if (n >= 1 && n <= this.options.length) this.pick(n - 1);
-        else if (!locked && (e.key === 'r' || e.key === 'R')) this.g.reroll();
-        else if (!locked && (e.key === 'x' || e.key === 'X')) this.g.skipLevel();
+        else if (!locked && !this.waiting && (e.key === 'r' || e.key === 'R')) this.g.requestReroll();
+        else if (!locked && !this.waiting && (e.key === 'x' || e.key === 'X')) this.g.requestSkip();
       } else if (s === 'chest') {
         if (!locked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.g.closeChest(); }
       } else if (s === 'menu' && !$('screen-menu').hidden) {
@@ -270,7 +347,7 @@
           this.selectChar(ids[(i + ids.length) % ids.length]);
         }
       } else if (s === 'results') {
-        if (!locked && e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') this.startRun();
+        if (!locked && e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') this.retry();
       }
     }
   }

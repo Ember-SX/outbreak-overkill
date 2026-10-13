@@ -19,6 +19,7 @@
   </div>
 
   <div id="banner" class="banner" role="status" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
 
   <!-- Main menu -->
   <section id="screen-menu" class="screen screen-menu" hidden>
@@ -43,9 +44,44 @@
       <div class="menu-actions">
         <button id="btn-start" class="btn btn-primary" type="button">Deploy</button>
         <button id="btn-armory" class="btn btn-ghost" type="button">Armory</button>
+        <button id="btn-coop" class="btn btn-ghost" type="button">Co-op</button>
       </div>
       <p class="controls"><kbd>WASD</kbd> or arrows or drag to move · <kbd>Esc</kbd> pause · <kbd>M</kbd> mute · <kbd>`</kbd> debug</p>
       <p id="records" class="records"></p>
+    </div>
+  </section>
+
+  <!-- Co-op lobby -->
+  <section id="screen-coop" class="screen screen-dim" hidden>
+    <div class="panel panel-coop">
+      <p class="eyebrow">Two operatives, one radio channel</p>
+      <h2 class="panel-title">Co-op</h2>
+      <p class="coop-note">Play with one partner over the internet. One of you hosts and reads out the 3-digit room code; the other joins with it. Infected have <strong>double health</strong> while a partner is connected. You deploy as <strong id="coop-selected">Mara Voss</strong>; change operative on the main menu.</p>
+
+      <div id="coop-choose" class="coop-choose">
+        <button id="coop-host" class="btn btn-primary" type="button">Host a room</button>
+        <div class="coop-join">
+          <label class="coop-label" for="coop-code">Room code</label>
+          <div class="coop-join-row">
+            <input id="coop-code" class="coop-input" type="text" inputmode="numeric" autocomplete="off" maxlength="3" placeholder="000">
+            <button id="coop-join" class="btn btn-ghost" type="button">Join</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="coop-room" class="coop-room" hidden>
+        <p class="coop-label">Room code</p>
+        <p id="coop-room-code" class="coop-code">---</p>
+        <p id="coop-status" class="coop-status"></p>
+        <ul id="coop-roster" class="coop-roster"></ul>
+        <div class="panel-actions">
+          <button id="coop-deploy" class="btn btn-primary" type="button" disabled>Deploy together</button>
+          <button id="coop-leave" class="btn btn-ghost" type="button">Leave room</button>
+        </div>
+      </div>
+
+      <p id="coop-error" class="coop-error" role="alert" hidden></p>
+      <div><button id="coop-back" class="btn-small" type="button">Back to menu</button></div>
     </div>
   </section>
 
@@ -70,7 +106,8 @@
       <p class="eyebrow">Field upgrade</p>
       <h2 class="panel-title">Level <span id="lu-level">2</span></h2>
       <div id="lu-cards" class="cards"></div>
-      <div class="lu-actions">
+      <p id="lu-wait" class="lu-wait" hidden></p>
+      <div id="lu-actions" class="lu-actions">
         <button id="btn-reroll" class="btn-small" type="button">Reroll <span id="reroll-n">(1 left)</span> <kbd>R</kbd></button>
         <button id="btn-skip" class="btn-small" type="button">Skip for 15 credits <kbd>X</kbd></button>
         <p class="hint">Press 1, 2 or 3, or tap a card</p>
@@ -98,6 +135,7 @@
         <h3 class="manual-title">Field manual: evolutions</h3>
         <ul id="pause-evo" class="evo-list"></ul>
       </div>
+      <p id="pause-coop" class="hint" hidden>Co-op: the game is paused for both of you. Either player can resume.</p>
       <dl id="pause-stats" class="stat-grid"></dl>
       <div class="settings">
         <button id="set-shake" class="btn-small" type="button"></button>
@@ -126,6 +164,7 @@
   </section>
 
   <!-- Load order matters: config and helpers first, main.js last. -->
+  <script src="js/vendor/peerjs.min.js"></script>
   <script src="js/config.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/audio.js"></script>
@@ -137,6 +176,8 @@
   <script src="js/render.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/game.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/coop.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

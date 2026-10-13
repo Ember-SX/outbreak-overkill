@@ -1,6 +1,13 @@
 /*
  * Game: owns the run state, the fixed-timestep loop and all simulation.
- * Rendering lives in render.js, menus in ui.js, content in config.js.
+ * Rendering lives in render.js, menus in ui.js, content in config.js, co-op networking in coop.js.
+ *
+ * The simulation always works on a list of players (`this.players`). Solo has one; a co-op host
+ * has two (the second one is driven by network input). `this.player` is always the local player:
+ * the one the camera follows, the HUD shows and the keyboard moves.
+ *
+ * Modes: 'solo' | 'host' (runs the simulation and streams it) | 'client' (renders the host's
+ * stream; see coop.js).
  */
 (function (OO) {
   'use strict';
@@ -8,13 +15,22 @@
   const U = OO.U;
   const Input = OO.Input;
   const STEP = 1 / 60;
+  const PLAYER_COLORS = ['#2f4a5c', '#5c3a2f'];
+  const SLOT_TINTS = ['#56d6c0', '#ff9f4a'];      // P1 teal, P2 orange (name tags, markers)
+  // Sounds that only make sense for the player they happened to (never forwarded to a partner).
+  const LOCAL_SOUNDS = new Set(['xp', 'hurt', 'heartbeat', 'levelup', 'select', 'chest', 'evolve', 'herb', 'victory', 'gameover']);
 
   class Game {
     constructor(canvas) {
       this.canvas = canvas;
       this.state = 'menu';            // menu | playing | levelup | chest | paused | results
+      this.mode = 'solo';             // solo | host | client
       this.debug = false;
       this.player = null;
+      this.players = [];
+      this.net = null;
+      this.netEvents = [];
+      this.remoteView = null;         // partner's view size, so spawns stay off both screens
       this.grid = new U.SpatialHash(64);
       this._sepBuf = []; this._prBuf = []; this._exBuf = []; this._zoneBuf = [];
       this.records = U.storage.get('oo.records', { bestTime: 0, bestKills: 0, runs: 0, wins: 0 });
@@ -32,11 +48,16 @@
 
       this.resize();
       window.addEventListener('resize', () => this.resize());
-      document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'playing') this.pause(); });
+      document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'playing' && !this.coop) this.pause(); });
 
       this.fps = 60; this.last = performance.now(); this.acc = 0; this.menuTime = 0;
       requestAnimationFrame((t) => this.frame(t));
     }
+
+    /** True while a co-op session (host or client) is running a shared game. */
+    get coop() { return this.mode !== 'solo'; }
+    /** True while a partner is actually connected: drives the co-op enemy HP multiplier. */
+    get coopActive() { return (this.mode === 'host' && this.players.length > 1) || this.mode === 'client'; }
 
     resize() {
       const w = window.innerWidth, h = window.innerHeight;
@@ -44,35 +65,61 @@
       this.screenW = w; this.screenH = h;
       this.zoom = U.clamp(Math.min(w, h) / 620, 0.6, 1.5);
       this.viewW = w / this.zoom; this.viewH = h / this.zoom;
-      this.spawnRadius = Math.hypot(this.viewW, this.viewH) / 2 + 50;
-      this.despawnDist = this.spawnRadius + 260;
+      this.updateSpawnRadius();
       this.renderer.resize(w, h, this.dpr);
     }
 
+    /** Spawn ring sits just outside the larger of the two players' views. */
+    updateSpawnRadius() {
+      let vw = this.viewW, vh = this.viewH;
+      if (this.remoteView && this.mode === 'host') { vw = Math.max(vw, this.remoteView.w); vh = Math.max(vh, this.remoteView.h); }
+      this.spawnRadius = Math.hypot(vw, vh) / 2 + 50;
+      this.despawnDist = this.spawnRadius + 260;
+    }
+
     // ------------------------------------------------------------ run lifecycle
-    start(charId) {
-      const ch = OO.CHARACTERS[charId] || OO.CHARACTERS.mara;
-      const P = OO.CONFIG.PLAYER;
-      this.charId = charId;
+    /** Shared reset for every kind of run. */
+    resetRun(seed) {
       this.time = 0; this.kills = 0; this.credits = 0; this.nextId = 0;
       this.enemies = []; this.projectiles = []; this.pickups = []; this.zones = []; this.lobs = [];
       this.effects = []; this.particles = []; this.decals = []; this.texts = []; this.lights = [];
       this.pendingExplosions = [];
       this.enemyShots = []; this.hazards = []; this.stampedes = [];
-      this.overflowGem = null; this.gemCount = 0; this._immuneT = -9;
+      this.netEvents = [];
+      this.gemCount = 0; this.otherCount = 0; this.nextPickupId = 0; this.nextProjId = 0; this._immuneT = -9;
+      this.team = { level: 1, xp: 0, xpNext: OO.CONFIG.xpToNext(1), pending: 0 };
       this.strain = { level: 0, peak: 0, timeLevel: 0, adapt: 0, oneShot: 0, samples: 0, rising: 0 };
       this.shakeAmt = 0; this.flashWhite = 0; this.xpCombo = 0; this.xpComboT = 0; this.heartT = 0;
-      this.player = {
-        x: 0, y: 0, r: P.radius, hp: 1, level: 1, xp: 0, xpNext: OO.CONFIG.xpToNext(1),
-        faceAngle: 0, aimAngle: 0, aimT: 0, moving: false, walk: 0, iframes: 0, hurt: 0,
-        weapons: [], passives: {}, passiveOrder: [], stats: {}, statsVersion: 0, char: ch, pendingLevels: 0,
-        rerolls: 1 + this.rank('reroll'), revives: this.rank('revive'),
-      };
-      this.world = new OO.World(Math.floor(Math.random() * 1e9));
+      this.seed = seed;
+      this.world = new OO.World(seed);
       this.world.update(0, 0);
-      this.recalcStats();
-      this.player.hp = this.player.stats.maxHp;
-      this.addWeapon(ch.weapon);
+    }
+
+    makePlayer(slot, charId, ranks, local) {
+      const ch = OO.CHARACTERS[charId] || OO.CHARACTERS.mara;
+      const P = OO.CONFIG.PLAYER;
+      ranks = ranks || {};
+      const p = {
+        slot, local, charId: OO.CHARACTERS[charId] ? charId : 'mara', name: ch.name, char: ch,
+        tag: 'P' + (slot + 1), tint: SLOT_TINTS[slot] || '#fff', vest: ch.vest || PLAYER_COLORS[slot],
+        x: slot * 44, y: 0, r: P.radius, hp: 1, vx: 0, vy: 0,
+        faceAngle: 0, aimAngle: 0, aimT: 0, moving: false, walk: 0, iframes: 0, hurt: 0,
+        weapons: [], passives: {}, passiveOrder: [], stats: {}, statsVersion: 0, ranks,
+        rerolls: 1 + (ranks.reroll || 0), revives: ranks.revive || 0,
+        downed: false, reviveT: 0, input: null, luOptions: null, luDone: true,
+      };
+      this.recalcStats(p);
+      p.hp = p.stats.maxHp;
+      this.addWeapon(p, ch.weapon);
+      return p;
+    }
+
+    start(charId) {
+      this.mode = 'solo';
+      this.resetRun(Math.floor(Math.random() * 1e9));
+      this.players = [this.makePlayer(0, charId, this.meta.ranks, true)];
+      this.player = this.players[0];
+      this.charId = charId;
       this.director = new OO.Director(this);
       U.storage.set('oo.char', charId);
       this.state = 'playing';
@@ -83,43 +130,63 @@
     endRun(victory) {
       if (this.state === 'results') return;
       this.state = 'results';
-      // Run payout goes into the Armory bank.
-      const payout = Math.round((this.credits + Math.floor(this.kills / 20) + Math.floor(this.time / 60) * 5 + (victory ? 100 : 0))
+      const summary = {
+        victory, time: this.time, level: this.team.level, kills: this.kills, credits: this.credits,
+        strain: this.strain.peak, difficulty: this.difficulty.name, coop: this.coop,
+        team: this.players.map((p) => ({ tag: p.tag, name: p.name, downed: p.downed })),
+      };
+      if (this.mode === 'host' && this.net) {
+        for (const p of this.players) if (!p.local) this.netSend({ t: 'results', summary, weapons: this.weaponTable(p) });
+      }
+      this.finishRun(summary, this.weaponTable(this.player));
+    }
+
+    /** Bank, record and show results for the local player (both sides of a co-op run call this). */
+    finishRun(summary, weapons) {
+      this.state = 'results';
+      // Run payout goes into the local Armory bank (each co-op player banks their own).
+      const payout = Math.round((summary.credits + Math.floor(summary.kills / 20) + Math.floor(summary.time / 60) * 5 + (summary.victory ? 100 : 0))
         * (1 + this.rank('greed') * 0.1) * this.difficulty.credits);
       this.meta.bank += payout;
       this.saveMeta();
       const r = this.records;
-      r.runs++; if (victory) r.wins++;
-      r.bestTime = Math.max(r.bestTime, Math.floor(this.time));
-      r.bestKills = Math.max(r.bestKills, this.kills);
+      r.runs++; if (summary.victory) r.wins++;
+      r.bestTime = Math.max(r.bestTime, Math.floor(summary.time));
+      r.bestKills = Math.max(r.bestKills, summary.kills);
       U.storage.set('oo.records', r);
-      OO.Audio.play(victory ? 'victory' : 'gameover');
+      OO.Audio.play(summary.victory ? 'victory' : 'gameover');
       this.ui.setHud(false);
-      this.ui.showResults({
-        victory, time: this.time, level: this.player.level, kills: this.kills, credits: this.credits, payout, bank: this.meta.bank,
-        strain: this.strain.peak,
-        difficulty: this.difficulty.name,
-        weapons: this.player.weapons.map((w) => ({ id: w.id, name: w.def.name, level: w.level, dmg: Math.round(w.damageDealt), kills: w.kills })),
-      });
+      this.ui.showResults(Object.assign({}, summary, { payout, bank: this.meta.bank, weapons }));
+    }
+
+    weaponTable(p) {
+      return p.weapons.map((w) => ({ id: w.id, name: w.def.name, level: w.level, dmg: Math.round(w.damageDealt), kills: w.kills }));
     }
 
     quitToMenu() {
+      if (this.net && this.leaveSession) this.leaveSession();
+      this.mode = 'solo';
       this.state = 'menu';
       this.player = null;
+      this.players = [];
       this.ui.setHud(false);
       this.ui.showMenu();
     }
 
     pause() {
       if (this.state !== 'playing') return;
+      if (this.mode === 'client') { this.netSend({ t: 'pause' }); return; }
       this.state = 'paused';
       this.ui.showPause();
+      if (this.mode === 'host') this.netSend({ t: 'paused' });
     }
 
     resume() {
       if (this.state !== 'paused') return;
+      if (this.mode === 'client') { this.netSend({ t: 'resume' }); return; }
       this.state = 'playing';
       this.ui.hideAll();
+      if (this.mode === 'host') this.netSend({ t: 'resumed' });
     }
 
     toggleSetting(key) {
@@ -167,12 +234,34 @@
       return d && !d.locked ? d : OO.DIFFICULTY.standard;
     }
 
+    // ------------------------------------------------------------ players
+    alivePlayers() { return this.players.filter((p) => !p.downed); }
+
+    /** Nearest player still on their feet (falls back to the local player if everyone is down). */
+    nearestPlayer(x, y) {
+      let best = null, bd = Infinity;
+      for (const p of this.players) {
+        if (p.downed) continue;
+        const d = U.dist2(x, y, p.x, p.y);
+        if (d < bd) { bd = d; best = p; }
+      }
+      return best || this.player || this.players[0];
+    }
+
+    /** Random standing player: where the Director spawns things around. */
+    anchorPlayer() {
+      const a = this.alivePlayers();
+      return a.length ? U.pick(a) : this.players[0];
+    }
+
+    playerBySlot(slot) { return this.players.find((p) => p.slot === slot); }
+
     // ------------------------------------------------------------ player build
-    recalcStats() {
-      const p = this.player, b = p.char.bonus, P = OO.CONFIG.PLAYER;
+    recalcStats(p) {
+      const b = p.char.bonus, P = OO.CONFIG.PLAYER;
       const lv = (id) => p.passives[id] || 0;
       const prevMax = p.stats.maxHp || 0;
-      const m = (id) => this.rank(id);     // armory ranks
+      const m = (id) => p.ranks[id] || 0;     // that player's own Armory ranks
       p.stats = {
         might: 1 + (b.might || 0) + lv('might') * 0.1 + m('power') * 0.05,
         armor: (b.armor || 0) + lv('armor') + m('plating'),
@@ -185,20 +274,19 @@
         amount: lv('amount'),
         growth: 1 + m('growth') * 0.08,
       };
-      if (prevMax && p.stats.maxHp > prevMax) p.hp += p.stats.maxHp - prevMax;
+      if (prevMax && p.stats.maxHp > prevMax && !p.downed) p.hp += p.stats.maxHp - prevMax;
       p.statsVersion++;
     }
 
-    addWeapon(id) {
-      this.player.weapons.push(new OO.Weapon(id));
+    addWeapon(p, id) {
+      p.weapons.push(new OO.Weapon(id, p));
     }
 
     /** Owned weapon by id, also matching its evolved form (so an evolved pistol still counts as 'pistol'). */
-    getWeapon(id) { return this.player.weapons.find((w) => w.id === id || w.def.from === id); }
+    getWeapon(p, id) { return p.weapons.find((w) => w.id === id || w.def.from === id); }
 
     /** First owned weapon that is ready to evolve, or null. */
-    findEvolution() {
-      const p = this.player;
+    findEvolution(p) {
       for (const w of p.weapons) {
         const E = OO.EVOLUTIONS[w.id];
         if (E && w.level >= w.maxLevel && p.passives[E.needs]) return w;
@@ -206,23 +294,22 @@
       return null;
     }
 
-    evolve(w) {
+    evolve(p, w) {
       const E = OO.EVOLUTIONS[w.id];
-      const nw = new OO.Weapon(E.into);
+      const nw = new OO.Weapon(E.into, p);
       nw.damageDealt = w.damageDealt; nw.kills = w.kills;
-      const list = this.player.weapons;
-      list[list.indexOf(w)] = nw;
-      this.ui.banner(w.def.name + ' evolved into ' + nw.def.name, 'good');
-      OO.Audio.play('evolve');
-      this.flashWhite = Math.max(this.flashWhite, 0.4);
+      p.weapons[p.weapons.indexOf(w)] = nw;
+      this.banner((this.coop ? p.name + ': ' : '') + w.def.name + ' evolved into ' + nw.def.name, 'good');
+      this.sfxFor(p, 'evolve');
+      if (p.local) this.flashWhite = Math.max(this.flashWhite, 0.4);
       return nw;
     }
 
-    rollUpgrades(n) {
-      const p = this.player, C = OO.CONFIG, pool = [];
+    rollUpgrades(p, n) {
+      const C = OO.CONFIG, pool = [];
       for (const w of p.weapons) if (w.level < w.maxLevel) pool.push({ kind: 'weapon', id: w.id, weight: 1.5 });
       if (p.weapons.length < C.MAX_WEAPONS) {
-        for (const id in OO.WEAPONS) if (!OO.WEAPONS[id].evolved && !this.getWeapon(id)) pool.push({ kind: 'weapon', id, weight: 1 });
+        for (const id in OO.WEAPONS) if (!OO.WEAPONS[id].evolved && !this.getWeapon(p, id)) pool.push({ kind: 'weapon', id, weight: 1 });
       }
       for (const id of p.passiveOrder) if (p.passives[id] < OO.PASSIVES[id].max) pool.push({ kind: 'passive', id, weight: 1 });
       if (p.passiveOrder.length < C.MAX_PASSIVES) {
@@ -238,9 +325,9 @@
       return picked;
     }
 
-    describeUpgrade(opt) {
+    describeUpgrade(p, opt) {
       if (opt.kind === 'weapon') {
-        const def = OO.WEAPONS[opt.id], w = this.getWeapon(opt.id);
+        const def = OO.WEAPONS[opt.id], w = this.getWeapon(p, opt.id);
         if (!w) return { icon: def.icon, name: def.name, badge: 'New', isNew: true, text: def.desc, type: 'Weapon' };
         const next = w.level + 1;
         let text = def.levels[w.level - 1].text;
@@ -249,80 +336,119 @@
         return { icon: def.icon, name: def.name, badge: next === w.maxLevel ? 'Lv ' + next + ' · Max' : 'Lv ' + next, text, type: 'Weapon' };
       }
       if (opt.kind === 'passive') {
-        const def = OO.PASSIVES[opt.id], lv = this.player.passives[opt.id] || 0;
+        const def = OO.PASSIVES[opt.id], lv = p.passives[opt.id] || 0;
         return { icon: def.icon, name: def.name, badge: lv ? 'Lv ' + (lv + 1) : 'New', isNew: !lv, text: def.text, type: 'Gear' };
       }
       if (opt.kind === 'herb') return { icon: 'herb', name: 'Green Herb', badge: 'Heal', text: 'Restore 40 HP.', type: 'Supply' };
       return { icon: 'credits', name: 'Credit Stash', badge: '+25', text: 'Pocket 25 credits.', type: 'Supply' };
     }
 
-    applyUpgrade(opt) {
-      const p = this.player;
+    applyUpgrade(p, opt) {
       if (opt.kind === 'weapon') {
-        const w = this.getWeapon(opt.id);
-        if (w) w.levelUp(); else this.addWeapon(opt.id);
+        const w = this.getWeapon(p, opt.id);
+        if (w) w.levelUp(); else this.addWeapon(p, opt.id);
       } else if (opt.kind === 'passive') {
         if (!p.passives[opt.id]) { p.passives[opt.id] = 1; p.passiveOrder.push(opt.id); }
         else p.passives[opt.id]++;
-        this.recalcStats();
+        this.recalcStats(p);
       } else if (opt.kind === 'herb') {
-        this.heal(40);
+        this.heal(p, 40);
       } else {
         this.credits += 25;
       }
     }
 
+    // ------------------------------------------------------------ level-ups (shared team XP)
+    // XP is pooled. When the team levels up, every player picks their own upgrade; the game
+    // waits until everyone has chosen.
     checkLevel() {
-      const p = this.player;
-      while (p.xp >= p.xpNext) {
-        p.xp -= p.xpNext;
-        p.level++;
-        p.xpNext = OO.CONFIG.xpToNext(p.level);
-        p.pendingLevels++;
+      const T = this.team;
+      while (T.xp >= T.xpNext) {
+        T.xp -= T.xpNext;
+        T.level++;
+        T.xpNext = OO.CONFIG.xpToNext(T.level);
+        T.pending++;
       }
-      if (p.pendingLevels > 0 && this.state === 'playing') this.openLevelUp();
+      if (T.pending > 0 && this.state === 'playing') this.openLevelUp();
     }
 
     openLevelUp() {
-      const p = this.player;
-      p.pendingLevels--;
+      const T = this.team;
+      T.pending--;
       this.state = 'levelup';
-      OO.Audio.play('levelup');
-      this.luLevel = p.level - p.pendingLevels;
-      this.ui.showLevelUp(this.rollUpgrades(3), this.luLevel);
+      this.luLevel = T.level - T.pending;
+      for (const p of this.players) {
+        p.luDone = false;
+        p.luOptions = this.rollUpgrades(p, 3);
+        this.sfxFor(p, 'levelup');
+        this.presentLevelUp(p);
+      }
     }
 
-    reroll() {
-      const p = this.player;
-      if (this.state !== 'levelup' || p.rerolls <= 0) return;
+    presentLevelUp(p) {
+      const descs = p.luOptions.map((o) => this.describeUpgrade(p, o));
+      if (p.local) this.ui.showLevelUp(descs, this.luLevel, p.rerolls);
+      else this.netSend({ t: 'lvl', level: this.luLevel, options: descs, rerolls: p.rerolls });
+    }
+
+    /** UI entry points: route to the host when we are a co-op client. */
+    pickUpgrade(i) {
+      if (this.mode === 'client') { this.netSend({ t: 'pick', i }); this.ui.showLevelWait(); return; }
+      this.chooseUpgrade(this.player, i);
+    }
+    requestReroll() {
+      if (this.mode === 'client') { this.netSend({ t: 'reroll' }); return; }
+      this.reroll(this.player);
+    }
+    requestSkip() {
+      if (this.mode === 'client') { this.netSend({ t: 'skip' }); this.ui.showLevelWait(); return; }
+      this.skipLevel(this.player);
+    }
+
+    chooseUpgrade(p, i) {
+      if (this.state !== 'levelup' || p.luDone || !p.luOptions) return;
+      const opt = p.luOptions[i];
+      if (!opt) return;
+      this.applyUpgrade(p, opt);
+      p.luDone = true;
+      this.sfxFor(p, 'select');
+      this.afterChoice(p);
+    }
+
+    reroll(p) {
+      if (this.state !== 'levelup' || p.luDone || p.rerolls <= 0) return;
       p.rerolls--;
-      OO.Audio.play('select');
-      this.ui.showLevelUp(this.rollUpgrades(3), this.luLevel);
+      this.sfxFor(p, 'select');
+      p.luOptions = this.rollUpgrades(p, 3);
+      this.presentLevelUp(p);
     }
 
-    skipLevel() {
-      if (this.state !== 'levelup') return;
+    skipLevel(p) {
+      if (this.state !== 'levelup' || p.luDone) return;
       this.credits += 15;
-      this.state = 'playing';
-      this.ui.hideAll();
-      if (this.player.pendingLevels > 0) this.openLevelUp();
+      p.luDone = true;
+      this.afterChoice(p);
     }
 
-    chooseUpgrade(opt) {
-      if (this.state !== 'levelup') return;
-      this.applyUpgrade(opt);
-      OO.Audio.play('select');
-      this.state = 'playing';
-      this.ui.hideAll();
-      if (this.player.pendingLevels > 0) this.openLevelUp();
+    afterChoice(p) {
+      if (this.players.every((q) => q.luDone)) { this.finishLevelUp(); return; }
+      if (p.local) this.ui.showLevelWait(this.players.find((q) => !q.luDone).name);
     }
 
-    openChest(big) {
-      const p = this.player, results = [];
+    finishLevelUp() {
+      this.state = 'playing';
+      this.ui.hideAll();
+      this.netSend({ t: 'lvldone' });
+      if (this.team.pending > 0) this.openLevelUp();
+    }
+
+    // ------------------------------------------------------------ supply cases
+    openChest(p, big) {
+      const results = [];
       let rolls = big ? 3 : 1;
-      const ready = this.findEvolution();
+      const ready = this.findEvolution(p);
       if (ready) {
-        const nw = this.evolve(ready);
+        const nw = this.evolve(p, ready);
         results.push({ icon: nw.def.icon, name: nw.def.name, badge: 'Evolved', text: nw.def.desc, type: 'Evolution', evolved: true });
         rolls--;
       }
@@ -331,15 +457,23 @@
         for (const w of p.weapons) if (w.level < w.maxLevel) cands.push({ kind: 'weapon', id: w.id });
         for (const id of p.passiveOrder) if (p.passives[id] < OO.PASSIVES[id].max) cands.push({ kind: 'passive', id });
         const opt = cands.length ? U.pick(cands) : { kind: 'credits' };
-        const d = this.describeUpgrade(opt);
-        this.applyUpgrade(opt);
+        const d = this.describeUpgrade(p, opt);
+        this.applyUpgrade(p, opt);
         results.push(d);
       }
       const bonus = big ? 60 : 20;
       this.credits += bonus;
-      this.state = 'chest';
-      OO.Audio.play('chest');
-      this.ui.showChest(results, bonus);
+      this.sfxFor(p, 'chest');
+      if (!this.coop) {
+        // Solo: the case screen pauses the game, as before.
+        this.state = 'chest';
+        this.ui.showChest(results, bonus);
+      } else if (p.local) {
+        // Co-op: nobody else should be frozen by your loot, so it shows as a toast.
+        this.ui.chestToast(results, bonus);
+      } else {
+        this.netSend({ t: 'chest', results, bonus });
+      }
     }
 
     closeChest() {
@@ -349,12 +483,11 @@
       this.checkLevel();
     }
 
-    heal(n) {
-      const p = this.player;
+    heal(p, n) {
       const before = p.hp;
       p.hp = Math.min(p.stats.maxHp, p.hp + n);
       this.addText(p.x, p.y - 24, '+' + Math.round(p.hp - before), 'heal');
-      OO.Audio.play('herb');
+      this.sfxFor(p, 'herb');
     }
 
     // ------------------------------------------------------------ main loop
@@ -378,18 +511,22 @@
         if (this.state === 'playing') this.pause();
         else if (this.state === 'paused') this.resume();
       }
-      if (this.state === 'playing') {
+      if (this.mode === 'client') {
+        this.clientTick(dt);
+      } else if (this.state === 'playing') {
         if (this.debug) this.debugKeys();
         this.update(dt);
       } else if (this.state === 'menu') {
         this.menuTime += dt;
       }
+      if (this.mode === 'host') this.hostTick(dt);
+      if (this.net) this.netWatch(dt);
       Input.endFrame();
     }
 
     debugKeys() {
-      const p = this.player;
-      if (Input.consume('KeyL')) p.xp = p.xpNext;
+      const p = this.player, T = this.team;
+      if (Input.consume('KeyL')) T.xp = T.xpNext;
       if (Input.consume('KeyT')) this.time += 60;
       if (Input.consume('KeyH')) p.hp = p.stats.maxHp;
       if (Input.consume('KeyJ')) this.strain.adapt = Math.min(OO.CONFIG.LEVELING.adapt.max, this.strain.adapt + 1);
@@ -399,23 +536,10 @@
     update(dt) {
       this.time += dt;
       if (this.time >= OO.CONFIG.RUN_LENGTH) { this.endRun(true); return; }
-      const p = this.player;
 
-      // Player movement
-      const ax = Input.axis.x, ay = Input.axis.y;
-      p.moving = ax !== 0 || ay !== 0;
-      p.vx = ax * p.stats.speed; p.vy = ay * p.stats.speed;
-      if (p.moving) {
-        p.x += ax * p.stats.speed * dt;
-        p.y += ay * p.stats.speed * dt;
-        p.faceAngle = Math.atan2(ay, ax);
-        p.walk += dt * 10 * Math.hypot(ax, ay);
-      }
-      this.world.update(p.x, p.y);
-      this.world.resolveCircle(p, p.r);
-      p.iframes -= dt; p.hurt -= dt; p.aimT -= dt;
-      if (p.aimT <= 0) p.aimAngle = p.faceAngle;
-      if (p.stats.regen) p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.regen * dt);
+      this.updatePlayers(dt);
+      this.world.update(this.players);
+      for (const p of this.players) if (!p.downed) this.world.resolveCircle(p, p.r);
 
       this.updateStrain(dt);
       this.director.update(dt);
@@ -426,7 +550,7 @@
       for (const e of this.enemies) if (!e.dead) this.grid.insert(e);
       this.separate();
 
-      for (const w of p.weapons) w.update(dt, this);
+      for (const p of this.players) if (!p.downed) for (const w of p.weapons) w.update(dt, this);
       this.updateProjectiles(dt);
       this.updateLobs(dt);
       this.updateEnemyShots(dt);
@@ -438,11 +562,46 @@
 
       compact(this.enemies);
 
-      if (p.hp / p.stats.maxHp < 0.3) {
+      const lp = this.player;
+      if (!lp.downed && lp.hp / lp.stats.maxHp < 0.3) {
         this.heartT -= dt;
         if (this.heartT <= 0) { OO.Audio.play('heartbeat'); this.heartT = 0.95; }
       }
       if (this.state === 'playing') this.checkLevel();
+    }
+
+    updatePlayers(dt) {
+      const C = OO.CONFIG.COOP;
+      for (const p of this.players) {
+        p.iframes -= dt; p.hurt -= dt; p.aimT -= dt;
+        if (p.downed) {
+          // Revive: a teammate standing close fills the ring; walking away drains it.
+          const helper = this.players.find((q) => q !== p && !q.downed && U.dist2(q.x, q.y, p.x, p.y) < C.reviveRadius * C.reviveRadius);
+          p.reviveT = helper ? p.reviveT + dt : Math.max(0, p.reviveT - dt * 0.5);
+          if (p.reviveT >= C.reviveTime) this.revive(p);
+          continue;
+        }
+        if (p.local) {
+          const ax = Input.axis.x, ay = Input.axis.y;
+          p.moving = ax !== 0 || ay !== 0;
+          p.vx = ax * p.stats.speed; p.vy = ay * p.stats.speed;
+          if (p.moving) {
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.faceAngle = Math.atan2(ay, ax);
+            p.walk += dt * 10 * Math.hypot(ax, ay);
+          }
+        } else if (p.input) {
+          // Remote player: the partner's client owns its own position (responsive movement);
+          // the host just adopts it.
+          const inp = p.input;
+          p.x = inp.x; p.y = inp.y; p.vx = inp.vx; p.vy = inp.vy;
+          p.moving = !!inp.mv; p.faceAngle = inp.fa;
+          if (p.moving) p.walk += dt * 10;
+        }
+        if (p.aimT <= 0) p.aimAngle = p.faceAngle;
+        if (p.stats.regen) p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.regen * dt);
+      }
     }
 
     // ------------------------------------------------------------ enemy leveling (strain)
@@ -467,18 +626,26 @@
       if (lvl > S.peak) {
         const crossed = Math.floor(lvl / C.announceEvery) > Math.floor(S.peak / C.announceEvery);
         S.peak = lvl;
-        if (crossed) this.ui.banner('Strain level ' + lvl + ': the infected are hardening', 'warn');
+        if (crossed) this.banner('Strain level ' + lvl + ': the infected are hardening', 'warn');
       }
       S.level = lvl;
     }
 
-    /** HP multiplier for an enemy of the given def at a given strain level (difficulty included). */
+    /** HP multiplier for an enemy of the given def at a given strain level (difficulty, surge and co-op included). */
     enemyHpMul(d, level) {
       if (d.crate) return 1;
       const g = OO.CONFIG.LEVELING.hpGrowth;
       const growth = d.boss ? g.boss : d.elite ? g.elite : g.normal;
-      return Math.pow(1 + growth, level) * this.difficulty.hp;
+      return Math.pow(1 + growth, level) * this.difficulty.hp * this.surgeHp(d) * (this.coopActive ? OO.CONFIG.COOP.enemyHp : 1);
     }
+
+    // ------------------------------------------------------------ late-game surge (after 6:00)
+    surgeMinutes() { return Math.max(0, this.time / 60 - OO.CONFIG.SURGE.start); }
+    surgeHp(d) {
+      const S = OO.CONFIG.SURGE;
+      return Math.pow(1 + (d && d.boss ? S.hpPerMin * S.bossHpScale : S.hpPerMin), this.surgeMinutes());
+    }
+    surgeDmg() { return Math.pow(1 + OO.CONFIG.SURGE.dmgPerMin, this.surgeMinutes()); }
 
     /** Called for every regular kill: feeds the rolling one-hit-kill share. */
     recordKill(e) {
@@ -489,15 +656,14 @@
 
     // ------------------------------------------------------------ enemies
     spawnEnemy(type, x, y) {
-      const d = OO.ENEMIES[type], m = this.time / 60;
-      const diff = this.difficulty;
+      const d = OO.ENEMIES[type];
       const level = d.crate ? 0 : this.strain.level;
       const hpMul = this.enemyHpMul(d, level);
       const e = {
         id: ++this.nextId, type, def: d, x, y, level, hits: 0,
         hp: d.hp * hpMul, maxHp: d.hp * hpMul,
         speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)),
-        dmg: d.dmg * (1 + m * 0.05) * diff.dmg, r: d.r, mass: d.mass,
+        dmg: d.dmg * this.enemyDmgScale(), r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
       if (!d.crate && !d.burster && this.world) this.world.resolveCircle(e, e.r);
@@ -506,20 +672,22 @@
     }
 
     updateEnemies(dt) {
-      const p = this.player;
+      const alive = this.alivePlayers();
       for (const e of this.enemies) {
         if (e.dead) continue;
         e.flash -= dt; e.t += dt;
         if (e.def.crate) continue;
         if (e.def.burster) { this.updateBurster(e, dt); continue; }
+        const p = this.nearestPlayer(e.x, e.y);     // everyone hunts whoever is closest
         const dx = p.x - e.x, dy = p.y - e.y;
         const d = Math.hypot(dx, dy) || 1;
 
         if (d > this.despawnDist) {
-          // Fell too far behind: bring it back ahead of the player instead of despawning.
-          const a = (p.moving ? p.faceAngle : Math.atan2(dy, dx)) + U.rand(-0.9, 0.9);
-          e.x = p.x + Math.cos(a) * this.spawnRadius;
-          e.y = p.y + Math.sin(a) * this.spawnRadius;
+          // Fell too far behind everyone: bring it back ahead of a player instead of despawning.
+          const q = this.anchorPlayer();
+          const a = (q.moving ? q.faceAngle : Math.atan2(q.y - e.y, q.x - e.x)) + U.rand(-0.9, 0.9);
+          e.x = q.x + Math.cos(a) * this.spawnRadius;
+          e.y = q.y + Math.sin(a) * this.spawnRadius;
           continue;
         }
 
@@ -583,9 +751,9 @@
         e.y += my * spd * dt + e.kby * dt;
         const k = Math.max(0, 1 - dt * 9);
         e.kbx *= k; e.kby *= k;
-        if (e.def.ranged) e.a = Math.atan2(dy, dx);   // always faces you, even while backing off
+        if (e.def.ranged) e.a = Math.atan2(dy, dx);   // always faces its target, even while backing off
 
-        if (d < e.r + p.r) this.hurtPlayer(e.dmg);
+        for (const q of alive) if (U.dist2(e.x, e.y, q.x, q.y) < (e.r + q.r) ** 2) this.hurtPlayer(q, e.dmg);
       }
     }
 
@@ -678,8 +846,8 @@
       e.dead = true;
       if (weapon) {
         weapon.kills++;
-        const ls = weapon.def.base.lifesteal;
-        if (ls) this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + ls);
+        const ls = weapon.def.base.lifesteal, o = weapon.owner;
+        if (ls && o && !o.downed) o.hp = Math.min(o.stats.maxHp, o.hp + ls);
       }
       if (e.def.crate) {
         this.crateLoot(e);
@@ -697,8 +865,8 @@
       if (e.def.elite) this.addPickup('case', e.x, e.y, { big: false });
       if (e.def.boss) {
         this.addPickup('case', e.x, e.y, { big: true });
-        this.ui.banner('The Stalker is down', 'good');
-        this.shake(12);
+        this.banner('The Stalker is down', 'good');
+        this.shakeAll(12);
         OO.Audio.play('explode');
       }
       if (U.chance(0.007)) this.addPickup('herb', e.x + 12, e.y);
@@ -710,44 +878,62 @@
       this.addPickup(kind, e.x, e.y, kind === 'credit' ? { value: U.randInt(10, 25) } : {});
     }
 
-    hurtPlayer(dmg, ignoreIframes) {
-      const p = this.player;
-      if (this.state !== 'playing') return;
+    hurtPlayer(p, dmg, ignoreIframes) {
+      if (this.state !== 'playing' || p.downed) return;
       if (p.iframes > 0 && !ignoreIframes) return;
       const d = Math.max(1, Math.round(dmg - p.stats.armor));
       p.hp -= d;
       p.iframes = OO.CONFIG.PLAYER.iframes;
       p.hurt = 0.3;
-      this.shake(5);
-      OO.Audio.play('hurt');
+      if (p.local) { this.shake(5); OO.Audio.play('hurt'); }
+      else this.emit(['hurt', d]);
       this.addText(p.x, p.y - 22, d, 'hurt');
       if (p.hp <= 0) {
-        if (p.revives > 0) { this.secondWind(); return; }
+        if (p.revives > 0) { this.secondWind(p); return; }
+        if (this.players.length > 1) { this.down(p); return; }
         p.hp = 0;
         this.endRun(false);
       }
     }
 
+    /** Co-op: a player at 0 HP goes down instead of dying. The run ends when everyone is down. */
+    down(p) {
+      p.downed = true;
+      p.hp = 0;
+      p.reviveT = 0;
+      p.moving = false;
+      this.banner(p.name + ' is down. Stand next to them to revive', 'boss');
+      if (!this.alivePlayers().length) this.endRun(false);
+    }
+
+    revive(p) {
+      p.downed = false;
+      p.reviveT = 0;
+      p.hp = p.stats.maxHp * OO.CONFIG.COOP.reviveHp;
+      p.iframes = 2;
+      this.addLight(p.x, p.y, 200, 1, 0.5);
+      this.banner(p.name + ' is back on their feet', 'good');
+      this.sfxFor(p, 'herb');
+    }
+
     /** Armory revive: back on your feet at half HP, with a shockwave to clear space. */
-    secondWind() {
-      const p = this.player;
+    secondWind(p) {
       p.revives--;
       p.hp = p.stats.maxHp * 0.5;
       p.iframes = 2;
-      this.flashWhite = 0.7;
-      this.shake(12);
+      if (p.local) { this.flashWhite = 0.7; this.shake(12); } else this.emit(['w', 0.7]);
       for (const e of this.enemies) {
         if (e.dead || e.def.crate) continue;
         const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
         if (d < 240) this.damageEnemy(e, e.def.boss ? 150 : 60, (dx / d) * 600, (dy / d) * 600, null);
       }
-      this.ui.banner('Second Wind', 'good');
-      OO.Audio.play('evolve');
+      this.banner((this.coop ? p.name + ': ' : '') + 'Second Wind', 'good');
+      this.sfxFor(p, 'evolve');
     }
 
     processExplosions() {
       let n = 0;
-      const p = this.player, buf = this._exBuf;
+      const buf = this._exBuf;
       while (this.pendingExplosions.length && n++ < 40) {
         const ex = this.pendingExplosions.shift();
         const blood = ex.kind === 'blood';
@@ -755,10 +941,13 @@
         this.addDecal(ex.x, ex.y, ex.r * 0.8, blood ? 'red' : 'bile');
         this.addLight(ex.x, ex.y, ex.r * 2.2, 1, 0.3);
         this.burst(ex.x, ex.y, blood ? '#c0262a' : '#b9c94a', 18, 260);
-        const near = U.dist2(ex.x, ex.y, p.x, p.y) < this.spawnRadius * this.spawnRadius;
-        if (near) { OO.Audio.play('explode'); this.shake(blood ? 7 : 5); }
-        // Cover blocks blasts: no damage if an obstacle sits between you and the explosion.
-        if (U.dist2(ex.x, ex.y, p.x, p.y) < (ex.r + p.r) ** 2 && !this.world.blocked(ex.x, ex.y, p.x, p.y)) this.hurtPlayer(ex.dmg, !blood);   // burster hits respect i-frames
+        const lp = this.player;
+        if (U.dist2(ex.x, ex.y, lp.x, lp.y) < this.spawnRadius * this.spawnRadius) { OO.Audio.play('explode'); this.shake(blood ? 7 : 5); }
+        this.emitNear(ex.x, ex.y, ['k', blood ? 7 : 5]);
+        // Cover blocks blasts: no damage if an obstacle sits between a player and the explosion.
+        for (const p of this.alivePlayers()) {
+          if (U.dist2(ex.x, ex.y, p.x, p.y) < (ex.r + p.r) ** 2 && !this.world.blocked(ex.x, ex.y, p.x, p.y)) this.hurtPlayer(p, ex.dmg, !blood);   // burster hits respect i-frames
+        }
         this.grid.query(ex.x, ex.y, ex.r + 32, buf);
         for (const o of buf) {
           if (o.dead) continue;
@@ -771,11 +960,13 @@
 
     // ------------------------------------------------------------ burster stampedes
     updateStampedes(dt) {
-      const p = this.player, S = OO.CONFIG.STAMPEDE;
+      const S = OO.CONFIG.STAMPEDE;
       for (const st of this.stampedes) {
         st.t -= dt;
         if (!st.locked) {
-          // the lane follows you until it locks
+          // the lane follows its target until it locks (if they go down, it picks the nearest player)
+          let p = this.playerBySlot(st.target);
+          if (!p || p.downed) p = this.nearestPlayer(st.ax, st.ay);
           st.ax = U.lerp(st.ax, p.x, Math.min(1, dt * 4));
           st.ay = U.lerp(st.ay, p.y, Math.min(1, dt * 4));
           if (st.t <= S.lockAt) { st.locked = true; OO.Audio.play('shriek', 1); }
@@ -817,7 +1008,7 @@
     }
 
     updateBurster(e, dt) {
-      const p = this.player, ai = e.ai;
+      const p = this.nearestPlayer(e.x, e.y), ai = e.ai;
       let cur = Math.atan2(ai.dy, ai.dx);
       let diff = Math.atan2(p.y - e.y, p.x - e.x) - cur;
       while (diff > Math.PI) diff -= U.TAU;
@@ -829,23 +1020,27 @@
       e.kbx *= 0.85; e.kby *= 0.85;
       ai.travel += step;
       if (Math.random() < 0.25) this.particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, life: 0.35, max: 0.35, color: '#5e0f0c', size: 3 });
-      // Far from you they scramble over wrecks; close in, they slam into whatever is in the way.
-      const pd2 = U.dist2(e.x, e.y, p.x, p.y);
-      if (pd2 < (e.r + p.r) ** 2 || (pd2 < 320 * 320 && this.world.hitCircle(e.x, e.y, e.r))) { this.detonate(e); return; }
+      // Far from everyone they scramble over wrecks; close in, they slam into whatever is in the way.
+      for (const q of this.alivePlayers()) {
+        if (U.dist2(e.x, e.y, q.x, q.y) < (e.r + q.r) ** 2) { this.detonate(e); return; }
+      }
+      if (U.dist2(e.x, e.y, p.x, p.y) < 320 * 320 && this.world.hitCircle(e.x, e.y, e.r)) { this.detonate(e); return; }
       if (ai.travel > ai.max) e.dead = true;    // ran off the far side
     }
 
     detonate(e) {
       e.dead = true;
       const b = e.def.burster;
-      this.pendingExplosions.push({ x: e.x, y: e.y, r: b.r, dmg: b.dmg * this.enemyDmgScale(), enemyDmg: b.enemyDmg, kind: 'blood' });
+      this.pendingExplosions.push({ x: e.x, y: e.y, r: b.r, dmg: b.dmg * this.enemyDmgScale(false), enemyDmg: b.enemyDmg, kind: 'blood' });
     }
 
     /** Damage multiplier for enemy attacks at the current time. */
-    enemyDmgScale() { return (1 + (this.time / 60) * 0.05) * this.difficulty.dmg; }
+    enemyDmgScale(withSurge = true) {
+      return (1 + (this.time / 60) * 0.05) * this.difficulty.dmg * (withSurge ? this.surgeDmg() : 1);
+    }
 
     spit(e) {
-      const p = this.player, R = e.def.ranged;
+      const p = this.nearestPlayer(e.x, e.y), R = e.def.ranged;
       const lead = R.flight * 0.5;      // aims where you're going, but only half-committed
       const tx = p.x + (p.vx || 0) * lead + U.rand(-14, 14);
       const ty = p.y + (p.vy || 0) * lead + U.rand(-14, 14);
@@ -855,12 +1050,11 @@
     }
 
     updateEnemyShots(dt) {
-      const p = this.player;
       for (const s of this.enemyShots) {
         s.t += dt;
         if (s.t < s.dur) continue;
         s.dead = true;
-        if (U.dist2(p.x, p.y, s.x1, s.y1) < (s.r + p.r) ** 2) this.hurtPlayer(s.impact);
+        for (const p of this.alivePlayers()) if (U.dist2(p.x, p.y, s.x1, s.y1) < (s.r + p.r) ** 2) this.hurtPlayer(p, s.impact);
         this.hazards.push({ x: s.x1, y: s.y1, r: s.pool.r, life: s.pool.life, max: s.pool.life, tick: s.pool.tick, tickT: 0.1,
           dmg: s.pool.dmg * this.enemyDmgScale(), seed: Math.random() * 100 });
         this.burst(s.x1, s.y1, '#a8d84a', 10, 150);
@@ -871,37 +1065,40 @@
     }
 
     updateHazards(dt) {
-      const p = this.player;
       for (const h of this.hazards) {
         h.life -= dt;
         if (h.life <= 0) { h.dead = true; continue; }
         h.tickT -= dt;
         if (h.tickT <= 0) {
           h.tickT = h.tick;
-          if (U.dist2(p.x, p.y, h.x, h.y) < (h.r + p.r * 0.4) ** 2) this.hurtPlayer(h.dmg);
+          for (const p of this.alivePlayers()) if (U.dist2(p.x, p.y, h.x, h.y) < (h.r + p.r * 0.4) ** 2) this.hurtPlayer(p, h.dmg);
         }
       }
       compact(this.hazards);
     }
 
-    airstrike() {
-      const p = this.player;
+    /** Airstrike flare: clears the screen around whoever picked it up. */
+    airstrike(p) {
       this.flashWhite = 1;
-      this.shake(16);
+      this.emit(['w', 1]);
+      this.shakeAll(16);
       OO.Audio.play('airstrike');
-      const hw = this.viewW / 2 + 40, hh = this.viewH / 2 + 40;
+      let vw = this.viewW, vh = this.viewH;
+      if (this.remoteView) { vw = Math.max(vw, this.remoteView.w); vh = Math.max(vh, this.remoteView.h); }
+      const hw = vw / 2 + 40, hh = vh / 2 + 40;
       for (const e of this.enemies) {
         if (e.dead || e.def.crate) continue;
         if (Math.abs(e.x - p.x) > hw || Math.abs(e.y - p.y) > hh) continue;
         this.damageEnemy(e, e.def.boss ? 400 : e.def.elite ? 250 : 99999, 0, 0, null);
       }
-      this.ui.banner('Airstrike called in', 'good');
+      this.banner('Airstrike called in', 'good');
     }
 
     // ------------------------------------------------------------ projectiles & areas
     spawnProjectile(o) {
       o.hit = new Set();
       o.dead = false;
+      o.id = ++this.nextProjId;
       this.projectiles.push(o);
     }
 
@@ -933,7 +1130,8 @@
           const sp = Math.hypot(pr.vx, pr.vy) || 1;
           this.damageEnemy(e, pr.dmg, (pr.vx / sp) * pr.kb, (pr.vy / sp) * pr.kb, pr.weapon);
           if (pr.ignite && Math.random() < pr.ignite && this.zones.length < 60) {
-            this.zones.push({ x: e.x, y: e.y, r: 26, life: 1.4, max: 1.4, dmg: 5 * this.player.stats.might, tick: 0.3, tickT: 0, kind: 'fire', weapon: pr.weapon, seed: Math.random() * 100 });
+            const might = pr.weapon && pr.weapon.owner ? pr.weapon.owner.stats.might : 1;
+            this.zones.push({ x: e.x, y: e.y, r: 26, life: 1.4, max: 1.4, dmg: 5 * might, tick: 0.3, tickT: 0, kind: 'fire', weapon: pr.weapon, seed: Math.random() * 100 });
           }
           if (--pr.pierce <= 0) { pr.dead = true; break; }
         }
@@ -977,83 +1175,154 @@
     }
 
     // ------------------------------------------------------------ pickups
+    /**
+     * Drop an item on the ground. Enforces the caps in OO.CONFIG.PICKUPS by retiring the oldest
+     * item of the same class, so fresh drops always appear (v0.3 bug: once 320 gems were on the
+     * map, every new drop was folded into a single far-away 'overflow' gem and drops seemed to stop).
+     */
     addPickup(kind, x, y, extra) {
-      const g = Object.assign({ kind, x, y, value: 1, attract: false, v: -140, t: U.rand(0, 10), dead: false }, extra || {});
+      const C = OO.CONFIG.PICKUPS;
+      const life = C.life[kind] || 0;
+      const g = Object.assign({ kind, x, y, value: 1, attract: false, v: -140, t: U.rand(0, 10), dead: false,
+        life: life || Infinity, max: life || Infinity, id: ++this.nextPickupId }, extra || {});
+      if (kind === 'xp') {
+        if (this.gemCount >= C.maxGems) {
+          const old = this.oldestPickup((o) => o.kind === 'xp' && !o.attract);
+          if (old) { old.dead = true; g.value += old.value; this.gemCount--; }
+        }
+        this.gemCount++;
+      } else if (kind !== 'case') {
+        if (this.otherCount >= C.maxOther) {
+          const old = this.oldestPickup((o) => o.kind !== 'xp' && o.kind !== 'case' && !o.attract);
+          if (old) { old.dead = true; this.otherCount--; }
+        }
+        this.otherCount++;
+      }
       this.pickups.push(g);
       return g;
     }
 
+    /** Pickups stay in insertion order, so the first live match is the oldest. */
+    oldestPickup(test) {
+      for (const o of this.pickups) if (!o.dead && test(o)) return o;
+      return null;
+    }
+
     dropXp(x, y, v) {
       if (v <= 0) return;
-      if (this.gemCount >= OO.CONFIG.MAX_GEMS) {
-        if (!this.overflowGem || this.overflowGem.dead) this.overflowGem = this.addPickup('xp', x, y, { value: 0, overflow: true });
-        this.overflowGem.value += v;
-        return;
-      }
-      this.gemCount++;
       this.addPickup('xp', x, y, { value: v });
     }
 
     updatePickups(dt) {
-      const p = this.player, mag = p.stats.magnet;
-      let gems = 0;
+      let gems = 0, other = 0;
       for (const g of this.pickups) {
         if (g.dead) continue;
-        if (g.kind === 'xp') gems++;
         g.t += dt;
+        // Despawn timer (items already flying to someone are never taken away).
+        if (!g.attract) {
+          g.life -= dt;
+          if (g.life <= 0) { g.dead = true; continue; }
+        }
+        if (g.kind === 'xp') gems++; else if (g.kind !== 'case') other++;
+        const p = this.nearestPlayer(g.x, g.y);
+        if (p.downed) continue;
         const dx = p.x - g.x, dy = p.y - g.y, d = Math.hypot(dx, dy) || 1;
-        if (!g.attract && g.kind !== 'case' && d < mag) g.attract = true;
+        if (!g.attract && g.kind !== 'case' && d < p.stats.magnet) g.attract = true;
         if (g.attract) {
           g.v = Math.min(g.v + 1500 * dt, 1100);
           const step = g.v > 0 ? Math.min(d, g.v * dt) : g.v * dt;
           g.x += (dx / d) * step; g.y += (dy / d) * step;
         }
         if (g.kind === 'case' && this.state !== 'playing') continue;   // one case screen at a time
-        if (U.dist2(p.x, p.y, g.x, g.y) < (p.r + 10) ** 2) this.collect(g);
+        if (U.dist2(p.x, p.y, g.x, g.y) < (p.r + 10) ** 2) this.collect(p, g);
       }
-      this.gemCount = gems;
+      this.gemCount = gems; this.otherCount = other;
       compact(this.pickups);
     }
 
-    collect(g) {
-      const p = this.player;
+    collect(p, g) {
       g.dead = true;
       switch (g.kind) {
         case 'xp':
-          p.xp += g.value * p.stats.growth;
-          this.xpCombo = this.xpComboT > 0 ? this.xpCombo + 1 : 0;
-          this.xpComboT = 0.4;
-          OO.Audio.play('xp', this.xpCombo);
+          this.team.xp += g.value * p.stats.growth;    // XP is shared; the collector's Lab Notes rank applies
+          if (p.local) {
+            this.xpCombo = this.xpComboT > 0 ? this.xpCombo + 1 : 0;
+            this.xpComboT = 0.4;
+            OO.Audio.play('xp', this.xpCombo);
+          } else this.emit(['s', 'xp', 4]);
           break;
-        case 'herb': this.heal(30); break;
+        case 'herb': this.heal(p, 30); break;
         case 'credit':
           this.credits += g.value;
           this.addText(p.x, p.y - 24, '+' + g.value + 'c', 'credit');
-          OO.Audio.play('xp', 10);
+          this.sfxFor(p, 'xp', 10);
           break;
         case 'magnet':
           for (const o of this.pickups) if (o.kind === 'xp') o.attract = true;
-          this.ui.banner('Scanner pulse: samples incoming', 'good');
-          OO.Audio.play('select');
+          this.banner('Scanner pulse: samples incoming', 'good');
+          this.sfxFor(p, 'select');
           break;
-        case 'bomb': this.airstrike(); break;
-        case 'case': this.openChest(!!g.big); break;
+        case 'bomb': this.airstrike(p); break;
+        case 'case': this.openChest(p, !!g.big); break;
       }
     }
 
-    // ------------------------------------------------------------ effects
-    addEffect(fx) { if (this.effects.length < 120) this.effects.push(fx); }
-    addLight(x, y, r, i, life) { if (this.lights.length < 40) this.lights.push({ x, y, r, i, life: life || 0.05, max: life || 0.05 }); }
+    // ------------------------------------------------------------ effects (and their co-op mirror)
+    /**
+     * Host side of co-op: one-shot effects, sounds and banners are queued here and shipped with
+     * the next snapshot so the partner sees and hears them. In solo and on the client it is a no-op.
+     */
+    emit(ev) {
+      if (this.mode === 'host' && this.players.length > 1 && this.netEvents.length < 400) this.netEvents.push(ev);
+    }
+    /** Same, but only if the partner is close enough to see it. */
+    emitNear(x, y, ev) {
+      if (this.mode !== 'host' || this.players.length < 2) return;
+      for (const p of this.players) {
+        if (p.local) continue;
+        const vw = (this.remoteView ? this.remoteView.w : this.viewW) / 2 + 120, vh = (this.remoteView ? this.remoteView.h : this.viewH) / 2 + 120;
+        if (Math.abs(x - p.x) < vw && Math.abs(y - p.y) < vh) { this.emit(ev); return; }
+      }
+    }
+    netSend(msg) { if (this.net) this.net.send(msg); }
+
+    /** Play a sound for the player it concerns: locally, or on the partner's machine. */
+    sfxFor(p, name, opt) {
+      if (p.local) OO.Audio.play(name, opt);
+      else this.emit(['s', name, opt]);
+    }
+    static isLocalSound(name) { return LOCAL_SOUNDS.has(name); }
+
+    banner(text, kind) {
+      this.ui.banner(text, kind);
+      this.emit(['b', text, kind]);
+    }
+
+    addEffect(fx) {
+      if (this.effects.length < 120) this.effects.push(fx);
+      this.emitNear(fx.x || (fx.points && fx.points[0]) || 0, fx.y || (fx.points && fx.points[1]) || 0, ['fx', fx]);
+    }
+    addLight(x, y, r, i, life) {
+      if (this.lights.length < 40) this.lights.push({ x, y, r, i, life: life || 0.05, max: life || 0.05 });
+      this.emitNear(x, y, ['l', x, y, r, i, life]);
+    }
     shake(a) { if (!this.reducedMotion && this.settings.shake) this.shakeAmt = Math.max(this.shakeAmt, a); }
+    /** Shake both screens (boss arrivals, airstrikes). */
+    shakeAll(a) { this.shake(a); this.emit(['k', a]); }
+    /** Shake only the screen of the player it concerns (recoil, hits). */
+    shakeFor(p, a) { if (p.local) this.shake(a); else this.emit(['k', a]); }
 
     addText(x, y, val, kind) {
       if (this.texts.length > 90) this.texts.shift();
       this.texts.push({ x, y, val, kind, life: 0.7, max: 0.7 });
+      this.emitNear(x, y, ['t', x, y, val, kind]);
     }
 
     addDecal(x, y, r, kind) {
+      const v = U.randInt(0, 5), rot = U.rand(0, U.TAU);
       if (this.decals.length > 200) this.decals.shift();
-      this.decals.push({ x, y, r, kind, rot: U.rand(0, U.TAU), v: U.randInt(0, 5), life: 40 });
+      this.decals.push({ x, y, r, kind, rot, v, life: 40 });
+      this.emitNear(x, y, ['d', x, y, r, kind, rot, v]);
     }
 
     burst(x, y, color, n, speed) {
@@ -1061,6 +1330,7 @@
         const a = U.rand(0, U.TAU), s = U.rand(0.3, 1) * speed;
         this.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: U.rand(0.3, 0.7), max: 0.7, color, size: U.rand(1.5, 3.5) });
       }
+      this.emitNear(x, y, ['p', x, y, color, n, speed]);
     }
 
     updateFx(dt) {
@@ -1084,6 +1354,11 @@
     }
 
     get bosses() { return this.enemies.filter((e) => e.def.boss && !e.dead); }
+
+    // Co-op hooks; coop.js fills these in.
+    hostTick() {}
+    clientTick() {}
+    netWatch() {}
   }
 
   /** Remove items flagged dead, in place (no new array every frame). */
@@ -1093,5 +1368,6 @@
     arr.length = j;
   }
 
+  Game.compact = compact;
   OO.Game = Game;
 })(window.OO = window.OO || {});

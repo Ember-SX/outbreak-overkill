@@ -4,7 +4,7 @@ A bio-horror horde survival game for the browser. You play one operative inside 
 
 The core loop follows the Vampire Survivors formula: move only, auto-firing weapons, XP gems (DNA samples here), a pick-one-of-three upgrade screen, weapon and passive slots, elites that drop supply cases, and a wave script that escalates until you're overrun or extracted.
 
-**Status:** v0.3.0. Playable start to finish, with cover, ranged infected, invincible stampedes, enemy leveling, weapon evolutions and an Armory between runs.
+**Status:** v0.4.0. Playable start to finish, solo or 2-player online co-op, with cover, ranged infected, invincible stampedes, enemy leveling, a late-game surge, weapon evolutions and an Armory between runs.
 
 ## Play it
 
@@ -64,12 +64,25 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 
 | Time (no adaptive bonus) | 0:00 | 5:00 | 10:00 | 15:00 |
 | --- | --- | --- | --- | --- |
+| Shambler HP, v0.4 Standard | 16 | 31 | 125 | 597 |
 | Shambler HP, v0.3 Standard | 16 | 31 | 60 | 116 |
 | Shambler HP, v0.2 Standard | 12 | 21 | 30 | 39 |
 
+**Late-game surge:** from 6:00, enemy HP compounds +20% and enemy damage +12% every minute on top of the strain level (The Stalker gets half the HP rate; Burster blasts skip the damage surge). A banner announces it and the strain line on the HUD turns red with the live multipliers. A shambler's contact hit goes from 15 to 24 at 10:00 and from 18 to 49 at 15:00. Tuning lives in `OO.CONFIG.SURGE`.
+
 **Threat levels:** Standard uses what v0.2 called Nightmare (35% tougher, 25% harder-hitting, 25% bigger waves). Nightmare is locked until it gets its own tuning in a future update.
 
-**Pickups:** DNA samples (XP), Green Herb (heal), Scanner (pulls every sample on the map), Airstrike Flare (clears the screen), credits, supply cases. Supply crates spawn around the map; shoot them open.
+**Pickups:** DNA samples (XP), Green Herb (heal), Scanner (pulls every sample on the map), Airstrike Flare (clears the screen), credits, supply cases. Supply crates spawn around the map; shoot them open. Items on the ground despawn (DNA samples after 60s, other items after 45s; supply cases never) and blink for their last 5 seconds. If 320 samples are already on the ground, the oldest one is recycled and its XP rides along with the new drop. Tuning lives in `OO.CONFIG.PICKUPS`.
+
+**Co-op (2 players, online):** press **Co-op** on the main menu. One player picks **Host a room** and reads out the 3-digit code; the other types it in and presses **Join**. Each of you plays the operative selected on your own main menu, with your own Armory upgrades.
+- XP is shared. On each team level-up both of you pick an upgrade; the game waits for both.
+- Infected chase whoever is closest and have **double health** while a partner is connected.
+- At 0 HP you go down instead of dying. Stand next to a downed partner for 3 seconds to revive them at 35% HP. The run ends when both of you are down.
+- Supply cases show as a toast instead of a pause screen. Either player can pause for both.
+- Each player banks their own payout. After a run, **Back to lobby** keeps the room open for another go.
+- If your partner drops, the host keeps playing solo; if the host drops, the run ends for the partner.
+
+Co-op needs an internet connection and a page served over http(s) (GitHub Pages, or `npm start` locally). It won't work inside the in-chat preview, which can't open network connections. Tuning lives in `OO.CONFIG.COOP`.
 
 **Presentation:** flashlight darkness with glowing eyes in the dark, blood and bile decals, screen shake, damage numbers, synthesized sound (Web Audio, no files), a low-HP heartbeat, edge markers for off-screen bosses, elites and supply cases. Screen shake and damage numbers can be switched off from the pause screen.
 
@@ -89,7 +102,10 @@ js/
   spawner.js        the Director: wave table and scripted events
   render.js         world drawing, sprite cache, darkness pass, HUD
   ui.js             DOM screens: menu, level up, supply case, pause, results
-  game.js           run state, fixed-timestep loop, simulation
+  game.js           run state, fixed-timestep loop, simulation (any number of players)
+  net.js            PeerJS wrapper: rooms, 3-digit codes, the data channel
+  coop.js           co-op lobby, host snapshots, client mirroring
+  vendor/peerjs.min.js  PeerJS 1.5.5 (MIT), vendored so the game has no CDN dependency
   main.js           boot
 tools/bundle.mjs    builds dist/outbreak-overkill.html (single file)
 tools/balance-sim.mjs  headless bot runs for balance checks (needs Playwright)
@@ -131,6 +147,8 @@ Done in v0.2: weapon evolutions, the Armory, cover, Spitters, Burster stampedes,
 
 Done in v0.3: enemy leveling (strain), harder Standard baseline, invincible Bursters.
 
+Done in v0.4: late-game surge, pickup despawn and cap fix, 2-player online co-op.
+
 Next up: give **Nightmare** its own tuning (faster strain growth, more stampedes) and unlock it.
 
 1. **Real art.** Swap procedural shapes for sprite sheets; `Renderer.enemySprite()` and `obstacleSprite()` are the places to change.
@@ -146,6 +164,20 @@ Next up: give **Nightmare** its own tuning (faster strain growth, more stampedes
 
 See [docs/GIT_WORKFLOW.md](docs/GIT_WORKFLOW.md) for first-time GitHub setup, the branch-per-feature flow, commit style and releases.
 
+## How co-op works
+
+The host runs the only simulation. Fifteen times a second it sends the partner a snapshot of what is near them: enemies, bullets and pickups packed into an `Int16Array`, small JSON lists (players, fire, acid, stampedes), and a queue of one-shot effects, sounds and banners. That's roughly 90 KB/s with about 380 infected on screen. The partner's browser moves its own operative locally (no input lag), sends its position 30 times a second, and draws everything else interpolated between snapshots. Level-up picks, rerolls, skips and pause requests are sent to the host, which applies them.
+
+Players find each other through a PeerJS signalling server. Room 427 is peer id `outbreak-overkill-v1-427`. After that handshake, game traffic goes directly between the two browsers over WebRTC. By default the free public PeerJS cloud server is used. To use your own server, or to test on one machine:
+
+```bash
+npx peer --port 9000 --host 127.0.0.1    # terminal 1: local signalling server
+npm start                                # terminal 2: serves the game on :8080
+# open http://localhost:8080/?peer=127.0.0.1:9000 in two windows
+```
+
+Both players must be on the same game version; the host turns away a mismatched version with a clear message.
+
 ## Credits and IP
 
-All code, art (procedural) and sound (synthesized) are original to this project. The game is inspired by the survivors-like genre and classic survival-horror themes; it uses no names, characters or assets from existing franchises. Fonts: Big Shoulders Stencil Display, Special Elite and IBM Plex Mono via Google Fonts (SIL Open Font License).
+All code, art (procedural) and sound (synthesized) are original to this project. The game is inspired by the survivors-like genre and classic survival-horror themes; it uses no names, characters or assets from existing franchises. Fonts: Big Shoulders Stencil Display, Special Elite and IBM Plex Mono via Google Fonts (SIL Open Font License). Networking: PeerJS (MIT, see `js/vendor/peerjs.LICENSE`).
