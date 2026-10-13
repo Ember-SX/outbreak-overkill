@@ -506,6 +506,70 @@ kbd {
 .res-payout { margin: 0; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 .res-payout strong { color: var(--amber); }
 
+/* ------------------------------------------------------------------ co-op */
+.panel-coop { width: min(560px, 100%); }
+.coop-note { margin: -4px 0 0; font-size: 14px; color: #b3ac9b; }
+.coop-note strong { color: var(--bone); font-weight: normal; }
+.coop-choose { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: end; }
+.coop-label { margin: 0; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.coop-join { display: grid; gap: 6px; }
+.coop-join-row { display: flex; gap: 8px; }
+.coop-input {
+  width: 4.2em;
+  padding: 6px 10px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 30px;
+  letter-spacing: 0.12em;
+  text-align: center;
+  color: var(--bone);
+  background: rgba(8, 10, 9, 0.8);
+  border: 2px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.coop-input:focus { outline: none; border-color: var(--amber); }
+.coop-room { display: grid; gap: 8px; }
+.coop-code {
+  margin: -6px 0 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(64px, 16vw, 96px);
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+.coop-status { margin: 0; font-family: var(--font-mono); font-size: 13px; color: var(--bone); }
+.coop-roster { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.coop-roster b { display: inline-block; min-width: 2.2em; font-family: var(--font-mono); font-size: 12px; }
+.coop-roster .tag-P1 { color: var(--dna); }
+.coop-roster .tag-P2 { color: #ff9f4a; }
+.coop-roster em { font-style: normal; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.coop-error { margin: 0; padding: 8px 10px; font-family: var(--font-mono); font-size: 12px; color: #ffb3a8; background: rgba(163, 32, 27, 0.18); border-left: 3px solid var(--blood); }
+
+.lu-wait { margin: 0; padding: 24px 0; font-family: var(--font-display); font-weight: 800; font-size: 26px; text-transform: uppercase; color: var(--bone); }
+
+.toast {
+  position: fixed;
+  z-index: 6;
+  right: 10px;
+  top: calc(64px + env(safe-area-inset-top, 0px));
+  width: min(260px, calc(100% - 20px));
+  padding: 10px 12px;
+  background: rgba(21, 23, 20, 0.92);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--amber);
+  font-size: 13px;
+  pointer-events: none;
+}
+.toast p { margin: 0 0 4px; display: flex; align-items: center; gap: 6px; }
+.toast img { width: 20px; height: 20px; }
+.toast em { font-style: normal; font-family: var(--font-mono); font-size: 10px; color: var(--amber); }
+.toast .evo strong, .toast .evo em { color: #ff6f4a; }
+.toast-title { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--amber); }
+.toast.show { animation: toast 4.5s ease-out forwards; }
+@keyframes toast { 0% { opacity: 0; transform: translateX(12px); } 6% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
+
 /* ------------------------------------------------------------------ HUD extras */
 .hud-buttons {
   position: fixed;

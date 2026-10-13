@@ -11,8 +11,10 @@
   const buf2 = [];
 
   class Weapon {
-    constructor(id) {
+    /** owner = the player object that carries this weapon (shots come from, and scale with, them). */
+    constructor(id, owner) {
       this.id = id;
+      this.owner = owner || null;
       this.def = OO.WEAPONS[id];
       this.level = 1;
       this.timer = 0.4;
@@ -48,12 +50,12 @@
 
     update(dt, game) {
       const b = this.behaviour;
-      if (b) b.update(this, this.getStats(game.player), dt, game);
+      if (b) b.update(this, this.getStats(this.owner), dt, game);
     }
 
     draw(ctx, game) {
       const b = this.behaviour;
-      if (b && b.draw) b.draw(this, this.getStats(game.player), ctx, game);
+      if (b && b.draw) b.draw(this, this.getStats(this.owner), ctx, game);
     }
   }
 
@@ -62,7 +64,7 @@
   // ------------------------------------------------------------ Service Pistol
   Behaviours.pistol = {
     update(w, s, dt, g) {
-      const st = w.state, p = g.player;
+      const st = w.state, p = w.owner;
       if (st.burst > 0) {
         st.burstT -= dt;
         if (st.burstT <= 0) {
@@ -90,7 +92,7 @@
   // ------------------------------------------------------------ Combat Knife
   Behaviours.knife = {
     update(w, s, dt, g) {
-      const st = w.state, p = g.player;
+      const st = w.state, p = w.owner;
       if (st.queue && st.queue.length) {
         st.qt -= dt;
         if (st.qt <= 0) {
@@ -109,7 +111,7 @@
       }
     },
     slash(w, s, g, ang) {
-      const p = g.player;
+      const p = w.owner;
       const len = 115 * s.area, wid = 46 * s.area;
       const c = Math.cos(ang), sn = Math.sin(ang);
       g.addEffect({ kind: 'slash', x: p.x, y: p.y, ang, len, wid, life: 0.18, max: 0.18 });
@@ -129,7 +131,7 @@
   // ------------------------------------------------------------ Pump Shotgun
   Behaviours.shotgun = {
     update(w, s, dt, g) {
-      const p = g.player;
+      const p = w.owner;
       w.timer -= dt;
       if (w.timer > 0) return;
       const t = g.nearestVisible(p.x, p.y, s.speed * s.duration + 30);   // only fire when something is in range
@@ -150,7 +152,7 @@
         });
       }
       g.addLight(p.x + Math.cos(base) * 24, p.y + Math.sin(base) * 24, 120, 0.9, 0.08);
-      g.shake(3);
+      g.shakeFor(p, 3);
       OO.Audio.play('shotgun');
     },
   };
@@ -158,7 +160,7 @@
   // ------------------------------------------------------------ Incendiary Grenade
   Behaviours.grenade = {
     update(w, s, dt, g) {
-      const p = g.player;
+      const p = w.owner;
       w.timer -= dt;
       if (w.timer > 0) return;
       w.timer = s.cd;
@@ -179,7 +181,7 @@
   // ------------------------------------------------------------ Sawblade Drones
   Behaviours.saw = {
     update(w, s, dt, g) {
-      const st = w.state, p = g.player;
+      const st = w.state, p = w.owner;
       if (!st.hits) { st.hits = new Map(); st.angle = 0; st.active = 0; }
       if (st.active > 0) {
         st.active -= dt;
@@ -208,7 +210,7 @@
       }
     },
     draw(w, s, ctx, g) {
-      const st = w.state, p = g.player;
+      const st = w.state, p = w.owner;
       if (!(st.active > 0)) return;
       const R = 78 * s.area, br = 13 * s.area;
       const fade = Math.min(1, st.active / 0.3);
@@ -238,7 +240,7 @@
   // ------------------------------------------------------------ Tesla Coil
   Behaviours.tesla = {
     update(w, s, dt, g) {
-      const p = g.player;
+      const p = w.owner;
       w.timer -= dt;
       if (w.timer > 0) return;
       const first = g.randomEnemyNear(p.x, p.y, 360);

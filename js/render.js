@@ -158,8 +158,8 @@
       this.drawZones(ctx);
       this.drawObstacles(ctx);
       this.drawEnemies(ctx);
-      this.drawPlayer(ctx);
-      for (const w of p.weapons) w.draw(ctx, g);
+      for (const pl of g.players) this.drawPlayer(ctx, pl);
+      for (const pl of g.players) if (!pl.downed) for (const w of pl.weapons) w.draw(ctx, g);
       this.drawLobs(ctx);
       this.drawEffects(ctx, false);
       this.drawParticles(ctx);
@@ -179,6 +179,7 @@
       this.drawEffects(ctx, true);
       this.drawTexts(ctx);
       this.drawEnemyBars(ctx);
+      if (g.players.length > 1) this.drawPlayerTags(ctx);
 
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       this.drawScreenFx();
@@ -607,8 +608,9 @@
       }
     }
 
-    drawPlayer(ctx) {
-      const g = this.g, p = g.player;
+    drawPlayer(ctx, p) {
+      const g = this.g;
+      if (p.downed) { this.drawDowned(ctx, p); return; }
       const blink = p.iframes > 0 && Math.floor(g.time * 30) % 2 === 0;
       ctx.save();
       ctx.translate(p.x, p.y);
@@ -630,7 +632,7 @@
       ctx.rotate(p.aimAngle);
       ctx.fillStyle = '#222';
       ctx.fillRect(6, 2, 16, 4.5);
-      ctx.fillStyle = p.char.vest;
+      ctx.fillStyle = p.vest || p.char.vest;
       ctx.beginPath(); ctx.ellipse(0, 0, p.r * 0.8, p.r, 0, 0, TAU); ctx.fill();
       ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(-3, -p.r * 0.8); ctx.lineTo(-3, p.r * 0.8); ctx.stroke();
@@ -651,6 +653,42 @@
       ctx.fillStyle = '#3a0c0a'; ctx.fillRect(p.x - w / 2, y, w, 4);
       ctx.fillStyle = p.hp / p.stats.maxHp < 0.3 ? '#ff3b2f' : '#c62a22';
       ctx.fillRect(p.x - w / 2, y, w * U.clamp(p.hp / p.stats.maxHp, 0, 1), 4);
+    }
+
+    /** Co-op: a downed operative lies on the ground with a revive ring that fills while a teammate stands close. */
+    drawDowned(ctx, p) {
+      const g = this.g, C = OO.CONFIG.COOP;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.fillStyle = 'rgba(90,10,8,0.55)'; circle(ctx, 0, 4, p.r * 1.6);
+      ctx.rotate(0.5);
+      ctx.globalAlpha = 0.75;
+      ctx.fillStyle = p.vest || p.char.vest;
+      ctx.beginPath(); ctx.ellipse(0, 0, p.r * 1.1, p.r * 0.6, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#c69a74'; circle(ctx, p.r * 1.05, 0, 4.2);
+      ctx.restore();
+      const k = U.clamp(p.reviveT / C.reviveTime, 0, 1);
+      const pulse = 0.5 + 0.5 * Math.sin(g.time * 5);
+      ctx.strokeStyle = `rgba(235,226,207,${0.25 + pulse * 0.2})`; ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath(); ctx.arc(p.x, p.y, C.reviveRadius, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      if (k > 0) {
+        ctx.strokeStyle = '#56d6c0'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 10, -Math.PI / 2, -Math.PI / 2 + k * TAU); ctx.stroke();
+      }
+    }
+
+    /** Co-op name tags over each operative, drawn over the darkness. */
+    drawPlayerTags(ctx) {
+      ctx.font = `700 10px ${FONT_MONO}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      for (const p of this.g.players) {
+        const label = p.tag + (p.downed ? ' DOWN' : '');
+        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillText(label, p.x + 1, p.y - p.r - 9);
+        ctx.fillStyle = p.downed ? '#ff5a4a' : p.tint; ctx.fillText(label, p.x, p.y - p.r - 10);
+      }
+      ctx.textBaseline = 'alphabetic';
     }
 
     drawPickups(ctx) {
@@ -880,13 +918,16 @@
       d.fillRect(0, 0, W, H);
       d.globalCompositeOperation = 'destination-out';
 
-      punch(p.x, p.y, OO.CONFIG.LIGHT_RADIUS, 1);
-      // flashlight cone in the facing direction
-      const cx = X(p.x), cy = Y(p.y), R = 560 * z, a = p.faceAngle;
-      const cg = d.createRadialGradient(cx, cy, 0, cx, cy, R);
-      cg.addColorStop(0, 'rgba(0,0,0,0.75)'); cg.addColorStop(0.6, 'rgba(0,0,0,0.45)'); cg.addColorStop(1, 'rgba(0,0,0,0)');
-      d.fillStyle = cg;
-      d.beginPath(); d.moveTo(cx, cy); d.arc(cx, cy, R, a - 0.42, a + 0.42); d.closePath(); d.fill();
+      for (const pl of g.players) {
+        if (pl.downed) { punch(pl.x, pl.y, 140, 0.7); continue; }
+        punch(pl.x, pl.y, OO.CONFIG.LIGHT_RADIUS * (pl === p ? 1 : 0.8), 1);
+        // flashlight cone in the facing direction
+        const cx = X(pl.x), cy = Y(pl.y), R = 560 * z, a = pl.faceAngle;
+        const cg = d.createRadialGradient(cx, cy, 0, cx, cy, R);
+        cg.addColorStop(0, 'rgba(0,0,0,0.75)'); cg.addColorStop(0.6, 'rgba(0,0,0,0.45)'); cg.addColorStop(1, 'rgba(0,0,0,0)');
+        d.fillStyle = cg;
+        d.beginPath(); d.moveTo(cx, cy); d.arc(cx, cy, R, a - 0.42, a + 0.42); d.closePath(); d.fill();
+      }
 
       for (const zn of g.zones) punch(zn.x, zn.y, zn.r * 2.6, 0.85 * Math.min(1, zn.life / 0.4));
       for (const l of g.lights) punch(l.x, l.y, l.r, l.i * Math.max(0, l.life / l.max));
@@ -900,6 +941,15 @@
     // ---------------------------------------------------------------- screen space
     drawScreenFx() {
       const g = this.g, p = g.player, ctx = this.ctx, w = this.w, h = this.h;
+      if (p.downed) {
+        ctx.fillStyle = 'rgba(40,0,0,0.45)'; ctx.fillRect(0, 0, w, h);
+        ctx.font = `800 30px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ff5a4a'; ctx.fillText('YOU ARE DOWN', w / 2, h * 0.62);
+        ctx.font = `500 12px ${FONT_MONO}`; ctx.fillStyle = '#ebe2cf';
+        ctx.fillText('Your partner can revive you by standing next to you for ' + OO.CONFIG.COOP.reviveTime + 's', w / 2, h * 0.62 + 28);
+        ctx.textBaseline = 'alphabetic';
+        return;
+      }
       const low = p.hp / p.stats.maxHp < 0.3;
       const hurtA = Math.max(0, p.hurt / 0.3) * 0.55 + (low ? 0.25 + Math.sin(g.time * 6) * 0.12 : 0);
       if (hurtA > 0.01) {
@@ -921,7 +971,8 @@
       // XP bar: the DNA sample meter
       const bh = 14;
       ctx.fillStyle = 'rgba(8,10,9,0.9)'; ctx.fillRect(0, top, W, bh);
-      const prog = U.clamp(p.xp / p.xpNext, 0, 1);
+      const T = g.team;
+      const prog = U.clamp(T.xp / T.xpNext, 0, 1);
       ctx.fillStyle = '#2f8f80'; ctx.fillRect(0, top, W * prog, bh);
       ctx.fillStyle = '#56d6c0'; ctx.fillRect(0, top, W * prog, 4);
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -929,8 +980,9 @@
       ctx.fillStyle = '#3a3a34'; ctx.fillRect(0, top + bh, W, 1);
       ctx.font = `700 11px ${FONT_MONO}`;
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#0d0f0e'; ctx.fillText('LV ' + p.level, W - 7, top + bh / 2 + 1);
-      ctx.fillStyle = '#ebe2cf'; ctx.fillText('LV ' + p.level, W - 8, top + bh / 2);
+      ctx.fillStyle = '#0d0f0e'; ctx.fillText('LV ' + T.level, W - 7, top + bh / 2 + 1);
+      ctx.fillStyle = '#ebe2cf'; ctx.fillText('LV ' + T.level, W - 8, top + bh / 2);
+      if (g.players.length > 1) this.drawPartnerPanel(top + 96);
 
       // Timer
       const remaining = OO.CONFIG.RUN_LENGTH - g.time;
@@ -1021,9 +1073,32 @@
       ctx.textBaseline = 'alphabetic';
     }
 
+    /** Co-op: partner's name, HP and status under your gear slots. */
+    drawPartnerPanel(y) {
+      const g = this.g, ctx = this.ctx;
+      for (const q of g.players) {
+        if (q === g.player) continue;
+        const x = 10, w = 150;
+        ctx.fillStyle = 'rgba(8,10,9,0.72)'; ctx.fillRect(x, y, w, 30);
+        ctx.strokeStyle = q.tint; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 29);
+        ctx.font = `700 10px ${FONT_MONO}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.fillStyle = q.tint; ctx.fillText(q.tag + ' ' + q.name.toUpperCase(), x + 6, y + 4);
+        const k = q.stats && q.stats.maxHp ? U.clamp(q.hp / q.stats.maxHp, 0, 1) : 0;
+        ctx.fillStyle = '#3a0c0a'; ctx.fillRect(x + 6, y + 19, w - 12, 5);
+        ctx.fillStyle = q.downed ? '#ff5a4a' : '#c62a22'; ctx.fillRect(x + 6, y + 19, (w - 12) * (q.downed ? U.clamp(q.reviveT / OO.CONFIG.COOP.reviveTime, 0, 1) : k), 5);
+        if (q.downed) {
+          ctx.textAlign = 'right'; ctx.fillStyle = '#ff5a4a';
+          ctx.fillText('DOWN', x + w - 6, y + 4);
+        }
+        ctx.textBaseline = 'alphabetic';
+        y += 36;
+      }
+    }
+
     drawOffscreenMarkers() {
       const g = this.g, ctx = this.ctx, z = g.zoom, W = this.w, H = this.h;
       const marks = [];
+      for (const q of g.players) if (q !== g.player) marks.push([q.x, q.y, q.downed ? '#ff5a4a' : q.tint, 12]);
       for (const e of g.enemies) {
         if (e.dead || !(e.def.boss || e.def.elite)) continue;
         marks.push([e.x, e.y, e.def.boss ? '#ff3b2f' : '#ff8a3a', e.def.boss ? 13 : 9]);

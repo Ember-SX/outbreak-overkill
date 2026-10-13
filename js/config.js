@@ -6,7 +6,7 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.3.0';
+  OO.VERSION = '0.4.0';
 
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory)
@@ -49,6 +49,18 @@
     // The Stalker gets hpPerMin * bossHpScale. Burster blasts skip the damage surge (they're
     // already lethal and can't be fought).
     SURGE: { start: 6, hpPerMin: 0.20, dmgPerMin: 0.12, bossHpScale: 0.5 },
+    // Co-op (2 players over P2P). Enemy HP is multiplied while a partner is connected.
+    // A player at 0 HP goes down; standing within reviveRadius of them for reviveTime seconds
+    // brings them back at reviveHp of max HP. The run ends when both are down.
+    COOP: {
+      enemyHp: 2.0,          // 200% enemy health while a partner is connected
+      reviveTime: 3,
+      reviveRadius: 70,
+      reviveHp: 0.35,
+      snapshotHz: 15,        // host -> client world updates per second
+      inputHz: 30,           // client -> host position updates per second
+      peerPrefix: 'outbreak-overkill-v1-',   // room 427 is peer id outbreak-overkill-v1-427
+    },
     // Burster stampede: warning time, when the lane locks (seconds before launch), row spacing.
     STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44, homing: 0.12 },
     // Spitters hang back and are easy to ignore, so cap how many can be alive: 1 + 0.5/min, max 7.
