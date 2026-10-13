@@ -191,9 +191,13 @@
   };
 
   // ---------------------------------------------------------------- THREAT LEVELS
+  // v0.3: what used to be Nightmare (x1.35 HP, x1.25 damage, x1.25 horde size) is now the
+  // Standard baseline. Nightmare is locked until it gets its own, harder tuning; its numbers
+  // below are placeholders and are never applied while `locked` is true.
   OO.DIFFICULTY = {
-    standard:  { name: 'Standard',  hp: 1,    dmg: 1,    count: 1,    credits: 1,   text: 'The intended experience.' },
-    nightmare: { name: 'Nightmare', hp: 1.35, dmg: 1.25, count: 1.25, credits: 1.6, text: 'Tougher, hungrier infected. Credits x1.6.' },
+    standard:  { name: 'Standard',  hp: 1.35, dmg: 1.25, count: 1.25, credits: 1,   text: 'The intended experience.' },
+    nightmare: { name: 'Nightmare', hp: 1.35, dmg: 1.25, count: 1.25, credits: 1.6, locked: true,
+                 text: 'Locked. Coming in a future update.' },
   };
 
   // ---------------------------------------------------------------- ARMORY (meta progression)

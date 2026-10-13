@@ -930,7 +930,7 @@
       ctx.fillText(U.formatTime(g.time), W / 2, top + 20);
       ctx.font = `500 10px ${FONT_MONO}`;
       ctx.fillStyle = '#8f8a7d';
-      ctx.fillText('EVAC IN ' + U.formatTime(remaining) + (g.settings.difficulty === 'nightmare' ? ' · NIGHTMARE' : ''), W / 2, top + 58);
+      ctx.fillText('EVAC IN ' + U.formatTime(remaining) + (g.difficulty !== OO.DIFFICULTY.standard ? ' · ' + g.difficulty.name.toUpperCase() : ''), W / 2, top + 58);
 
       // Off-screen markers: bosses, elites and supply cases you can't see yet
       this.drawOffscreenMarkers();

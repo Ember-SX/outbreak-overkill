@@ -20,6 +20,9 @@
       this.records = U.storage.get('oo.records', { bestTime: 0, bestKills: 0, runs: 0, wins: 0 });
       this.settings = Object.assign({ muted: false, damageNumbers: true, shake: true, difficulty: 'standard' }, U.storage.get('oo.settings', {}));
       this.meta = Object.assign({ bank: 0, ranks: {} }, U.storage.get('oo.meta', {}));
+      // A save from v0.2 may still have Nightmare selected; fall back to Standard while it is locked.
+      const sel = OO.DIFFICULTY[this.settings.difficulty];
+      if (!sel || sel.locked) { this.settings.difficulty = 'standard'; U.storage.set('oo.settings', this.settings); }
       OO.Audio.setMuted(this.settings.muted);
       this.reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -123,7 +126,7 @@
     }
 
     setDifficulty(id) {
-      if (!OO.DIFFICULTY[id]) return;
+      if (!OO.DIFFICULTY[id] || OO.DIFFICULTY[id].locked) return;
       this.settings.difficulty = id;
       U.storage.set('oo.settings', this.settings);
     }
@@ -157,7 +160,10 @@
       this.saveMeta();
     }
 
-    get difficulty() { return OO.DIFFICULTY[this.settings.difficulty] || OO.DIFFICULTY.standard; }
+    get difficulty() {
+      const d = OO.DIFFICULTY[this.settings.difficulty];
+      return d && !d.locked ? d : OO.DIFFICULTY.standard;
+    }
 
     // ------------------------------------------------------------ player build
     recalcStats() {

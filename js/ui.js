@@ -77,8 +77,10 @@
         b.className = 'threat-btn threat-' + id;
         b.id = 'diff-' + id;
         b.setAttribute('aria-pressed', String(this.g.settings.difficulty === id));
-        b.innerHTML = `<span class="threat-name">${esc(d.name)}</span><span class="threat-text">${esc(d.text)}</span>`;
+        b.innerHTML = `<span class="threat-name">${d.locked ? '<img class="threat-lock" src="' + OO.Icons.url('lock', 16, '#8f8a7d') + '" alt="Locked">' : ''}${esc(d.name)}</span><span class="threat-text">${esc(d.text)}</span>`;
+        if (d.locked) { b.disabled = true; b.title = d.name + ' is locked for now'; }
         b.addEventListener('click', () => {
+          if (d.locked) return;
           this.g.setDifficulty(id);
           for (const k in OO.DIFFICULTY) $('diff-' + k).setAttribute('aria-pressed', String(k === id));
           OO.Audio.init(); OO.Audio.play('select');
