@@ -1,12 +1,13 @@
 {
   "name": "outbreak-overkill",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Bio-horror horde survival browser game. Survive 15 minutes in the Cold Harbor quarantine zone.",
   "private": true,
   "scripts": {
     "start": "npx --yes http-server . -p 8080 -c-1 -o",
     "bundle": "node tools/bundle.mjs",
-    "sim": "node tools/balance-sim.mjs"
+    "sim": "node tools/balance-sim.mjs",
+    "peer": "npx --yes peer --port 9000 --host 127.0.0.1"
   },
   "devDependencies": {
     "playwright": "^1.56.0"
