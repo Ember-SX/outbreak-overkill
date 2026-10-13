@@ -15,6 +15,25 @@
     MAX_WEAPONS: 6,
     MAX_PASSIVES: 6,
     LIGHT_RADIUS: 330,            // flashlight radius in world units
+    // Enemy leveling ("strain level"). Every infected spawns at the current strain level, and its
+    // HP is multiplied by (1 + hpGrowth)^level on top of the threat level's HP multiplier.
+    // level = floor(minutes * perMinute + adapt). `adapt` is the dynamic part: it climbs while too
+    // many kills are one-hit kills (one-hit share above `target`) and slowly falls back when the
+    // infected start soaking hits again. It never goes below 0 or above `max`.
+    LEVELING: {
+      perMinute: 1,
+      hpGrowth: { normal: 0.14, elite: 0.12, boss: 0.10 },
+      adapt: {
+        target: 0.4,     // aim for at most ~40% of regular kills being one-hit kills
+        gain: 0.06,      // levels per second per unit of one-hit share above target
+        decay: 0.02,     // levels per second lost while one-hit share is well under target
+        max: 10,
+        smoothing: 0.03, // weight of each new kill in the rolling one-hit share
+        grace: 60,       // seconds before adaptation starts
+        minSamples: 20,
+      },
+      announceEvery: 5,  // banner at strain level 5, 10, 15...
+    },
     // Burster stampede: warning time, when the lane locks (seconds before launch), row spacing.
     STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44, homing: 0.12 },
     // Spitters hang back and are easy to ignore, so cap how many can be alive: 1 + 0.5/min, max 7.

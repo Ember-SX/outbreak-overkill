@@ -60,6 +60,7 @@
       this.pendingExplosions = [];
       this.enemyShots = []; this.hazards = []; this.stampedes = [];
       this.overflowGem = null; this.gemCount = 0;
+      this.strain = { level: 0, peak: 0, timeLevel: 0, adapt: 0, oneShot: 0, samples: 0, rising: 0 };
       this.shakeAmt = 0; this.flashWhite = 0; this.xpCombo = 0; this.xpComboT = 0; this.heartT = 0;
       this.player = {
         x: 0, y: 0, r: P.radius, hp: 1, level: 1, xp: 0, xpNext: OO.CONFIG.xpToNext(1),
@@ -96,6 +97,7 @@
       this.ui.setHud(false);
       this.ui.showResults({
         victory, time: this.time, level: this.player.level, kills: this.kills, credits: this.credits, payout, bank: this.meta.bank,
+        strain: this.strain.peak,
         difficulty: this.difficulty.name,
         weapons: this.player.weapons.map((w) => ({ id: w.id, name: w.def.name, level: w.level, dmg: Math.round(w.damageDealt), kills: w.kills })),
       });
@@ -390,6 +392,7 @@
       if (Input.consume('KeyL')) p.xp = p.xpNext;
       if (Input.consume('KeyT')) this.time += 60;
       if (Input.consume('KeyH')) p.hp = p.stats.maxHp;
+      if (Input.consume('KeyJ')) this.strain.adapt = Math.min(OO.CONFIG.LEVELING.adapt.max, this.strain.adapt + 1);
       if (Input.consume('KeyB')) this.director.runEvent({ kind: 'boss', enemy: 'stalker', count: 1, text: 'Debug: Stalker spawned' });
     }
 
@@ -414,6 +417,7 @@
       if (p.aimT <= 0) p.aimAngle = p.faceAngle;
       if (p.stats.regen) p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.regen * dt);
 
+      this.updateStrain(dt);
       this.director.update(dt);
       this.updateStampedes(dt);
       this.updateEnemies(dt);
@@ -441,13 +445,56 @@
       if (this.state === 'playing') this.checkLevel();
     }
 
+    // ------------------------------------------------------------ enemy leveling (strain)
+    /**
+     * Strain level = minutes survived + an adaptive bonus. The bonus rises while most kills are
+     * one-hit kills (your damage has outgrown the infected) and eases off once they need several
+     * hits again, so enemy HP keeps pace with your build instead of only with the clock.
+     */
+    updateStrain(dt) {
+      const S = this.strain, C = OO.CONFIG.LEVELING, A = C.adapt;
+      S.timeLevel = (this.time / 60) * C.perMinute;
+      S.rising = Math.max(0, S.rising - dt);
+      if (this.time > A.grace && S.samples >= A.minSamples) {
+        if (S.oneShot > A.target) {
+          S.adapt = Math.min(A.max, S.adapt + (S.oneShot - A.target) * A.gain * dt);
+          S.rising = 2;
+        } else if (S.oneShot < A.target - 0.1) {
+          S.adapt = Math.max(0, S.adapt - A.decay * dt);
+        }
+      }
+      const lvl = Math.floor(S.timeLevel + S.adapt);
+      if (lvl > S.peak) {
+        const crossed = Math.floor(lvl / C.announceEvery) > Math.floor(S.peak / C.announceEvery);
+        S.peak = lvl;
+        if (crossed) this.ui.banner('Strain level ' + lvl + ': the infected are hardening', 'warn');
+      }
+      S.level = lvl;
+    }
+
+    /** HP multiplier for an enemy of the given def at a given strain level (difficulty included). */
+    enemyHpMul(d, level) {
+      if (d.crate) return 1;
+      const g = OO.CONFIG.LEVELING.hpGrowth;
+      const growth = d.boss ? g.boss : d.elite ? g.elite : g.normal;
+      return Math.pow(1 + growth, level) * this.difficulty.hp;
+    }
+
+    /** Called for every regular kill: feeds the rolling one-hit-kill share. */
+    recordKill(e) {
+      const S = this.strain, k = OO.CONFIG.LEVELING.adapt.smoothing;
+      S.oneShot = S.oneShot * (1 - k) + (e.hits <= 1 ? 1 : 0) * k;
+      S.samples++;
+    }
+
     // ------------------------------------------------------------ enemies
     spawnEnemy(type, x, y) {
       const d = OO.ENEMIES[type], m = this.time / 60;
       const diff = this.difficulty;
-      const hpMul = d.crate ? 1 : (d.boss ? 1 + m * 0.12 : 1 + m * 0.15) * diff.hp;
+      const level = d.crate ? 0 : this.strain.level;
+      const hpMul = this.enemyHpMul(d, level);
       const e = {
-        id: ++this.nextId, type, def: d, x, y,
+        id: ++this.nextId, type, def: d, x, y, level, hits: 0,
         hp: d.hp * hpMul, maxHp: d.hp * hpMul,
         speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)),
         dmg: d.dmg * (1 + m * 0.05) * diff.dmg, r: d.r, mass: d.mass,
@@ -611,6 +658,7 @@
     damageEnemy(e, dmg, kbx, kby, weapon) {
       if (e.dead) return;
       dmg = Math.max(1, Math.round(dmg));
+      e.hits++;
       const dealt = Math.min(dmg, e.hp);
       e.hp -= dmg;
       e.flash = 0.1;
@@ -637,6 +685,7 @@
         return;
       }
       this.kills++;
+      if (!e.def.elite && !e.def.boss) this.recordKill(e);
       this.dropXp(e.x, e.y, e.def.xp);
       const bile = e.def.blood === 'bile';
       this.addDecal(e.x, e.y, e.r * U.rand(1.4, 2.1), bile ? 'bile' : 'red');

@@ -228,7 +228,7 @@
       $('screen-results').classList.toggle('won', r.victory);
       $('res-payout').innerHTML = `Banked <strong>+${r.payout.toLocaleString()}</strong> credits for the Armory (${r.bank.toLocaleString()} total) · ${esc(r.difficulty)}`;
       $('res-stats').innerHTML = [
-        ['Survived', U.formatTime(r.time)], ['Level', r.level], ['Kills', r.kills], ['Credits', r.credits],
+        ['Survived', U.formatTime(r.time)], ['Level', r.level], ['Kills', r.kills], ['Credits', r.credits], ['Strain', 'LV ' + r.strain],
       ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
       const rows = r.weapons.slice().sort((a, b) => b.dmg - a.dmg).map((w) => `
         <tr><td><img src="${OO.Icons.url(OO.WEAPONS[w.id].icon, 20, OO.WEAPONS[w.id].evolved ? '#ff6f4a' : '#e3a33b')}" alt=""> ${esc(w.name)}</td>

@@ -594,6 +594,9 @@
         const w = e.r * 2;
         ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w, 4);
         ctx.fillStyle = '#c62a22'; ctx.fillRect(e.x - w / 2, e.y - e.r - 12, w * Math.max(0, e.hp / e.maxHp), 4);
+        ctx.font = `700 9px ${FONT_MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillStyle = '#ff8a3a'; ctx.fillText('LV ' + e.level, e.x, e.y - e.r - 14);
+        ctx.textBaseline = 'alphabetic';
       }
     }
 
@@ -932,6 +935,14 @@
       ctx.fillStyle = '#8f8a7d';
       ctx.fillText('EVAC IN ' + U.formatTime(remaining) + (g.difficulty !== OO.DIFFICULTY.standard ? ' · ' + g.difficulty.name.toUpperCase() : ''), W / 2, top + 58);
 
+      // Strain level (enemy leveling). Colour climbs with the level; ADAPTING shows while the
+      // dynamic part is rising because too many kills are one-hit kills.
+      const S = g.strain, sl = S.level;
+      ctx.font = `700 11px ${FONT_MONO}`;
+      ctx.fillStyle = sl >= 12 ? '#ff5a4a' : sl >= 6 ? '#e3a33b' : '#ebe2cf';
+      const strainText = 'STRAIN LV ' + sl + (S.rising > 0 ? '  \u25B2 ADAPTING' : '');
+      ctx.fillText(strainText, W / 2, top + 72);
+
       // Off-screen markers: bosses, elites and supply cases you can't see yet
       this.drawOffscreenMarkers();
 
@@ -988,7 +999,7 @@
       if (bosses.length) {
         let hp = 0, max = 0;
         for (const b of bosses) { hp += Math.max(0, b.hp); max += b.maxHp; }
-        const bw = Math.min(440, W - 40), bx = (W - bw) / 2, by = top + (W < 560 ? 116 : 92);
+        const bw = Math.min(440, W - 40), bx = (W - bw) / 2, by = top + (W < 560 ? 122 : 106);
         ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
         ctx.font = `800 15px ${FONT_DISPLAY}`;
         ctx.fillStyle = '#ff5a4a';
@@ -1042,11 +1053,13 @@
         'enemies ' + g.enemies.length + '  projectiles ' + g.projectiles.length,
         'pickups ' + g.pickups.length + '  particles ' + g.particles.length,
         'wave ' + Math.floor(g.time / 60) + '  zoom ' + g.zoom.toFixed(2),
-        '[L] level  [T] +1 min  [H] heal  [B] boss',
+        'strain ' + g.strain.level + ' = time ' + g.strain.timeLevel.toFixed(1) + ' + adapt ' + g.strain.adapt.toFixed(2) +
+          '  one-hit ' + Math.round(g.strain.oneShot * 100) + '%  shambler hp ' + Math.round(OO.ENEMIES.shambler.hp * g.enemyHpMul(OO.ENEMIES.shambler, g.strain.level)),
+        '[L] level  [T] +1 min  [H] heal  [B] boss  [J] +1 strain',
       ];
       ctx.font = `500 11px ${FONT_MONO}`;
       ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(8, this.h - 18 * lines.length - 16, 300, 18 * lines.length + 8);
+      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(8, this.h - 18 * lines.length - 16, 560, 18 * lines.length + 8);
       ctx.fillStyle = '#9ee05a';
       lines.forEach((l, i) => ctx.fillText(l, 14, this.h - 18 * lines.length - 12 + i * 18));
       ctx.textBaseline = 'alphabetic';
