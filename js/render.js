@@ -657,10 +657,11 @@
       const t = this.g.time;
       for (const g of this.g.pickups) {
         if (g.dead || !this.inView(g.x, g.y, 20)) continue;
+        if (g.life < OO.CONFIG.PICKUPS.blink && Math.floor(g.life * 8) % 2 === 0) continue;   // about to despawn
         const bob = g.attract ? 0 : Math.sin(t * 3 + g.t) * 2;
         const x = g.x, y = g.y + bob;
         if (g.kind === 'xp') {
-          const tier = g.value >= 10 || g.overflow ? 2 : g.value >= 3 ? 1 : 0;
+          const tier = g.value >= 10 ? 2 : g.value >= 3 ? 1 : 0;
           const spr = this.gemSprite(tier);
           ctx.drawImage(spr, x - spr.half, y - spr.half, spr.half * 2, spr.half * 2);
           continue;

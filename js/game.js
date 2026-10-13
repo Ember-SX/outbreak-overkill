@@ -59,7 +59,7 @@
       this.effects = []; this.particles = []; this.decals = []; this.texts = []; this.lights = [];
       this.pendingExplosions = [];
       this.enemyShots = []; this.hazards = []; this.stampedes = [];
-      this.overflowGem = null; this.gemCount = 0; this._immuneT = -9;
+      this.gemCount = 0; this.otherCount = 0; this.nextPickupId = 0; this._immuneT = -9;
       this.strain = { level: 0, peak: 0, timeLevel: 0, adapt: 0, oneShot: 0, samples: 0, rising: 0 };
       this.shakeAmt = 0; this.flashWhite = 0; this.xpCombo = 0; this.xpComboT = 0; this.heartT = 0;
       this.player = {
@@ -986,30 +986,56 @@
     }
 
     // ------------------------------------------------------------ pickups
+    /**
+     * Drop an item on the ground. Enforces the caps in OO.CONFIG.PICKUPS by retiring the oldest
+     * item of the same class, so fresh drops always appear (v0.3 bug: once 320 gems were on the
+     * map, every new drop was folded into a single far-away 'overflow' gem and drops seemed to stop).
+     */
     addPickup(kind, x, y, extra) {
-      const g = Object.assign({ kind, x, y, value: 1, attract: false, v: -140, t: U.rand(0, 10), dead: false }, extra || {});
+      const C = OO.CONFIG.PICKUPS;
+      const life = C.life[kind] || 0;
+      const g = Object.assign({ kind, x, y, value: 1, attract: false, v: -140, t: U.rand(0, 10), dead: false,
+        life: life || Infinity, max: life || Infinity, id: ++this.nextPickupId }, extra || {});
+      if (kind === 'xp') {
+        if (this.gemCount >= C.maxGems) {
+          const old = this.oldestPickup((o) => o.kind === 'xp' && !o.attract);
+          if (old) { old.dead = true; g.value += old.value; this.gemCount--; }
+        }
+        this.gemCount++;
+      } else if (kind !== 'case') {
+        if (this.otherCount >= C.maxOther) {
+          const old = this.oldestPickup((o) => o.kind !== 'xp' && o.kind !== 'case' && !o.attract);
+          if (old) { old.dead = true; this.otherCount--; }
+        }
+        this.otherCount++;
+      }
       this.pickups.push(g);
       return g;
     }
 
+    /** Pickups stay in insertion order, so the first live match is the oldest. */
+    oldestPickup(test) {
+      for (const o of this.pickups) if (!o.dead && test(o)) return o;
+      return null;
+    }
+
     dropXp(x, y, v) {
       if (v <= 0) return;
-      if (this.gemCount >= OO.CONFIG.MAX_GEMS) {
-        if (!this.overflowGem || this.overflowGem.dead) this.overflowGem = this.addPickup('xp', x, y, { value: 0, overflow: true });
-        this.overflowGem.value += v;
-        return;
-      }
-      this.gemCount++;
       this.addPickup('xp', x, y, { value: v });
     }
 
     updatePickups(dt) {
       const p = this.player, mag = p.stats.magnet;
-      let gems = 0;
+      let gems = 0, other = 0;
       for (const g of this.pickups) {
         if (g.dead) continue;
-        if (g.kind === 'xp') gems++;
         g.t += dt;
+        // Despawn timer (items already flying to you are never taken away).
+        if (!g.attract) {
+          g.life -= dt;
+          if (g.life <= 0) { g.dead = true; continue; }
+        }
+        if (g.kind === 'xp') gems++; else if (g.kind !== 'case') other++;
         const dx = p.x - g.x, dy = p.y - g.y, d = Math.hypot(dx, dy) || 1;
         if (!g.attract && g.kind !== 'case' && d < mag) g.attract = true;
         if (g.attract) {
@@ -1020,7 +1046,7 @@
         if (g.kind === 'case' && this.state !== 'playing') continue;   // one case screen at a time
         if (U.dist2(p.x, p.y, g.x, g.y) < (p.r + 10) ** 2) this.collect(g);
       }
-      this.gemCount = gems;
+      this.gemCount = gems; this.otherCount = other;
       compact(this.pickups);
     }
 

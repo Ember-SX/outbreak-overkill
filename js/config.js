@@ -11,7 +11,16 @@
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory)
     MAX_ENEMIES: 500,
-    MAX_GEMS: 320,                // past this, new XP merges into one overflow gem
+    // Ground items. Every pickup has a lifetime (seconds; 0 = never despawns) and blinks for the
+    // last `blink` seconds. Past maxGems, the oldest DNA sample on the ground is recycled and its
+    // XP rides along with the new drop, so no XP is lost to the cap. Past maxOther, the oldest
+    // non-gem pickup (herb, credits, scanner, flare) is removed. Supply cases never despawn.
+    PICKUPS: {
+      maxGems: 320,
+      maxOther: 60,
+      life: { xp: 60, herb: 45, credit: 45, magnet: 45, bomb: 45, case: 0 },
+      blink: 5,
+    },
     MAX_WEAPONS: 6,
     MAX_PASSIVES: 6,
     LIGHT_RADIUS: 330,            // flashlight radius in world units
