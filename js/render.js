@@ -947,7 +947,9 @@
       const S = g.strain, sl = S.level;
       ctx.font = `700 11px ${FONT_MONO}`;
       ctx.fillStyle = sl >= 12 ? '#ff5a4a' : sl >= 6 ? '#e3a33b' : '#ebe2cf';
-      const strainText = 'STRAIN LV ' + sl + (S.rising > 0 ? '  \u25B2 ADAPTING' : '');
+      const surge = g.surgeMinutes() > 0 ? '  \u00B7  SURGE HP x' + g.surgeHp().toFixed(1) + ' DMG x' + g.surgeDmg().toFixed(1) : '';
+      if (surge) ctx.fillStyle = '#ff5a4a';
+      const strainText = 'STRAIN LV ' + sl + (S.rising > 0 ? '  \u25B2 ADAPTING' : '') + surge;
       ctx.fillText(strainText, W / 2, top + 72);
 
       // Off-screen markers: bosses, elites and supply cases you can't see yet

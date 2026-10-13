@@ -34,6 +34,12 @@
       },
       announceEvery: 5,  // banner at strain level 5, 10, 15...
     },
+    // Late-game surge. From `start` minutes on, enemy HP and damage compound every minute on top of
+    // the strain level, so late builds stop deleting the horde before it reaches you.
+    // HP x(1 + hpPerMin)^(minutes past start), damage x(1 + dmgPerMin)^(minutes past start).
+    // The Stalker gets hpPerMin * bossHpScale. Burster blasts skip the damage surge (they're
+    // already lethal and can't be fought).
+    SURGE: { start: 6, hpPerMin: 0.20, dmgPerMin: 0.12, bossHpScale: 0.5 },
     // Burster stampede: warning time, when the lane locks (seconds before launch), row spacing.
     STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44, homing: 0.12 },
     // Spitters hang back and are easy to ignore, so cap how many can be alive: 1 + 0.5/min, max 7.
@@ -285,6 +291,7 @@
     { t: 300, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'Warning: The Stalker is hunting you' },
     { t: 285, kind: 'stampede', count: 9,  text: 'Bursters again. Find cover' },
     { t: 330, kind: 'elite', enemy: 'brute',    count: 1 },
+    { t: 358, kind: 'banner', text: 'The strain is surging. They get stronger every minute now' },
     { t: 360, kind: 'pack',  enemy: 'spitter',  count: 5, text: 'A nest of Spitters' },
     { t: 390, kind: 'pack',  enemy: 'hound',    count: 40 },
     { t: 405, kind: 'stampede', count: 11 },

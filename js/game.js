@@ -477,8 +477,16 @@
       if (d.crate) return 1;
       const g = OO.CONFIG.LEVELING.hpGrowth;
       const growth = d.boss ? g.boss : d.elite ? g.elite : g.normal;
-      return Math.pow(1 + growth, level) * this.difficulty.hp;
+      return Math.pow(1 + growth, level) * this.difficulty.hp * this.surgeHp(d);
     }
+
+    // ------------------------------------------------------------ late-game surge (after 6:00)
+    surgeMinutes() { return Math.max(0, this.time / 60 - OO.CONFIG.SURGE.start); }
+    surgeHp(d) {
+      const S = OO.CONFIG.SURGE;
+      return Math.pow(1 + (d && d.boss ? S.hpPerMin * S.bossHpScale : S.hpPerMin), this.surgeMinutes());
+    }
+    surgeDmg() { return Math.pow(1 + OO.CONFIG.SURGE.dmgPerMin, this.surgeMinutes()); }
 
     /** Called for every regular kill: feeds the rolling one-hit-kill share. */
     recordKill(e) {
@@ -489,15 +497,14 @@
 
     // ------------------------------------------------------------ enemies
     spawnEnemy(type, x, y) {
-      const d = OO.ENEMIES[type], m = this.time / 60;
-      const diff = this.difficulty;
+      const d = OO.ENEMIES[type];
       const level = d.crate ? 0 : this.strain.level;
       const hpMul = this.enemyHpMul(d, level);
       const e = {
         id: ++this.nextId, type, def: d, x, y, level, hits: 0,
         hp: d.hp * hpMul, maxHp: d.hp * hpMul,
         speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)),
-        dmg: d.dmg * (1 + m * 0.05) * diff.dmg, r: d.r, mass: d.mass,
+        dmg: d.dmg * this.enemyDmgScale(), r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
       if (!d.crate && !d.burster && this.world) this.world.resolveCircle(e, e.r);
@@ -838,11 +845,13 @@
     detonate(e) {
       e.dead = true;
       const b = e.def.burster;
-      this.pendingExplosions.push({ x: e.x, y: e.y, r: b.r, dmg: b.dmg * this.enemyDmgScale(), enemyDmg: b.enemyDmg, kind: 'blood' });
+      this.pendingExplosions.push({ x: e.x, y: e.y, r: b.r, dmg: b.dmg * this.enemyDmgScale(false), enemyDmg: b.enemyDmg, kind: 'blood' });
     }
 
     /** Damage multiplier for enemy attacks at the current time. */
-    enemyDmgScale() { return (1 + (this.time / 60) * 0.05) * this.difficulty.dmg; }
+    enemyDmgScale(withSurge = true) {
+      return (1 + (this.time / 60) * 0.05) * this.difficulty.dmg * (withSurge ? this.surgeDmg() : 1);
+    }
 
     spit(e) {
       const p = this.player, R = e.def.ranged;
