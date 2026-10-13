@@ -528,7 +528,14 @@
           ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(0, 0, r * 1.3, r * 0.8, 0, 0, TAU); ctx.fill();
           ctx.fillStyle = fl ? '#fff' : '#ff6b5a';
           circle(ctx, -r * 0.35, -r * 0.25, r * 0.38); circle(ctx, -r * 0.2, r * 0.3, r * 0.32); circle(ctx, -r * 0.75, 0, r * 0.3);
+          // bone carapace: overlapping plates down the back (why nothing gets through)
+          ctx.fillStyle = '#d9d0bd'; ctx.strokeStyle = '#6b6252'; ctx.lineWidth = 1;
+          for (let i = 0; i < 4; i++) {
+            const px = r * 0.55 - i * r * 0.5;
+            ctx.beginPath(); ctx.ellipse(px, 0, r * 0.32, r * 0.62 - i * r * 0.06, 0, -Math.PI / 2, Math.PI / 2); ctx.fill(); ctx.stroke();
+          }
           ctx.fillStyle = skin; circle(ctx, r * 0.9, 0, r * 0.45);
+          ctx.fillStyle = '#d9d0bd'; ctx.beginPath(); ctx.ellipse(r * 0.95, 0, r * 0.32, r * 0.42, 0, -Math.PI / 2, Math.PI / 2); ctx.fill();
           break;
         }
         case 'spitter': {
@@ -842,7 +849,7 @@
       ctx.font = `700 12px ${FONT_MONO}`;
       for (const t of this.g.texts) {
         ctx.globalAlpha = Math.min(1, t.life / t.max * 1.6);
-        const col = t.kind === 'hurt' ? '#ff5a4a' : t.kind === 'heal' ? '#7ddc6a' : t.kind === 'credit' ? '#e3a33b' : '#ebe2cf';
+        const col = t.kind === 'hurt' ? '#ff5a4a' : t.kind === 'heal' ? '#7ddc6a' : t.kind === 'credit' ? '#e3a33b' : t.kind === 'immune' ? '#9fd4ff' : '#ebe2cf';
         ctx.fillStyle = 'rgba(0,0,0,0.8)';
         ctx.fillText(t.val, t.x + 1, t.y + 1);
         ctx.fillStyle = col;

@@ -59,7 +59,7 @@
       this.effects = []; this.particles = []; this.decals = []; this.texts = []; this.lights = [];
       this.pendingExplosions = [];
       this.enemyShots = []; this.hazards = []; this.stampedes = [];
-      this.overflowGem = null; this.gemCount = 0;
+      this.overflowGem = null; this.gemCount = 0; this._immuneT = -9;
       this.strain = { level: 0, peak: 0, timeLevel: 0, adapt: 0, oneShot: 0, samples: 0, rising: 0 };
       this.shakeAmt = 0; this.flashWhite = 0; this.xpCombo = 0; this.xpComboT = 0; this.heartT = 0;
       this.player = {
@@ -613,10 +613,13 @@
       for (const e of this.enemies) if (!e.dead && !e.def.crate && !e.def.burster) this.world.resolveCircle(e, e.r);
     }
 
+    /** Auto-aim never wastes shots on crates or on infected that can't be hurt. */
+    targetable(e) { return !e.dead && !e.def.crate && !e.def.invulnerable; }
+
     nearestEnemy(x, y, maxD, exclude) {
       let best = null, bd = maxD * maxD;
       for (const e of this.enemies) {
-        if (e.dead || e.def.crate) continue;
+        if (!this.targetable(e)) continue;
         if (exclude && exclude.has(e.id)) continue;
         const d = U.dist2(x, y, e.x, e.y);
         if (d < bd) { bd = d; best = e; }
@@ -630,7 +633,7 @@
       if (!first || !this.world.blocked(x, y, first.x, first.y)) return first;
       const md = maxD * maxD, cands = [];
       for (const e of this.enemies) {
-        if (e.dead || e.def.crate) continue;
+        if (!this.targetable(e)) continue;
         const d = U.dist2(x, y, e.x, e.y);
         if (d < md) cands.push([d, e]);
       }
@@ -646,7 +649,7 @@
       let pick = null, n = 0;
       const md = maxD * maxD;
       for (const e of this.enemies) {
-        if (e.dead || e.def.crate) continue;
+        if (!this.targetable(e)) continue;
         if (exclude && exclude.has(e.id)) continue;
         if (U.dist2(x, y, e.x, e.y) > md) continue;
         n++;
@@ -656,7 +659,7 @@
     }
 
     damageEnemy(e, dmg, kbx, kby, weapon) {
-      if (e.dead) return;
+      if (e.dead || e.def.invulnerable) return;   // Bursters: nothing hurts them
       dmg = Math.max(1, Math.round(dmg));
       e.hits++;
       const dealt = Math.min(dmg, e.hp);
@@ -691,7 +694,6 @@
       this.addDecal(e.x, e.y, e.r * U.rand(1.4, 2.1), bile ? 'bile' : 'red');
       this.burst(e.x, e.y, bile ? '#a8b83a' : '#8f1712', e.def.boss ? 50 : 7, e.def.boss ? 280 : 140);
       if (e.def.explode) this.pendingExplosions.push({ x: e.x, y: e.y, r: e.def.explode.r, dmg: e.def.explode.dmg * this.enemyDmgScale(), enemyDmg: e.def.explode.enemyDmg, kind: 'bile' });
-      if (e.def.burster) this.detonate(e);
       if (e.def.elite) this.addPickup('case', e.x, e.y, { big: false });
       if (e.def.boss) {
         this.addPickup('case', e.x, e.y, { big: true });
@@ -919,6 +921,14 @@
         for (const e of buf) {
           if (e.dead || pr.hit.has(e.id)) continue;
           if (U.dist2(pr.x, pr.y, e.x, e.y) > (pr.r + e.r) ** 2) continue;
+          if (e.def.invulnerable) {
+            // glances off the carapace
+            pr.dead = true;
+            this.burst(pr.x, pr.y, '#e8e2d4', 4, 140);
+            if (this.time - this._immuneT > 0.5) { this._immuneT = this.time; this.addText(e.x, e.y - e.r - 4, 'IMMUNE', 'immune'); }
+            OO.Audio.play('ricochet');
+            break;
+          }
           pr.hit.add(e.id);
           const sp = Math.hypot(pr.vx, pr.vy) || 1;
           this.damageEnemy(e, pr.dmg, (pr.vx / sp) * pr.kb, (pr.vy / sp) * pr.kb, pr.weapon);

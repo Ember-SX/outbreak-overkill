@@ -58,8 +58,10 @@
                 // Keeps its distance, swells up, then lobs acid where you're heading. The pool lingers.
                 ranged: { min: 150, max: 240, cd: [3.0, 4.2], windup: 0.6, flight: 0.85, splash: 34, impact: 10,
                           pool: { r: 40, life: 3.6, tick: 0.35, dmg: 5 } } },
-    burster:  { name: 'Burster',     hp: 6,    speed: 430, dmg: 0, r: 10, xp: 1,   mass: 0.5, body: '#6a1830', skin: '#c94f6c', eye: '#ffe6e6', blood: 'red',
+    burster:  { name: 'Burster',     hp: 6,    speed: 430, dmg: 0, r: 10, xp: 0,   mass: 0.5, body: '#6a1830', skin: '#c94f6c', eye: '#ffe6e6', blood: 'red',
                 // Only arrive in stampedes (see OO.EVENTS kind 'stampede'). Explode on contact with you or cover.
+                // Invulnerable: nothing damages them, auto-aim ignores them, bullets glance off. Cover is the answer.
+                invulnerable: true,
                 burster: { r: 64, dmg: 42, enemyDmg: 90 } },
     brute:    { name: 'Brute',       hp: 450,  speed: 42, dmg: 18, r: 26, xp: 25,  mass: 10,  body: '#3c3e46', skin: '#6c707c', eye: '#ff3a30', blood: 'red', elite: true },
     stalker:  { name: 'The Stalker', hp: 4800, speed: 58, dmg: 30, r: 32, xp: 120, mass: 40,  body: '#1b1620', skin: '#3b2d45', eye: '#ff2444', blood: 'red', boss: true },
@@ -277,7 +279,7 @@
     { t: 90,  kind: 'pack',  enemy: 'hound',    count: 20 },
     { t: 150, kind: 'elite', enemy: 'brute',    count: 1, text: 'Brute sighted' },
     { t: 135, kind: 'banner', text: 'Spitters: keep moving, the acid lingers' },
-    { t: 165, kind: 'stampede', count: 7,  text: 'Stampede! Get behind cover' },
+    { t: 165, kind: 'stampede', count: 7,  text: "Stampede! Bursters can't be stopped. Get behind cover" },
     { t: 210, kind: 'ring',  enemy: 'shambler', count: 40, text: 'They have you surrounded' },
     { t: 240, kind: 'elite', enemy: 'brute',    count: 1 },
     { t: 300, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'Warning: The Stalker is hunting you' },
