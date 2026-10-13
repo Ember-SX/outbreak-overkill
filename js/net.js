@@ -14,7 +14,7 @@
 
   const ERRORS = {
     'browser-incompatible': "This browser can't make peer-to-peer connections. Try a current Chrome, Edge, Firefox or Safari.",
-    network: "Couldn't reach the matchmaking server. Check your internet connection and try again.",
+    network: "Couldn't reach the matchmaking server. Check your internet connection and try again. (Embedded previews can't go online; open the full game, e.g. from GitHub Pages.)",
     'server-error': "The matchmaking server didn't respond. Try again in a moment.",
     'socket-error': "Lost contact with the matchmaking server. Try again in a moment.",
     'socket-closed': "Lost contact with the matchmaking server. Try again in a moment.",
