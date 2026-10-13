@@ -1,6 +1,6 @@
 {
   "name": "outbreak-overkill",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Bio-horror horde survival browser game. Survive 15 minutes in the Cold Harbor quarantine zone.",
   "private": true,
   "scripts": {

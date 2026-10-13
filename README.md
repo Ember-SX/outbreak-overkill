@@ -4,7 +4,7 @@ A bio-horror horde survival game for the browser. You play one operative inside 
 
 The core loop follows the Vampire Survivors formula: move only, auto-firing weapons, XP gems (DNA samples here), a pick-one-of-three upgrade screen, weapon and passive slots, elites that drop supply cases, and a wave script that escalates until you're overrun or extracted.
 
-**Status:** v0.2.0. Playable start to finish, with cover, ranged infected, stampedes, weapon evolutions and an Armory between runs.
+**Status:** v0.3.0. Playable start to finish, with cover, ranged infected, invincible stampedes, enemy leveling, weapon evolutions and an Armory between runs.
 
 ## Play it
 
@@ -25,7 +25,7 @@ No install, no build step.
 | Mute | M | Sound button |
 | Debug overlay | ` (backtick) | — |
 
-With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heals, **B** spawns The Stalker.
+With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heals, **B** spawns The Stalker, **J** adds a strain level. The overlay also shows the strain breakdown, the current one-hit-kill share and a shambler's HP at the current level, which is the quickest way to judge the enemy scaling while you play.
 
 ## What's in the game
 
@@ -52,15 +52,22 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 | Sawblade Drones | Speed Loader | Buzzsaw Halo (never stops) |
 | Tesla Coil | Scavenger Pack | Arc Storm |
 
-**Infected:** Shambler, Rot Hound, Skinner, Bloater (explodes in bile, hurts you and other infected), Spitter (keeps its distance, swells up, then lobs acid at where you're heading; the pool lingers), Burster (only arrives in stampedes, explodes on impact), Brute (elite, drops a supply case), The Stalker (boss at 5:00, 10:00 and 14:00, telegraphs and charges).
+**Infected:** Shambler, Rot Hound, Skinner, Bloater (explodes in bile, hurts you and other infected), Spitter (keeps its distance, swells up, then lobs acid at where you're heading; the pool lingers), Burster (only arrives in stampedes, can't be damaged by anything, explodes on impact), Brute (elite, drops a supply case), The Stalker (boss at 5:00, 10:00 and 14:00, telegraphs and charges).
 
-**Stampedes:** a rumble, rising screen shake and distant shrieks give 3 seconds of warning. A red lane shows where the row of Bursters will run, with a STAMPEDE arrow on the screen edge they come from. The lane follows you until it locks 0.8s before launch. Get behind a car, barrier or pillar: obstacles stop Bursters and block every blast, including Bloater bile. The two-slot gap in the row is also safe.
+**Stampedes:** a rumble, rising screen shake and distant shrieks give 3 seconds of warning. A red lane shows where the row of Bursters will run, with a STAMPEDE arrow on the screen edge they come from. The lane follows you until it locks 0.8s before launch. Bursters are invincible: auto-aim ignores them and bullets glance off their carapace, so you can't thin the row out. Get behind a car, barrier or pillar: obstacles stop Bursters and block every blast, including Bloater bile. The two-slot gap in the row is also safe.
 
 **Cover:** the map is littered with wrecked cars, a burnt-out bus, jersey barriers, dumpsters, pillars and hazmat barrels, generated in chunks from a seed so it stays consistent while you roam. You and the infected collide with them, and the infected steer around them. Your bullets and pellets stop on cover, and guns only aim at targets they can actually hit.
 
 **Armory:** every run banks the credits you picked up plus a payout for kills, time survived and evacuating. Spend them on the main menu on permanent upgrades (HP, damage, armor, speed, pickup range, XP gain, rerolls, payouts, and Second Wind: get back up once per run). Refund any time.
 
-**Threat levels:** Standard, or Nightmare (35% tougher, 25% harder-hitting, 25% bigger waves, credits x1.6).
+**Strain level (enemy leveling):** every infected spawns at the current strain level, and each level multiplies its HP by 1.14 (1.12 for elites, 1.10 for The Stalker). The level is minutes survived plus an adaptive bonus: once more than 40% of your kills are one-hit kills, the bonus climbs (up to +10 levels) until the infected start soaking hits again, then eases back. The HUD shows STRAIN LV under the evac timer, with ADAPTING while the bonus is rising. Tuning lives in `OO.CONFIG.LEVELING`.
+
+| Time (no adaptive bonus) | 0:00 | 5:00 | 10:00 | 15:00 |
+| --- | --- | --- | --- | --- |
+| Shambler HP, v0.3 Standard | 16 | 31 | 60 | 116 |
+| Shambler HP, v0.2 Standard | 12 | 21 | 30 | 39 |
+
+**Threat levels:** Standard uses what v0.2 called Nightmare (35% tougher, 25% harder-hitting, 25% bigger waves). Nightmare is locked until it gets its own tuning in a future update.
 
 **Pickups:** DNA samples (XP), Green Herb (heal), Scanner (pulls every sample on the map), Airstrike Flare (clears the screen), credits, supply cases. Supply crates spawn around the map; shoot them open.
 
@@ -110,17 +117,21 @@ Most changes are data edits in `js/config.js`.
 ```bash
 npm install                       # installs Playwright (dev only)
 npx playwright install chromium   # one-time browser download
-npm run sim                       # Standard, 2 runs per operative per bot
-npm run sim -- nightmare 3        # threat level, runs per combination
+npm run sim                       # 2 runs per operative per bot
+npm run sim -- standard 3         # threat level, runs per combination
 ```
 
-The bots are much worse than a person, so read the numbers as relative: compare before and after a change. At v0.2.0 they average about 5-6 minutes on Standard with the odd evacuation, and about 3.5 minutes on Nightmare.
+The bots play nothing like a person, so treat this as a smoke test (does a run still play through without errors, did a change move things wildly) and do the real balance judgement by playing. v0.3's enemy leveling was tuned by hand play, not by the bots.
 
 ## Roadmap
 
 Each item is a good-sized feature branch.
 
-Done in v0.2: weapon evolutions, the Armory, cover, Spitters, Burster stampedes, rerolls and skips, Nightmare, the balance sim.
+Done in v0.2: weapon evolutions, the Armory, cover, Spitters, Burster stampedes, rerolls and skips, the balance sim.
+
+Done in v0.3: enemy leveling (strain), harder Standard baseline, invincible Bursters.
+
+Next up: give **Nightmare** its own tuning (faster strain growth, more stampedes) and unlock it.
 
 1. **Real art.** Swap procedural shapes for sprite sheets; `Renderer.enemySprite()` and `obstacleSprite()` are the places to change.
 2. **Audio pass.** Recorded SFX and a music loop; `Audio.play()` cases map one-to-one to samples.
