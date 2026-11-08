@@ -205,6 +205,46 @@
         noise({ dur: 1.2, vol: 0.6, freq: 1500, f2: 50 });
         tone({ type: 'sine', f: 70, f2: 25, dur: 1.0, vol: 0.4 });
         break;
+      // ---- Hare Trigger (final boss mech)
+      case 'stomp':
+        if (!throttle(name, 160)) return;
+        noise({ dur: 0.22, vol: 0.28, freq: 380, f2: 60 });
+        tone({ type: 'sine', f: 62, f2: 34, dur: 0.22, vol: 0.32 });
+        break;
+      case 'servo':
+        if (!throttle(name, 300)) return;
+        tone({ type: 'square', f: 180, f2: 420, dur: 0.35, vol: 0.05 });
+        tone({ type: 'square', f: 184, f2: 430, dur: 0.35, vol: 0.04, delay: 0.02 });
+        break;
+      case 'thrust':
+        noise({ dur: 0.9, vol: 0.35, freq: 1800, f2: 300, type: 'bandpass', q: 0.7 });
+        tone({ type: 'sawtooth', f: 90, f2: 220, dur: 0.6, vol: 0.08 });
+        break;
+      case 'slam':
+        noise({ dur: 0.8, vol: 0.6, freq: 700, f2: 40 });
+        tone({ type: 'sine', f: 70, f2: 22, dur: 0.7, vol: 0.5 });
+        break;
+      case 'missile':
+        if (!throttle(name, 60)) return;
+        noise({ dur: 0.25, vol: 0.16, freq: 2400, f2: 900, type: 'bandpass', q: 1.2 });
+        tone({ type: 'triangle', f: 660, f2: 990, dur: 0.12, vol: 0.05 });
+        break;
+      case 'lockon':
+        if (!throttle(name, 400)) return;
+        [1320, 1320, 1760].forEach((f, i) => tone({ type: 'square', f, dur: 0.06, vol: 0.05, delay: i * 0.09 }));
+        break;
+      case 'charge':
+        tone({ type: 'sawtooth', f: 200, f2: 1400, dur: 1.0, vol: 0.07 });
+        tone({ type: 'sine', f: 400, f2: 2200, dur: 1.0, vol: 0.05 });
+        break;
+      case 'laser':
+        if (!throttle(name, 120)) return;
+        tone({ type: 'sawtooth', f: 880, f2: 820, dur: 0.14, vol: 0.06 });
+        noise({ dur: 0.12, vol: 0.06, freq: 3000, type: 'highpass' });
+        break;
+      case 'squeak':      // the pilot is not pleased
+        [1400, 1900, 1600].forEach((f, i) => tone({ type: 'sine', f, f2: f * 1.25, dur: 0.07, vol: 0.07, delay: i * 0.07 }));
+        break;
       case 'gameover':
         [392, 330, 262, 196].forEach((f, i) => tone({ type: 'triangle', f, dur: 0.4, vol: 0.12, delay: i * 0.22 }));
         break;

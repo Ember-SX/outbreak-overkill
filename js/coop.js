@@ -320,6 +320,8 @@
       s: this.enemyShots.map((o) => [Math.round(o.x0), Math.round(o.y0), Math.round(o.x1), Math.round(o.y1), r1(o.t), r1(o.dur), o.r]),
       h: this.hazards.filter((o) => near(o.x, o.y)).map((o) => [Math.round(o.x), Math.round(o.y), o.r, r1(o.life), r1(o.max), r1(o.seed)]),
       st: this.stampedes.map((o) => [o.a, Math.round(o.ax), Math.round(o.ay), r1(o.t), o.warn, o.locked ? 1 : 0, o.count, o.ranks, o.gap]),
+      bo: this.enemies.filter((e) => !e.dead && e.def.mech).map((e) => this.mechaState(e)),
+      mi: this.missiles.map((o) => [Math.round(o.x0), Math.round(o.y0), Math.round(o.x1), Math.round(o.y1), Math.round(o.t * 100) / 100, o.dur, o.r]),
       ev,
     });
   };
@@ -407,6 +409,8 @@
     if (this.state === 'playing') {
       for (const o of this.lobs) o.t += dt;
       for (const o of this.enemyShots) o.t += dt;
+      for (const o of this.missiles) o.t += dt;
+      for (const e of this.enemies) if (e.def.mech && e.ai.mode === 'air' && e.ai.airDur) e.ai.k = Math.min(1, (e.ai.k || 0) + dt / e.ai.airDur);
       for (const o of this.zones) o.life -= dt;
       for (const o of this.hazards) o.life -= dt;
       for (const st of this.stampedes) {
@@ -493,6 +497,8 @@
     this.lobs = m.l.map(([x0, y0, x1, y1, t, dur]) => ({ x0, y0, x1, y1, t, dur }));
     this.enemyShots = m.s.map(([x0, y0, x1, y1, t, dur, r]) => ({ x0, y0, x1, y1, t, dur, r }));
     this.hazards = m.h.map(([x, y, r, life, max, seed]) => ({ x, y, r, life, max, seed }));
+    if (m.bo) for (const st of m.bo) { const e = mir.enemies.get(st[0]); if (e) this.applyMechaState(e, st); }
+    this.missiles = (m.mi || []).map(([x0, y0, x1, y1, t, dur, r]) => ({ x0, y0, x1, y1, t, dur, r }));
     this.stampedes = m.st.map(([a, sx, sy, t, warn, locked, count, ranks, gap]) => ({ a, ax: sx, ay: sy, t, warn, locked: !!locked, count, ranks, gap }));
 
     for (const ev of m.ev) this.applyEvent(ev);

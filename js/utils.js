@@ -11,6 +11,12 @@
   U.pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   U.chance = (p) => Math.random() < p;
   U.dist2 = (ax, ay, bx, by) => { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; };
+  /** Distance from point (px, py) to the segment (ax, ay)-(bx, by). */
+  U.distToSegment = (px, py, ax, ay, bx, by) => {
+    const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy;
+    const t = l2 ? U.clamp(((px - ax) * vx + (py - ay) * vy) / l2, 0, 1) : 0;
+    return Math.hypot(px - (ax + vx * t), py - (ay + vy * t));
+  };
 
   /** items: [[value, weight], ...] */
   U.weightedPick = (items) => {

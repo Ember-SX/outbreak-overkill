@@ -84,7 +84,7 @@
       this.enemies = []; this.projectiles = []; this.pickups = []; this.zones = []; this.lobs = [];
       this.effects = []; this.particles = []; this.decals = []; this.texts = []; this.lights = [];
       this.pendingExplosions = [];
-      this.enemyShots = []; this.hazards = []; this.stampedes = [];
+      this.enemyShots = []; this.hazards = []; this.stampedes = []; this.missiles = [];
       this.netEvents = [];
       this.gemCount = 0; this.otherCount = 0; this.nextPickupId = 0; this.nextProjId = 0; this._immuneT = -9;
       this.team = { level: 1, xp: 0, xpNext: OO.CONFIG.xpToNext(1), pending: 0 };
@@ -531,6 +531,7 @@
       if (Input.consume('KeyH')) p.hp = p.stats.maxHp;
       if (Input.consume('KeyJ')) this.strain.adapt = Math.min(OO.CONFIG.LEVELING.adapt.max, this.strain.adapt + 1);
       if (Input.consume('KeyB')) this.director.runEvent({ kind: 'boss', enemy: 'stalker', count: 1, text: 'Debug: Stalker spawned' });
+      if (Input.consume('KeyN')) this.director.runEvent({ kind: 'boss', enemy: 'mecha', count: 1, text: 'Debug: Hare Trigger spawned' });
     }
 
     update(dt) {
@@ -554,6 +555,7 @@
       this.updateProjectiles(dt);
       this.updateLobs(dt);
       this.updateEnemyShots(dt);
+      this.updateMissiles(dt);
       this.updateHazards(dt);
       this.updateZones(dt);
       this.processExplosions();
@@ -681,6 +683,7 @@
         e.flash -= dt; e.t += dt;
         if (e.def.crate) continue;
         if (e.def.burster) { this.updateBurster(e, dt); continue; }
+        if (e.def.mech) { this.updateMecha(e, dt, alive); continue; }   // final boss: boss.js
         const p = this.nearestPlayer(e.x, e.y);     // everyone hunts whoever is closest
         const dx = p.x - e.x, dy = p.y - e.y;
         const d = Math.hypot(dx, dy) || 1;
@@ -763,10 +766,10 @@
     separate() {
       const buf = this._sepBuf;
       for (const e of this.enemies) {
-        if (e.dead || e.def.crate || e.def.burster) continue;
+        if (e.dead || e.def.crate || e.def.burster || e.airborne) continue;
         this.grid.query(e.x, e.y, e.r + 32, buf);
         for (const o of buf) {
-          if (o === e || o.dead || o.def.burster) continue;   // bursters plough straight through
+          if (o === e || o.dead || o.def.burster || o.airborne) continue;   // bursters plough straight through
           if (!o.def.crate && o.id < e.id) continue;   // each enemy pair handled once
           let dx = e.x - o.x, dy = e.y - o.y;
           const min = e.r + o.r;
@@ -781,11 +784,11 @@
           o.x -= nx * push * (e.mass / tm); o.y -= ny * push * (e.mass / tm);
         }
       }
-      for (const e of this.enemies) if (!e.dead && !e.def.crate && !e.def.burster) this.world.resolveCircle(e, e.r);
+      for (const e of this.enemies) if (!e.dead && !e.def.crate && !e.def.burster && !e.airborne) this.world.resolveCircle(e, e.r);
     }
 
     /** Auto-aim never wastes shots on crates or on infected that can't be hurt. */
-    targetable(e) { return !e.dead && !e.def.crate && !e.def.invulnerable; }
+    targetable(e) { return !e.dead && !e.def.crate && !e.def.invulnerable && !e.airborne; }
 
     nearestEnemy(x, y, maxD, exclude) {
       let best = null, bd = maxD * maxD;
@@ -830,7 +833,7 @@
     }
 
     damageEnemy(e, dmg, kbx, kby, weapon) {
-      if (e.dead || e.def.invulnerable) return;   // Bursters: nothing hurts them
+      if (e.dead || e.def.invulnerable || e.airborne) return;   // Bursters: nothing hurts them. A mech mid-jump is out of reach
       dmg = Math.max(1, Math.round(dmg));
       e.hits++;
       const dealt = Math.min(dmg, e.hp);
@@ -861,12 +864,13 @@
       this.kills++;
       if (!e.def.elite && !e.def.boss) this.recordKill(e);
       this.dropXp(e.x, e.y, e.def.xp);
-      const bile = e.def.blood === 'bile';
-      this.addDecal(e.x, e.y, e.r * U.rand(1.4, 2.1), bile ? 'bile' : 'red');
-      this.burst(e.x, e.y, bile ? '#a8b83a' : '#8f1712', e.def.boss ? 50 : 7, e.def.boss ? 280 : 140);
+      const bile = e.def.blood === 'bile', oil = e.def.blood === 'oil';
+      this.addDecal(e.x, e.y, e.r * U.rand(1.4, 2.1), bile ? 'bile' : oil ? 'scorch' : 'red');
+      this.burst(e.x, e.y, bile ? '#a8b83a' : oil ? '#2b2620' : '#8f1712', e.def.boss ? 50 : 7, e.def.boss ? 280 : 140);
       if (e.def.explode) this.pendingExplosions.push({ x: e.x, y: e.y, r: e.def.explode.r, dmg: e.def.explode.dmg * this.enemyDmgScale(), enemyDmg: e.def.explode.enemyDmg, kind: 'bile' });
       if (e.def.elite) this.addPickup('case', e.x, e.y, { big: false });
-      if (e.def.boss) {
+      if (e.def.mech) this.mechaDown(e);
+      else if (e.def.boss) {
         this.addPickup('case', e.x, e.y, { big: true });
         this.banner('The Stalker is down', 'good');
         this.shakeAll(12);
@@ -939,16 +943,16 @@
       const buf = this._exBuf;
       while (this.pendingExplosions.length && n++ < 40) {
         const ex = this.pendingExplosions.shift();
-        const blood = ex.kind === 'blood';
-        this.addEffect({ kind: 'burst', x: ex.x, y: ex.y, r: ex.r, life: 0.35, max: 0.35, blood });
-        this.addDecal(ex.x, ex.y, ex.r * 0.8, blood ? 'red' : 'bile');
+        const blood = ex.kind === 'blood', fire = ex.kind === 'fire';
+        this.addEffect({ kind: 'burst', x: ex.x, y: ex.y, r: ex.r, life: 0.35, max: 0.35, blood, tint: fire ? 'fire' : undefined });
+        this.addDecal(ex.x, ex.y, ex.r * 0.8, blood ? 'red' : fire ? 'scorch' : 'bile');
         this.addLight(ex.x, ex.y, ex.r * 2.2, 1, 0.3);
-        this.burst(ex.x, ex.y, blood ? '#c0262a' : '#b9c94a', 18, 260);
+        this.burst(ex.x, ex.y, blood ? '#c0262a' : fire ? '#ff8a2a' : '#b9c94a', 18, 260);
         const lp = this.player;
         if (U.dist2(ex.x, ex.y, lp.x, lp.y) < this.spawnRadius * this.spawnRadius) { OO.Audio.play('explode'); this.shake(blood ? 7 : 5); }
         this.emitNear(ex.x, ex.y, ['k', blood ? 7 : 5]);
         // Cover blocks blasts: no damage if an obstacle sits between a player and the explosion.
-        for (const p of this.alivePlayers()) {
+        if (ex.dmg > 0) for (const p of this.alivePlayers()) {
           if (U.dist2(ex.x, ex.y, p.x, p.y) < (ex.r + p.r) ** 2 && !this.world.blocked(ex.x, ex.y, p.x, p.y)) this.hurtPlayer(p, ex.dmg, !blood);   // burster hits respect i-frames
         }
         this.grid.query(ex.x, ex.y, ex.r + 32, buf);
@@ -1119,7 +1123,7 @@
         }
         this.grid.query(pr.x, pr.y, pr.r + 32, buf);
         for (const e of buf) {
-          if (e.dead || pr.hit.has(e.id)) continue;
+          if (e.dead || e.airborne || pr.hit.has(e.id)) continue;
           if (U.dist2(pr.x, pr.y, e.x, e.y) > (pr.r + e.r) ** 2) continue;
           if (e.def.invulnerable) {
             // glances off the carapace

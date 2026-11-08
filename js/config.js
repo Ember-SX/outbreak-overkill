@@ -95,6 +95,21 @@
                 burster: { r: 64, dmg: 42, enemyDmg: 90 } },
     brute:    { name: 'Brute',       hp: 450,  speed: 42, dmg: 18, r: 26, xp: 25,  mass: 10,  body: '#3c3e46', skin: '#6c707c', eye: '#ff3a30', blood: 'red', elite: true },
     stalker:  { name: 'The Stalker', hp: 4800, speed: 58, dmg: 30, r: 32, xp: 120, mass: 40,  body: '#1b1620', skin: '#3b2d45', eye: '#ff2444', blood: 'red', boss: true },
+    // Final boss. Lab subject B-0 "Biscuit", a very small and very angry rabbit, at the controls of
+    // the HARE TRIGGER combat frame. Hunts the nearest operative, rocket-jumps onto you, fires
+    // carrot missiles at marked ground and, below half health, sweeps a visor laser. Cover blocks
+    // missiles and the laser, not the landing shockwave.
+    mecha:    { name: 'Hare Trigger', pilot: 'Biscuit', hp: 7200, speed: 66, dmg: 32, r: 40, xp: 400, mass: 80,
+                body: '#3b414c', skin: '#d9b23a', eye: '#ff5fb0', blood: 'oil', boss: true, final: true,
+                mech: {
+                  turn: 2.4,                         // body turn rate (rad/s)
+                  attackGap: [2.2, 3.4],             // seconds of walking between attacks (x0.7 in overdrive)
+                  leap: { range: [200, 640], crouch: 0.75, air: 0.95, r: 125, dmg: 1.25, farLeap: 720 },
+                  missiles: { count: 6, overdrive: 9, aim: 0.45, flight: 1.25, stagger: 0.09, r: 58, dmg: 0.6, spread: 150 },
+                  laser: { charge: 1.0, sweep: 1.6, turn: 0.6, length: 560, width: 15, dmg: 0.4, tick: 0.12 },
+                  overdrive: 0.5,                    // below this share of HP: faster, more missiles, adds the laser
+                  overSpeed: 1.25,
+                } },
     crate:    { name: 'Supply Crate', hp: 1,   speed: 0,  dmg: 0,  r: 15, xp: 0,   mass: 999, crate: true },
   };
 
@@ -331,7 +346,7 @@
     { t: 735, kind: 'stampede', count: 13, ranks: 2 },
     { t: 780, kind: 'elite', enemy: 'brute',    count: 3 },
     { t: 815, kind: 'stampede', count: 15, ranks: 2 },
-    { t: 840, kind: 'boss',  enemy: 'stalker',  count: 2, text: 'Two Stalkers. Evac is one minute out' },
+    { t: 840, kind: 'boss',  enemy: 'mecha',    count: 1, text: 'Lab subject B-0 has stolen the HARE TRIGGER. Evac is one minute out' },
     { t: 870, kind: 'banner', text: 'Evac helicopter inbound. Hold on' },
     { t: 880, kind: 'stampede', count: 15, ranks: 2, text: 'One last stampede' },
   ];
