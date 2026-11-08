@@ -4,7 +4,7 @@ A bio-horror horde survival game for the browser. You play one operative inside 
 
 The core loop follows the Vampire Survivors formula: move only, auto-firing weapons, XP gems (DNA samples here), a pick-one-of-three upgrade screen, weapon and passive slots, elites that drop supply cases, and a wave script that escalates until you're overrun or extracted.
 
-**Status:** v0.5.0. Playable start to finish, solo or 2-player online co-op, with cover, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions and an Armory between runs.
+**Status:** v0.6.0. Playable start to finish, solo or 2-player online co-op, with cover, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions, and an Armory with upgrades and an outfit wardrobe between runs.
 
 ## Play it
 
@@ -65,7 +65,19 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 
 **Cover:** the map is littered with wrecked cars, a burnt-out bus, jersey barriers, dumpsters, pillars and hazmat barrels, generated in chunks from a seed so it stays consistent while you roam. You and the infected collide with them, and the infected steer around them. Your bullets and pellets stop on cover, and guns only aim at targets they can actually hit.
 
-**Armory:** every run banks the credits you picked up plus a payout for kills, time survived and evacuating. Spend them on the main menu on permanent upgrades (HP, damage, armor, speed, pickup range, XP gain, rerolls, payouts, and Second Wind: get back up once per run). Refund any time.
+**Armory:** every run banks the credits you picked up plus a payout for kills, time survived and evacuating. Spend them on the main menu on permanent upgrades (HP, damage, armor, speed, pickup range, XP gain, rerolls, payouts, and Second Wind: get back up once per run). Refund upgrades any time.
+
+**Wardrobe (Armory > Wardrobe):** five outfits per operative, all cosmetic.
+- Each operative has the same five sets: their default tactical kit (free), covert ops, undercover, hazmat, and swimwear.
+- Every other outfit costs **1,800 credits**. A clean 15:00 evacuation banks about 550–650 credits (simulated runs ranged 240–1,080 depending on kills), so one outfit is roughly three full successful runs. The price lives in `OO.SKIN_COST` (js/characters.js).
+- Buying an outfit equips it. Your partner sees it in co-op. Refunding Armory upgrades doesn't touch outfits.
+- The menu's operative dossier shows the equipped outfit. **Change** jumps straight to that operative's wardrobe.
+
+| Operative | Tactical (free) | Covert ops | Undercover | Hazmat | Swimwear |
+|---|---|---|---|---|---|
+| Mara Voss, patrol officer | Patrol uniform | Night shift | Off the books | Decon shell | Shore leave |
+| Dex Okafor, contractor | Contractor rig | Black site | Street clothes | CBRN heavy | Lifeguard |
+| Rin Sato, lab technician | Containment suit | Ghost protocol | Lab coat | Level A | Pool day |
 
 **Strain level (enemy leveling):** every infected spawns at the current strain level, and each level multiplies its HP by 1.14 (1.12 for elites, 1.10 for The Stalker). The level is minutes survived plus an adaptive bonus: once more than 40% of your kills are one-hit kills, the bonus climbs (up to +10 levels) until the infected start soaking hits again, then eases back. The HUD shows STRAIN LV under the evac timer, with ADAPTING while the bonus is rising. Tuning lives in `OO.CONFIG.LEVELING`.
 
@@ -98,23 +110,37 @@ Co-op needs an internet connection and a page served over http(s) (GitHub Pages,
 
 **Can't connect?** Strict firewalls (offices, schools, some mobile and public Wi-Fi) block direct browser-to-browser links. The game then routes through a TURN relay server: first any relay you set under **Co-op > Connection settings**, then the free Open Relay servers on ports 80 and 443 (UDP, TCP and TLS, which nearly every firewall allows), then the PeerJS relays. The joiner tries every route first and, if nothing opens within 10 seconds, retries over relays only. Free public relays are best effort. If they're busy, a free TURN account (for example Metered or Cloudflare) gives you your own: paste its `turn:` address, username and password into Connection settings, or a Metered credentials URL (`https://<app>.metered.live/api/v1/turn/credentials?apiKey=...`) as the server. The settings are saved in your browser. The player on the strict network is the one who needs it.
 
-**Presentation:** flashlight darkness with glowing eyes in the dark, blood and bile decals, screen shake, damage numbers, synthesized sound (Web Audio, no files), a low-HP heartbeat, edge markers for off-screen bosses, elites and supply cases. Screen shake and damage numbers can be switched off from the pause screen.
+**Presentation:** the interface is styled as a field-issued containment terminal: glass panels with bracketed corners, containment teal for readouts, hazard amber for actions, infection red for danger.
+- **Vitals monitor (top left):** an ECG trace that speeds up as you lose health. It reads STABLE (teal), STRAINED (amber) or CRITICAL (red, with a noisy trace), and flatlines when you're down in co-op. Partners get a small monitor of their own.
+- **Map:** ground detail is baked per map chunk and stays put when you come back.
+  - Roads every other block, with lane paint, kerbs, drains and crossings.
+  - Puddles, oil stains, skid marks, paper, glass, spent casings and hazard tape.
+  - Old blood: pools, drag trails, footprints, handprints. Quarantine stencils on the road.
+  - Kill splats have a pool, a directional spray and a wet sheen.
+- **Lighting:** flashlight darkness, sodium street lamps (some flicker or are dead), rotating red emergency beacons, drifting haze, dust in your flashlight beam, a vignette and film grain.
+- **Operatives:** distinct top-down silhouettes. Mara wears a fitted patrol uniform and duty vest with her hair up. Dex is broad, with a plate carrier and a slung shotgun. Rin wears a helmeted containment suit with an air unit. Large front-facing portraits appear on the menu and in the wardrobe.
+- **Also:** glowing eyes in the dark, screen shake, damage numbers, synthesized sound (Web Audio, no files), a low-HP heartbeat, edge markers for off-screen bosses, elites and supply cases.
+
+**Pause screen settings:** screen shake, damage numbers and **Atmosphere**. Atmosphere covers the full-screen haze, dust and grain passes. *Auto* (the default) turns them off if the frame rate stays under about 42 fps and back on above 56. *High* and *low* force it either way.
 
 ## Project layout
 
 ```
 index.html          page shell, screens, script load order
 css/style.css       menus and overlays
+css/fonts/          self-hosted fonts (SIL OFL, see OFL.txt); no third-party requests
 js/
   config.js         ALL tunable data: enemies, weapons, passives, operatives, waves, events
   utils.js          math helpers, weighted random, storage, spatial hash
   audio.js          synthesized sound effects and ambience
   input.js          keyboard, gamepad, touch joystick
   icons.js          vector icons for weapons, gear and pickups
+  characters.js     operatives: outfit data, top-down sprite, menu/wardrobe portraits
   world.js          procedural obstacles, collision, line of sight
   weapons.js        Weapon class + one behaviour per weapon
   spawner.js        the Director: wave table and scripted events
-  render.js         world drawing, sprite cache, darkness pass, HUD
+  scenery.js        baked ground detail per chunk, street lamps and beacons, haze, dust, grain
+  render.js         world drawing, sprite cache, darkness pass, HUD (ECG vitals monitor)
   ui.js             DOM screens: menu, level up, supply case, pause, results
   game.js           run state, fixed-timestep loop, simulation (any number of players)
   net.js            PeerJS wrapper: rooms, 3-digit codes, the data channel
@@ -140,6 +166,7 @@ Most changes are data edits in `js/config.js`.
 - **New evolution:** add the evolved weapon to `EVOLVED` and the recipe to `OO.EVOLUTIONS` in config.js.
 - **New obstacle type:** add a shape to `KINDS` in world.js and a drawing case in `Renderer.obstacleSprite`.
 - **New Armory upgrade:** add it to `OO.ARMORY` and apply its rank in `Game.recalcStats()`.
+- **New outfit:** add an entry to the operative's list in `SKINS` (js/characters.js). An outfit is data: colours plus a few style keys (`topKind`, `legKind`, `vest`, `head`, `hair`, `pack`...). The same data draws the in-game sprite and the portrait, so new outfits built from existing garment types need no drawing code.
 
 ## Balance checks
 
@@ -167,6 +194,8 @@ Done in v0.3: enemy leveling (strain), harder Standard baseline, invincible Burs
 Done in v0.4: late-game surge, pickup despawn and cap fix, 2-player online co-op.
 
 Done in v0.5: co-op through strict firewalls (TURN relays, relay fallback, sturdier handshake), the 13:00 HP cap, the Hare Trigger final boss.
+
+Done in v0.6: interface and HUD redesign with the ECG vitals monitor, lighting and ground detail, new operative art, the outfit wardrobe.
 
 Next up: give **Nightmare** its own tuning (faster strain growth, more stampedes) and unlock it.
 
@@ -210,4 +239,4 @@ Both players must be on the same game version; the host turns away a mismatched 
 
 ## Credits and IP
 
-All code, art (procedural) and sound (synthesized) are original to this project. The game is inspired by the survivors-like genre and classic survival-horror themes; it uses no names, characters or assets from existing franchises. Fonts: Big Shoulders Stencil Display, Special Elite and IBM Plex Mono via Google Fonts (SIL Open Font License). Networking: PeerJS (MIT, see `js/vendor/peerjs.LICENSE`).
+All code, art (procedural) and sound (synthesized) are original to this project. The game is inspired by the survivors-like genre and classic survival-horror themes; it uses no names, characters or assets from existing franchises. Operatives and outfits are original designs built from generic archetypes (patrol officer, contractor, lab technician); they don't copy any existing character's look. Fonts: Chakra Petch, IBM Plex Mono and Big Shoulders Stencil Display, self-hosted from Fontsource (SIL Open Font License, see `css/fonts/OFL.txt`). Networking: PeerJS (MIT, see `js/vendor/peerjs.LICENSE`).
