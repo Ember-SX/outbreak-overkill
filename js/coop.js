@@ -54,7 +54,7 @@
     const L = this.lobby = { role: 'client', charId, code, linked: false, connected: false, hostName: null, netStatus: '' };
     this.renderLobby();
     const hello = () => this.netSend({
-      t: 'hello', v: OO.VERSION, charId, name: OO.CHARACTERS[charId].name,
+      t: 'hello', v: OO.VERSION, charId, name: OO.CHARACTERS[charId].name, skin: this.skinFor(charId),
       ranks: this.meta.ranks, view: { w: this.viewW, h: this.viewH },
     });
     this.net = new OO.Net({
@@ -163,6 +163,7 @@
         // Hellos repeat until our welcome lands, so answer every one but only greet once.
         if (!L.partner) OO.Audio.play('select');
         L.partner = { charId: OO.CHARACTERS[m.charId] ? m.charId : 'mara', name: String(m.name || 'Partner').slice(0, 24), ranks: sanitizeRanks(m.ranks) };
+        L.partner.skin = OO.Characters.skinOf(L.partner.charId, String(m.skin || '')).id;
         L.joining = false; L.notice = null;
         this.remoteView = sanitizeView(m.view);
         this.updateSpawnRadius();
@@ -247,8 +248,8 @@
     this.mode = 'host';
     this.resetRun(Math.floor(Math.random() * 1e9));
     this.players = [
-      this.makePlayer(0, L.charId, this.meta.ranks, true),
-      this.makePlayer(1, L.partner.charId, L.partner.ranks, false),
+      this.makePlayer(0, L.charId, this.meta.ranks, true, this.skinFor(L.charId)),
+      this.makePlayer(1, L.partner.charId, L.partner.ranks, false, L.partner.skin),
     ];
     this.player = this.players[0];
     this.director = new OO.Director(this);
@@ -260,7 +261,7 @@
     this.ui.setHud(true);
     this.netSend({
       t: 'start', seed: this.seed, you: 1,
-      players: this.players.map((p) => ({ slot: p.slot, charId: p.charId, x: p.x, y: p.y })),
+      players: this.players.map((p) => ({ slot: p.slot, charId: p.charId, skin: p.skin, x: p.x, y: p.y })),
     });
     OO.Audio.play('select');
   };
@@ -356,7 +357,7 @@
     this.resetRun(m.seed);
     this.players = m.players.map((pp) => {
       const local = pp.slot === m.you;
-      const p = this.makePlayer(pp.slot, pp.charId, local ? this.meta.ranks : {}, local);
+      const p = this.makePlayer(pp.slot, pp.charId, local ? this.meta.ranks : {}, local, local ? this.skinFor(pp.charId) : String(pp.skin || ''));
       p.x = pp.x; p.y = pp.y; p.tx = pp.x; p.ty = pp.y; p.px = pp.x; p.py = pp.y; p.lt = 1;
       return p;
     });

@@ -8,8 +8,12 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 let html = readFileSync(join(root, 'index.html'), 'utf8');
 
-html = html.replace(/<link rel="stylesheet" href="(css\/[^"]+)">/g, (_, href) =>
-  `<style>\n${readFileSync(join(root, href), 'utf8')}\n</style>`);
+// Stylesheets are inlined, and the fonts they reference become data: URIs.
+html = html.replace(/<link rel="stylesheet" href="(css\/[^"]+)">/g, (_, href) => {
+  const css = readFileSync(join(root, href), 'utf8').replace(/url\((fonts\/[^)]+\.woff2)\)/g, (m, file) =>
+    `url(data:font/woff2;base64,${readFileSync(join(root, 'css', file)).toString('base64')})`);
+  return `<style>\n${css}\n</style>`;
+});
 
 html = html.replace(/<script src="(js\/[^"]+)"><\/script>/g, (_, src) =>
   `<script>\n${readFileSync(join(root, src), 'utf8').replace(/<\/script/gi, '<\\/script')}\n</script>`);

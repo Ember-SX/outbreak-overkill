@@ -2,6 +2,42 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
+## [0.6.0] - 2026-11-08
+
+Branch `feature/v0.6-presentation-skins`.
+
+### Added
+- **Wardrobe** in the Armory: five outfits per operative (tactical default, covert ops, undercover, hazmat, swimwear).
+  - Each non-default outfit costs 1,800 credits, about three successful 15:00 runs (`OO.SKIN_COST`).
+  - Buying equips it. Outfits are saved with the Armory and survive an upgrade refund.
+  - They show in co-op: the outfit travels in `hello` and the `start` message.
+  - The results screen says how far you are from the next one.
+- **Operative art** (`js/characters.js`):
+  - Distinct top-down silhouettes: Mara's patrol uniform and vest, Dex's broad build with a plate carrier and slung shotgun, Rin's helmeted containment suit with an air unit.
+  - Front-facing portraits for the menu dossier and the wardrobe. Outfits are data, and one description drives both views.
+- **ECG vitals monitor** replacing the HP bar:
+  - The trace speeds up as health drops. It reads STABLE, STRAINED or CRITICAL and flatlines when you're down.
+  - Partners get a compact monitor. The menu header has its own heartbeat line.
+- **Scenery** (`js/scenery.js`):
+  - Ground detail baked per chunk: roads with markings, crossings and drains; puddles, oil, skid marks and litter; glass, casings and hazard tape; old blood pools, drag trails, footprints and handprints; quarantine stencils.
+  - Lights: sodium street lamps (some flicker or are dead) and rotating red beacons that cut through the darkness.
+  - Atmosphere: drifting haze, dust in the flashlight beam, vignette and film grain.
+- **Atmosphere** setting on the pause screen (auto / high / low). Auto drops the full-screen passes when the frame rate sags.
+
+### Changed
+- **Interface redesign:** a containment-terminal look with glass panels, bracketed corners and teal/amber/red signal colours.
+  - Two-column main menu with an operative dossier and portrait tabs.
+  - Tabbed Armory (Upgrades / Wardrobe); restyled level-up cards, pause, results, co-op and banners.
+  - Mobile layout: wordmark, then operative, then briefing and buttons.
+- **HUD:** a thin XP strip, mission clock plate, segmented boss bar, and teal/amber gear and weapon slots.
+- **Kill decals** have a pool, a directional spray and a sheen, in 8 variants.
+- Darkness and ground re-tinted cooler.
+- **Fonts are self-hosted** (Chakra Petch, IBM Plex Mono, Big Shoulders Stencil Display; SIL OFL).
+  - The game makes no third-party requests and looks right offline.
+  - The single-file bundle embeds them.
+  - Special Elite is gone with the case-file look.
+- `npm run sim` prints each run's payout.
+
 ## [0.5.0] - 2026-11-08
 
 Branch `feature/v0.5-final-boss`.

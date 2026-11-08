@@ -10,6 +10,7 @@
   const TAU = Math.PI * 2;
   const FONT_DISPLAY = '"Big Shoulders Stencil Display", Impact, "Arial Narrow", sans-serif';
   const FONT_MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
+  const FONT_UI = '"Chakra Petch", "Segoe UI", system-ui, sans-serif';
   const HEAD = { burster: 0.9, spitter: 0.3, shambler: 0.45, hound: 1.45, skinner: 0.35, bloater: 0.6, brute: 0.55, stalker: 0.5, mecha: 1.12 };
   const ANIM = { burster: 18, spitter: 6, shambler: 5, hound: 16, skinner: 9, bloater: 4, brute: 3, stalker: 4, mecha: 5 };   // anim speed (rad/s)
   const FRAMES = 8;
@@ -20,6 +21,63 @@
   /** Height (0..1) of a mech mid rocket-jump, shared by body, eyes and shadow. */
   function mechLift(e) { return e.ai && e.ai.mode === 'air' ? Math.sin(Math.PI * U.clamp(e.ai.k || 0, 0, 1)) : 0; }
 
+  // ---------------------------------------------------------------- ECG trace
+  // Shared by the HUD vitals monitor and the menu header. wave(u) is one heartbeat, u in [0, 1).
+  const ECG = {
+    wave(u) {
+      if (u > 0.08 && u < 0.18) return 0.12 * Math.sin(Math.PI * (u - 0.08) / 0.1);           // P
+      if (u >= 0.24 && u < 0.26) return -0.14 * (u - 0.24) / 0.02;                            // Q
+      if (u >= 0.26 && u < 0.285) return -0.14 + 1.14 * (u - 0.26) / 0.025;                    // R up
+      if (u >= 0.285 && u < 0.31) return 1 - 1.32 * (u - 0.285) / 0.025;                       // R down to S
+      if (u >= 0.31 && u < 0.34) return -0.32 + 0.32 * (u - 0.31) / 0.03;                       // S back
+      if (u > 0.46 && u < 0.66) return 0.24 * Math.sin(Math.PI * (u - 0.46) / 0.2);            // T
+      return 0;
+    },
+    /**
+     * A scrolling trace in the box (x, y, w, h). opts: bpm, color, amp (0..1), noise (0..1),
+     * flat (true = asystole line), reduced (no scrolling), grid.
+     */
+    draw(ctx, x, y, w, h, t, opts) {
+      const o = Object.assign({ bpm: 70, color: '#52e6c6', amp: 1, noise: 0, flat: false, reduced: false, grid: true }, opts);
+      const speed = 90;                                   // px per second
+      const beatPx = speed * 60 / o.bpm;
+      const head = o.reduced ? 0 : t * speed;
+      const mid = y + h * 0.62, A = h * 0.52 * o.amp;
+      if (o.grid) {
+        ctx.strokeStyle = 'rgba(82,230,198,0.07)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let gx = x + ((-head) % 12 + 12) % 12; gx < x + w; gx += 12) { ctx.moveTo(Math.round(gx) + 0.5, y); ctx.lineTo(Math.round(gx) + 0.5, y + h); }
+        for (let gy = y + 6; gy < y + h; gy += 12) { ctx.moveTo(x, gy + 0.5); ctx.lineTo(x + w, gy + 0.5); }
+        ctx.stroke();
+      }
+      const grad = ctx.createLinearGradient(x, 0, x + w, 0);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(0.35, o.color);
+      grad.addColorStop(1, o.color);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, y - 2, w, h + 4); ctx.clip();
+      ctx.lineJoin = 'round';
+      const path = new Path2D();
+      let last = mid;
+      for (let px = 0; px <= w; px += 1.5) {
+        const pos = head - (w - px);
+        let v = o.flat ? 0 : ECG.wave((((pos / beatPx) % 1) + 1) % 1);
+        if (o.noise) v += (Math.sin(pos * 0.9) + Math.sin(pos * 2.3)) * 0.05 * o.noise;
+        last = mid - v * A;
+        if (px === 0) path.moveTo(x + px, last); else path.lineTo(x + px, last);
+      }
+      // glow as a wide faint stroke under the line (cheaper than shadowBlur)
+      ctx.globalAlpha = 0.22; ctx.strokeStyle = grad; ctx.lineWidth = 5; ctx.stroke(path);
+      ctx.globalAlpha = 1; ctx.lineWidth = 1.6; ctx.stroke(path);
+      ctx.fillStyle = o.color; ctx.globalAlpha = 0.3;
+      ctx.beginPath(); ctx.arc(x + w, last, 5, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(x + w, last, 2.2, 0, TAU); ctx.fill();
+      ctx.restore();
+    },
+  };
+  OO.ECG = ECG;
+
   class Renderer {
     constructor(game, canvas) {
       this.g = game;
@@ -29,8 +87,9 @@
       this.dctx = this.dark.getContext('2d');
       this.groundTile = this.makeGround();
       this.pattern = this.ctx.createPattern(this.groundTile, 'repeat');
+      this.scenery = new OO.Scenery(this);
       this.splats = { red: [], bile: [], scorch: [] };
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 8; i++) {
         this.splats.red.push(this.makeSplat('#4f0a08', '#7a130f'));
         this.splats.bile.push(this.makeSplat('#4d5a17', '#8b9c2b'));
         this.splats.scorch.push(this.makeSplat('#141210', '#2e2924'));
@@ -63,7 +122,7 @@
       const x = c.getContext('2d');
       const tiled = (fn) => { for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) { x.save(); x.translate(ox, oy); fn(); x.restore(); } };
 
-      x.fillStyle = '#1a1c1a';
+      x.fillStyle = '#171b1b';
       x.fillRect(0, 0, S, S);
 
       for (let i = 0; i < 70; i++) {
@@ -71,7 +130,7 @@
         const light = Math.random() < 0.5;
         tiled(() => {
           const g = x.createRadialGradient(px, py, 0, px, py, r);
-          g.addColorStop(0, light ? 'rgba(52,56,48,0.35)' : 'rgba(6,7,6,0.35)');
+          g.addColorStop(0, light ? 'rgba(48,58,56,0.35)' : 'rgba(4,8,8,0.35)');
           g.addColorStop(1, 'rgba(0,0,0,0)');
           x.fillStyle = g; x.beginPath(); x.arc(px, py, r, 0, TAU); x.fill();
         });
@@ -121,20 +180,35 @@
       return c;
     }
 
+    /** A blood (or bile, or scorch) splat: an irregular pool, a directional spray of droplets, a wet highlight. */
     makeSplat(dark, light) {
       const c = document.createElement('canvas');
-      c.width = c.height = 64;
+      c.width = c.height = 96;
       const x = c.getContext('2d');
-      x.translate(32, 32);
+      x.translate(48, 48);
+      // pool: a short random walk of overlapping blobs
       x.fillStyle = dark;
-      for (let i = 0; i < 7; i++) circle(x, U.rand(-9, 9), U.rand(-9, 9), U.rand(6, 13));
-      for (let i = 0; i < 9; i++) {
-        const a = U.rand(0, TAU), d = U.rand(14, 28);
-        circle(x, Math.cos(a) * d, Math.sin(a) * d, U.rand(1.2, 3.5));
+      let px = 0, py = 0;
+      for (let i = 0; i < 10; i++) {
+        circle(x, px, py, U.rand(5, 12));
+        px = U.clamp(px + U.rand(-6, 6), -12, 12); py = U.clamp(py + U.rand(-6, 6), -12, 12);
       }
-      x.fillStyle = light;
-      x.globalAlpha = 0.55;
-      for (let i = 0; i < 3; i++) circle(x, U.rand(-6, 6), U.rand(-6, 6), U.rand(3, 6));
+      // spray: droplets thrown one way, smaller and sparser with distance, with a few elongated streaks
+      const dir = U.rand(0, TAU);
+      for (let i = 0; i < 22; i++) {
+        const a = dir + U.rand(-0.55, 0.55), d = U.rand(16, 44), s = Math.max(0.7, 3.6 - d * 0.065) * U.rand(0.6, 1.2);
+        circle(x, Math.cos(a) * d, Math.sin(a) * d, s);
+        if (i % 5 === 0) {
+          x.save(); x.translate(Math.cos(a) * (d - 6), Math.sin(a) * (d - 6)); x.rotate(a);
+          x.beginPath(); x.ellipse(0, 0, 6, s * 0.7, 0, 0, TAU); x.fill(); x.restore();
+        }
+      }
+      for (let i = 0; i < 8; i++) { const a = U.rand(0, TAU), d = U.rand(12, 22); circle(x, Math.cos(a) * d, Math.sin(a) * d, U.rand(1, 2.4)); }
+      // darker core and a wet sheen
+      x.globalAlpha = 0.5; x.fillStyle = '#000'; circle(x, U.rand(-3, 3), U.rand(-3, 3), U.rand(4, 7));
+      x.globalAlpha = 0.5; x.fillStyle = light;
+      for (let i = 0; i < 3; i++) circle(x, U.rand(-6, 6), U.rand(-6, 6), U.rand(2, 5));
+      x.globalAlpha = 0.25; x.fillStyle = '#fff'; circle(x, U.rand(-5, 0), U.rand(-5, 0), 1.6);
       return c;
     }
 
@@ -156,10 +230,14 @@
       const world = () => { ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); ctx.translate(sx, sy); ctx.scale(z, z); ctx.translate(-camX, -camY); };
 
       world();
-      ctx.fillStyle = this.pattern;
-      ctx.fillRect(camX - 40, camY - 40, g.viewW + 80, g.viewH + 80);
+      if (!this.scenery.covers(this.cam, g.viewW, g.viewH, g.world.seed)) {
+        ctx.fillStyle = this.pattern;
+        ctx.fillRect(camX - 40, camY - 40, g.viewW + 80, g.viewH + 80);
+      }
+      this.scenery.drawGround(ctx, this.cam, g.viewW, g.viewH, g.world.seed);
       this.drawDecals(ctx);
       this.drawZones(ctx);
+      this.scenery.drawFixtures(ctx, g.time);
       this.drawObstacles(ctx);
       this.drawEnemies(ctx);
       for (const pl of g.players) this.drawPlayer(ctx, pl);
@@ -167,12 +245,15 @@
       this.drawLobs(ctx);
       this.drawEffects(ctx, false);
       this.drawParticles(ctx);
+      const fx = this.fxLevel();
+      if (fx === 'high') this.scenery.drawHaze(ctx, this.cam, g.viewW, g.viewH, g.time);
 
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       this.drawDarkness();
 
-      // Things that should read through the dark: eyes, loot, tracers, lightning, numbers.
+      // Things that should read through the dark: lamps, eyes, loot, tracers, lightning, numbers.
       world();
+      this.scenery.drawGlows(ctx, g.time);
       this.drawObstacleEdges(ctx);
       this.drawEyes(ctx);
       this.drawPickups(ctx);
@@ -187,10 +268,28 @@
       if (g.players.length > 1) this.drawPlayerTags(ctx);
 
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      if (!p.downed && fx === 'high') this.scenery.drawMotes(ctx, (p.x - camX) * z + sx, (p.y - camY) * z + sy, p.faceAngle, 520 * z, g.time);
+      this.scenery.drawPost(ctx, this.w, this.h, g.time, g.reducedMotion, fx === 'high');
       this.drawScreenFx();
       if (g.state !== 'results') this.drawHud();
       this.drawStick();
       if (g.debug) this.drawDebug();
+    }
+
+    /**
+     * Atmosphere level for this frame. 'auto' starts high and drops to low after a few seconds
+     * under ~42 fps (haze, dust and grain are full-screen passes), and comes back above ~56 fps.
+     */
+    fxLevel() {
+      const g = this.g, want = g.settings.fx || 'auto';
+      if (want !== 'auto') return want;
+      const now = g.time;
+      if (this.autoFx === undefined) { this.autoFx = 'high'; this.fxT = now; }
+      if (g.state !== 'playing') { this.fxT = now; return this.autoFx; }
+      const bad = this.autoFx === 'high' ? g.fps < 42 : g.fps > 56;
+      if (!bad) this.fxT = now;
+      else if (now - this.fxT > (this.autoFx === 'high' ? 4 : 10)) { this.autoFx = this.autoFx === 'high' ? 'low' : 'high'; this.fxT = now; }
+      return this.autoFx;
     }
 
     inView(x, y, r) {
@@ -239,7 +338,7 @@
         ctx.globalAlpha = Math.min(1, d.life / 6) * 0.85;
         ctx.save();
         ctx.translate(d.x, d.y); ctx.rotate(d.rot);
-        const s = d.r * 2.2;
+        const s = d.r * 2.4;
         ctx.drawImage(img, -s / 2, -s / 2, s, s);
         ctx.restore();
       }
@@ -832,28 +931,7 @@
       ctx.beginPath(); ctx.ellipse(0, p.r * 0.75, p.r * 1.1, p.r * 0.45, 0, 0, TAU); ctx.fill();
       ctx.globalAlpha = blink ? 0.45 : 1;
 
-      // legs (walk cycle, drawn along facing)
-      ctx.save();
-      ctx.rotate(p.faceAngle);
-      const step = p.moving ? Math.sin(p.walk) * 5 : 0;
-      ctx.fillStyle = '#1e2126';
-      ctx.fillRect(-4 + step, -8, 9, 5);
-      ctx.fillRect(-4 - step, 3, 9, 5);
-      ctx.restore();
-
-      // body + gun toward aim
-      ctx.save();
-      ctx.rotate(p.aimAngle);
-      ctx.fillStyle = '#222';
-      ctx.fillRect(6, 2, 16, 4.5);
-      ctx.fillStyle = p.vest || p.char.vest;
-      ctx.beginPath(); ctx.ellipse(0, 0, p.r * 0.8, p.r, 0, 0, TAU); ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(-3, -p.r * 0.8); ctx.lineTo(-3, p.r * 0.8); ctx.stroke();
-      ctx.fillStyle = '#c69a74'; circle(ctx, 6, 5, 3.2);
-      ctx.fillStyle = '#2a1f18'; circle(ctx, 1, 0, 7);
-      ctx.fillStyle = '#c69a74'; circle(ctx, 3.5, 0, 4.2);
-      ctx.restore();
+      OO.Characters.drawTopDown(ctx, p, g.time);
 
       if (p.hurt > 0) {
         ctx.globalAlpha = p.hurt / 0.3 * 0.6;
@@ -877,9 +955,10 @@
       ctx.fillStyle = 'rgba(90,10,8,0.55)'; circle(ctx, 0, 4, p.r * 1.6);
       ctx.rotate(0.5);
       ctx.globalAlpha = 0.75;
-      ctx.fillStyle = p.vest || p.char.vest;
+      const sk = OO.Characters.skinOf(p.charId, p.skin), look = OO.Characters.LOOKS[p.charId];
+      ctx.fillStyle = sk.top || look.skin;
       ctx.beginPath(); ctx.ellipse(0, 0, p.r * 1.1, p.r * 0.6, 0, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#c69a74'; circle(ctx, p.r * 1.05, 0, 4.2);
+      ctx.fillStyle = look.skin; circle(ctx, p.r * 1.05, 0, 4.2);
       ctx.restore();
       const k = U.clamp(p.reviveT / C.reviveTime, 0, 1);
       const pulse = 0.5 + 0.5 * Math.sin(g.time * 5);
@@ -1131,10 +1210,11 @@
 
       d.globalCompositeOperation = 'source-over';
       d.clearRect(0, 0, W, H);
-      d.fillStyle = 'rgba(3,5,4,0.86)';
+      d.fillStyle = 'rgba(2,9,11,0.88)';
       d.fillRect(0, 0, W, H);
       d.globalCompositeOperation = 'destination-out';
 
+      for (const [lx, ly, lr, li] of this.scenery.lightSources(g.time)) punch(lx, ly, lr, li);
       for (const pl of g.players) {
         if (pl.downed) { punch(pl.x, pl.y, 140, 0.7); continue; }
         punch(pl.x, pl.y, OO.CONFIG.LIGHT_RADIUS * (pl === p ? 1 : 0.8), 1);
@@ -1181,141 +1261,188 @@
       }
     }
 
+    // ---------------------------------------------------------------- HUD
+    /** A glass plate with bracketed corners, the HUD's one framing device. */
+    plate(x, y, w, h, accent) {
+      const ctx = this.ctx, b = 8;
+      ctx.fillStyle = 'rgba(5,14,16,0.78)'; ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = 'rgba(46,90,95,0.55)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      ctx.fillStyle = accent || '#52e6c6';
+      for (const [cx, cy, sx, sy] of [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]]) {
+        ctx.fillRect(sx > 0 ? cx : cx - b, sy > 0 ? cy : cy - 1, b, 1);
+        ctx.fillRect(sx > 0 ? cx : cx - 1, sy > 0 ? cy : cy - b, 1, b);
+      }
+    }
+
+    /** Vital signs for one operative: status, ECG trace that speeds up as HP drops, HP readout. */
+    vitals(p) {
+      const k = p.stats && p.stats.maxHp ? U.clamp(p.hp / p.stats.maxHp, 0, 1) : 0;
+      if (p.downed) return { k: 0, status: 'DOWN', color: '#ff3b4e', bpm: 0, flat: true };
+      if (k > 0.6) return { k, status: 'STABLE', color: '#52e6c6', bpm: Math.round(66 + (1 - k) * 40), flat: false };
+      if (k > 0.3) return { k, status: 'STRAINED', color: '#f2b23a', bpm: Math.round(96 + (0.6 - k) * 90), flat: false };
+      return { k, status: 'CRITICAL', color: '#ff3b4e', bpm: Math.round(128 + (0.3 - k) * 140), flat: false };
+    }
+
+    drawVitals(x, y, w, p, big) {
+      const ctx = this.ctx, g = this.g, v = this.vitals(p), h = big ? 84 : 50;
+      this.plate(x, y, w, h, v.color);
+      // header: name and status
+      ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+      ctx.font = `600 ${big ? 12 : 11}px ${FONT_UI}`;
+      ctx.fillStyle = '#82a09b';
+      ctx.fillText((g.players.length > 1 ? p.tag + '  ' : '') + p.name, x + 10, y + 7);
+      ctx.textAlign = 'right'; ctx.fillStyle = v.color;
+      const blink = v.status === 'CRITICAL' || v.status === 'DOWN' ? (Math.sin(g.time * 8) > 0 ? 1 : 0.35) : 1;
+      ctx.globalAlpha = blink;
+      ctx.font = `700 ${big ? 12 : 11}px ${FONT_UI}`;
+      ctx.fillText(v.status, x + w - 10, y + 7);
+      ctx.globalAlpha = 1;
+      // trace
+      const tw = big ? w - 98 : w - 70, th = big ? 44 : 22, ty = y + (big ? 26 : 22);
+      ECG.draw(ctx, x + 10, ty, tw, th, g.time + p.slot * 0.37, {
+        bpm: v.bpm || 60, color: v.color, flat: v.flat, amp: v.flat ? 0 : 0.85 + (1 - v.k) * 0.15,
+        noise: v.status === 'CRITICAL' ? 0.8 : 0, reduced: g.reducedMotion, grid: big,
+      });
+      // numbers
+      ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+      ctx.font = `600 ${big ? 24 : 16}px ${FONT_MONO}`;
+      ctx.fillStyle = '#dce7e3';
+      ctx.fillText(String(Math.max(0, Math.ceil(p.hp))), x + w - 10, ty + (big ? 22 : 17));
+      if (big) {
+        ctx.font = `500 10px ${FONT_MONO}`; ctx.fillStyle = '#5a7672';
+        ctx.fillText('/' + Math.round(p.stats.maxHp) + ' HP', x + w - 10, ty + 35);
+        ctx.fillStyle = v.color;
+        ctx.fillText(v.flat ? '-- BPM' : v.bpm + ' BPM', x + w - 10, ty + 48);
+      }
+      // HP bar along the bottom edge
+      ctx.fillStyle = 'rgba(82,230,198,0.1)'; ctx.fillRect(x + 1, y + h - 4, w - 2, 3);
+      ctx.fillStyle = v.color; ctx.fillRect(x + 1, y + h - 4, (w - 2) * (p.downed ? U.clamp(p.reviveT / OO.CONFIG.COOP.reviveTime, 0, 1) : v.k), 3);
+      return h;
+    }
+
     drawHud() {
-      const g = this.g, p = g.player, ctx = this.ctx, W = this.w;
-      const top = 0;
-
-      // XP bar: the DNA sample meter
-      const bh = 14;
-      ctx.fillStyle = 'rgba(8,10,9,0.9)'; ctx.fillRect(0, top, W, bh);
-      const T = g.team;
-      const prog = U.clamp(T.xp / T.xpNext, 0, 1);
-      ctx.fillStyle = '#2f8f80'; ctx.fillRect(0, top, W * prog, bh);
-      ctx.fillStyle = '#56d6c0'; ctx.fillRect(0, top, W * prog, 4);
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      for (let x = 6; x < W * prog; x += 9) ctx.fillRect(x, top + 4, 2, bh - 4);
-      ctx.fillStyle = '#3a3a34'; ctx.fillRect(0, top + bh, W, 1);
-      ctx.font = `700 11px ${FONT_MONO}`;
-      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#0d0f0e'; ctx.fillText('LV ' + T.level, W - 7, top + bh / 2 + 1);
-      ctx.fillStyle = '#ebe2cf'; ctx.fillText('LV ' + T.level, W - 8, top + bh / 2);
-      if (g.players.length > 1) this.drawPartnerPanel(top + 96);
-
-      // Timer
-      const remaining = OO.CONFIG.RUN_LENGTH - g.time;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.font = `800 ${W < 560 ? 28 : 34}px ${FONT_DISPLAY}`;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillText(U.formatTime(g.time), W / 2 + 2, top + 22);
-      ctx.fillStyle = remaining < 60 ? '#e3a33b' : '#ebe2cf';
-      ctx.fillText(U.formatTime(g.time), W / 2, top + 20);
-      ctx.font = `500 10px ${FONT_MONO}`;
-      ctx.fillStyle = '#8f8a7d';
-      ctx.fillText('EVAC IN ' + U.formatTime(remaining) + (g.difficulty !== OO.DIFFICULTY.standard ? ' · ' + g.difficulty.name.toUpperCase() : ''), W / 2, top + 58);
-
-      // Strain level (enemy leveling). Colour climbs with the level; ADAPTING shows while the
-      // dynamic part is rising because too many kills are one-hit kills.
-      const S = g.strain, sl = S.level;
-      ctx.font = `700 11px ${FONT_MONO}`;
-      ctx.fillStyle = sl >= 12 ? '#ff5a4a' : sl >= 6 ? '#e3a33b' : '#ebe2cf';
-      const surge = g.surgeMinutes() > 0 ? '  \u00B7  SURGE HP x' + g.surgeHp().toFixed(1) + (S.capped ? ' (MAX)' : '') + ' DMG x' + g.surgeDmg().toFixed(1) : '';
-      if (surge) ctx.fillStyle = '#ff5a4a';
-      const strainText = 'STRAIN LV ' + sl + (S.rising > 0 ? '  \u25B2 ADAPTING' : '') + surge;
-      ctx.fillText(strainText, W / 2, top + 72);
-
-      // Off-screen markers: bosses, elites and supply cases you can't see yet
-      this.drawOffscreenMarkers();
-
-      // Kills and credits (left of the DOM pause/mute buttons)
-      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-      ctx.font = `700 14px ${FONT_MONO}`;
+      const g = this.g, p = g.player, ctx = this.ctx, W = this.w, H = this.h;
       const narrow = W < 560;
-      const rx = narrow ? W - 10 : W - 128, ky = narrow ? 68 : 34, cy = narrow ? 86 : 54;
-      ctx.fillStyle = '#ebe2cf'; ctx.fillText(String(g.kills), rx, top + ky);
-      ctx.drawImage(OO.Icons.image('skull', 14, '#ebe2cf'), rx - ctx.measureText(String(g.kills)).width - 20, top + ky - 7, 14, 14);
-      ctx.fillStyle = '#e3a33b'; ctx.fillText(String(g.credits), rx, top + cy);
-      ctx.drawImage(OO.Icons.image('credits', 14, '#e3a33b'), rx - ctx.measureText(String(g.credits)).width - 20, top + cy - 7, 14, 14);
 
-      // Weapon and gear slots
-      const slot = 30, gap = 4, x0 = 10;
-      const drawSlot = (x, y, icon, lvl, max, color) => {
-        ctx.fillStyle = 'rgba(8,10,9,0.72)'; ctx.fillRect(x, y, slot, slot);
-        ctx.strokeStyle = lvl >= max ? '#e3a33b' : '#3a3a34'; ctx.lineWidth = 1;
+      // XP: a thin specimen-tube strip across the top
+      const T = g.team, prog = U.clamp(T.xp / T.xpNext, 0, 1);
+      ctx.fillStyle = 'rgba(5,14,16,0.9)'; ctx.fillRect(0, 0, W, 6);
+      const xg = ctx.createLinearGradient(0, 0, W * prog, 0);
+      xg.addColorStop(0, '#1d6f62'); xg.addColorStop(1, '#52e6c6');
+      ctx.fillStyle = xg; ctx.fillRect(0, 0, W * prog, 6);
+      ctx.fillStyle = 'rgba(5,14,16,0.7)';
+      for (let x = 24; x < W; x += 24) ctx.fillRect(x, 0, 1, 6);
+      ctx.fillStyle = '#2e5a5f'; ctx.fillRect(0, 6, W, 1);
+
+      // Vitals monitor, then weapon and gear slots under it
+      const vx = 12, vy = 14, vw = narrow ? 200 : 250;
+      const vh = this.drawVitals(vx, vy, vw, p, true);
+      ctx.font = `700 11px ${FONT_MONO}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillStyle = '#52e6c6';
+      const lvl = 'LV ' + T.level;
+      ctx.fillText(lvl, vx + vw + 8, vy + 2);
+
+      const slot = 30, gap = 4, sy0 = vy + vh + 8;
+      const drawSlot = (x, y, icon, lvl2, max, color) => {
+        ctx.fillStyle = 'rgba(5,14,16,0.78)'; ctx.fillRect(x, y, slot, slot);
+        ctx.strokeStyle = lvl2 >= max ? color : 'rgba(46,90,95,0.7)'; ctx.lineWidth = 1;
         ctx.strokeRect(x + 0.5, y + 0.5, slot - 1, slot - 1);
         ctx.drawImage(OO.Icons.image(icon, 20, color), x + 5, y + 4, 20, 20);
         const pip = (slot - 6) / max;
         for (let i = 0; i < max; i++) {
-          ctx.fillStyle = i < lvl ? color : 'rgba(235,226,207,0.15)';
+          ctx.fillStyle = i < lvl2 ? color : 'rgba(220,231,227,0.12)';
           ctx.fillRect(x + 3 + i * pip, y + slot - 4, Math.max(1, pip - 1), 2);
         }
       };
-      p.weapons.forEach((w, i) => drawSlot(x0 + i * (slot + gap), top + 22, w.def.icon, w.level, w.maxLevel, w.def.evolved ? '#ff6f4a' : '#e3a33b'));
-      p.passiveOrder.forEach((id, i) => drawSlot(x0 + i * (slot + gap), top + 22 + slot + gap, OO.PASSIVES[id].icon, p.passives[id], OO.PASSIVES[id].max, '#56d6c0'));
+      p.weapons.forEach((w, i) => drawSlot(vx + i * (slot + gap), sy0, w.def.icon, w.level, w.maxLevel, w.def.evolved ? '#ff7a52' : '#f2b23a'));
+      p.passiveOrder.forEach((id, i) => drawSlot(vx + i * (slot + gap), sy0 + slot + gap, OO.PASSIVES[id].icon, p.passives[id], OO.PASSIVES[id].max, '#52e6c6'));
+      if (g.players.length > 1) this.drawPartnerPanel(sy0 + (slot + gap) * 2 + 6, vw);
+
+      // Mission clock, centre top
+      const remaining = OO.CONFIG.RUN_LENGTH - g.time;
+      const cw = narrow ? 120 : 150, cx = W / 2 - cw / 2, cy = 14;
+      this.plate(cx, cy, cw, 44, remaining < 60 ? '#f2b23a' : '#52e6c6');
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.font = `600 ${narrow ? 22 : 26}px ${FONT_MONO}`;
+      ctx.fillStyle = remaining < 60 ? '#f2b23a' : '#dce7e3';
+      ctx.fillText(U.formatTime(g.time), W / 2, cy + 4);
+      ctx.font = `600 10px ${FONT_UI}`;
+      ctx.fillStyle = '#82a09b';
+      ctx.fillText('Evac in ' + U.formatTime(remaining) + (g.difficulty !== OO.DIFFICULTY.standard ? '  ' + g.difficulty.name : ''), W / 2, cy + (narrow ? 29 : 32) - 1);
+
+      // Strain line under the clock
+      const S = g.strain, sl = S.level;
+      ctx.font = `600 11px ${FONT_MONO}`;
+      ctx.fillStyle = sl >= 12 ? '#ff3b4e' : sl >= 6 ? '#f2b23a' : '#82a09b';
+      const surge = g.surgeMinutes() > 0 ? '   SURGE HP x' + g.surgeHp().toFixed(1) + (S.capped ? ' (MAX)' : '') + '  DMG x' + g.surgeDmg().toFixed(1) : '';
+      if (surge) ctx.fillStyle = '#ff3b4e';
+      ctx.fillText('STRAIN ' + sl + (S.rising > 0 ? '  ▲ ADAPTING' : '') + surge, W / 2, cy + 50);
+
+      this.drawOffscreenMarkers();
+
+      // Kills and credits, left of the DOM pause/mute buttons
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.font = `600 14px ${FONT_MONO}`;
+      const rx = narrow ? W - 12 : W - 128, ky = narrow ? 62 : 30, cry = narrow ? 80 : 50;
+      ctx.fillStyle = '#dce7e3'; ctx.fillText(String(g.kills), rx, ky);
+      ctx.drawImage(OO.Icons.image('skull', 14, '#82a09b'), rx - ctx.measureText(String(g.kills)).width - 20, ky - 7, 14, 14);
+      ctx.fillStyle = '#f2b23a'; ctx.fillText(String(g.credits), rx, cry);
+      ctx.drawImage(OO.Icons.image('credits', 14, '#f2b23a'), rx - ctx.measureText(String(g.credits)).width - 20, cry - 7, 14, 14);
 
       // Stampede origin arrows at the screen edge
       for (const st of g.stampedes) {
         const L = g.stampedeLane(st);
         const ang = Math.atan2(L.sy - p.y, L.sx - p.x);
-        const cx = W / 2, cy = this.h / 2, m = 46;
+        const ccx = W / 2, ccy = H / 2, m = 46;
         const tx = Math.cos(ang), ty = Math.sin(ang);
-        const s = Math.min((cx - m) / Math.max(Math.abs(tx), 1e-3), (cy - m) / Math.max(Math.abs(ty), 1e-3));
-        const ex = cx + tx * s, ey = cy + ty * s;
+        const sc = Math.min((ccx - m) / Math.max(Math.abs(tx), 1e-3), (ccy - m) / Math.max(Math.abs(ty), 1e-3));
+        const ex = ccx + tx * sc, ey = ccy + ty * sc;
         const pulse = 0.55 + 0.45 * Math.sin(g.time * (st.locked ? 30 : 10));
         ctx.save();
         ctx.translate(ex, ey); ctx.rotate(ang + Math.PI);
-        ctx.fillStyle = `rgba(255,60,45,${pulse})`;
+        ctx.fillStyle = `rgba(255,59,78,${pulse})`;
         for (let i = 0; i < 3; i++) {
           ctx.beginPath(); ctx.moveTo(-14 + i * 12, -14); ctx.lineTo(i * 12, 0); ctx.lineTo(-14 + i * 12, 14); ctx.lineTo(-8 + i * 12, 0); ctx.closePath(); ctx.fill();
         }
         ctx.restore();
-        ctx.font = `800 16px ${FONT_DISPLAY}`;
+        ctx.font = `700 14px ${FONT_UI}`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = `rgba(255,90,70,${pulse})`;
+        ctx.fillStyle = `rgba(255,90,100,${pulse})`;
         ctx.fillText(st.locked ? 'INCOMING' : 'STAMPEDE', ex - tx * 46, ey - ty * 46);
       }
 
-      // Boss health
+      // Boss health: a name plate over a segmented bar
       const bosses = g.bosses;
       if (bosses.length) {
         let hp = 0, max = 0;
         for (const b of bosses) { hp += Math.max(0, b.hp); max += b.maxHp; }
-        const bw = Math.min(440, W - 40), bx = (W - bw) / 2, by = top + (W < 560 ? 122 : 106);
-        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        ctx.font = `800 15px ${FONT_DISPLAY}`;
-        ctx.fillStyle = '#ff5a4a';
+        const bw = Math.min(460, W - 40), bx = (W - bw) / 2, by = narrow ? 112 : 100;
         const mech = bosses.find((b) => b.def.mech);
-        const label = mech ? 'HARE TRIGGER' + (mech.ai.over ? '  \u00B7  OVERDRIVE' : '') : bosses.length > 1 ? 'THE STALKERS' : 'THE STALKER';
-        ctx.fillText(label, W / 2, by - 2);
+        const label = mech ? 'HARE TRIGGER' + (mech.ai.over ? '  ·  OVERDRIVE' : '') : bosses.length > 1 ? 'THE STALKERS' : 'THE STALKER';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+        ctx.font = `700 14px ${FONT_UI}`; ctx.fillStyle = '#ff3b4e';
+        ctx.fillText(label, bx, by - 3);
         if (mech) {
-          ctx.textBaseline = 'top'; ctx.font = `700 10px ${FONT_MONO}`; ctx.fillStyle = '#f4a6c0';
-          ctx.fillText('PILOT: BISCUIT (LAB SUBJECT B-0)', W / 2, by + 11);
-          ctx.textBaseline = 'bottom';
+          ctx.textAlign = 'right'; ctx.font = `600 10px ${FONT_UI}`; ctx.fillStyle = '#f4a6c0';
+          ctx.fillText('Pilot: Biscuit (lab subject B-0)', bx + bw, by - 4);
         }
-        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(bx - 2, by - 1, bw + 4, 10);
-        ctx.fillStyle = '#5e0f0c'; ctx.fillRect(bx, by + 1, bw, 6);
-        ctx.fillStyle = '#d4291f'; ctx.fillRect(bx, by + 1, bw * (hp / max), 6);
+        ctx.fillStyle = 'rgba(5,14,16,0.85)'; ctx.fillRect(bx - 2, by - 1, bw + 4, 11);
+        ctx.fillStyle = '#4a0c14'; ctx.fillRect(bx, by + 1, bw, 7);
+        const bg = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+        bg.addColorStop(0, '#8f1020'); bg.addColorStop(1, '#ff3b4e');
+        ctx.fillStyle = bg; ctx.fillRect(bx, by + 1, bw * (hp / max), 7);
+        ctx.fillStyle = 'rgba(5,14,16,0.85)';
+        for (let i = 1; i < 20; i++) ctx.fillRect(bx + (bw / 20) * i, by + 1, 1, 7);
       }
-      ctx.textBaseline = 'alphabetic';
+      ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
     }
 
-    /** Co-op: partner's name, HP and status under your gear slots. */
-    drawPartnerPanel(y) {
-      const g = this.g, ctx = this.ctx;
+    /** Co-op: partner's vitals (small monitor) under your gear slots. */
+    drawPartnerPanel(y, w) {
+      const g = this.g;
       for (const q of g.players) {
         if (q === g.player) continue;
-        const x = 10, w = 150;
-        ctx.fillStyle = 'rgba(8,10,9,0.72)'; ctx.fillRect(x, y, w, 30);
-        ctx.strokeStyle = q.tint; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 29);
-        ctx.font = `700 10px ${FONT_MONO}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-        ctx.fillStyle = q.tint; ctx.fillText(q.tag + ' ' + q.name.toUpperCase(), x + 6, y + 4);
-        const k = q.stats && q.stats.maxHp ? U.clamp(q.hp / q.stats.maxHp, 0, 1) : 0;
-        ctx.fillStyle = '#3a0c0a'; ctx.fillRect(x + 6, y + 19, w - 12, 5);
-        ctx.fillStyle = q.downed ? '#ff5a4a' : '#c62a22'; ctx.fillRect(x + 6, y + 19, (w - 12) * (q.downed ? U.clamp(q.reviveT / OO.CONFIG.COOP.reviveTime, 0, 1) : k), 5);
-        if (q.downed) {
-          ctx.textAlign = 'right'; ctx.fillStyle = '#ff5a4a';
-          ctx.fillText('DOWN', x + w - 6, y + 4);
-        }
-        ctx.textBaseline = 'alphabetic';
-        y += 36;
+        y += this.drawVitals(12, y, Math.min(w, 200), q, false) + 6;
       }
     }
 

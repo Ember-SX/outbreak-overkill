@@ -33,7 +33,7 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
   g.setDifficulty(difficulty);
   // Don't let simulated runs touch the real Armory bank or records.
   const savedMeta = JSON.stringify(g.meta), savedRecords = JSON.stringify(g.records);
-  g.meta = { bank: 0, ranks: {} };
+  g.meta = { bank: 0, ranks: {}, skins: {}, outfit: {} };
 
   // Attribute damage taken to its source. In god mode damage is counted but never applied.
   const src = {};
@@ -124,6 +124,7 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
     for (const bot of ['random', 'smart']) {
       for (let r = 0; r < runs; r++) {
         for (const k in src) delete src[k];
+        const bank0 = g.meta.bank;
         g.start(ch);
         let steps = 0, boss = null, minute = 0;
         const hpCurve = [];
@@ -138,7 +139,7 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
           else if (g.state === 'chest') g.closeChest();
         }
         out.push({
-          ch, bot, won: g.time >= OO.CONFIG.RUN_LENGTH, time: Math.round(g.time), level: g.team.level, kills: g.kills,
+          ch, bot, won: g.time >= OO.CONFIG.RUN_LENGTH, payout: g.meta.bank - bank0, time: Math.round(g.time), level: g.team.level, kills: g.kills,
           weapons: g.player.weapons.map((w) => w.id + (w.def.evolved ? '*' : w.level)).join(' '),
           boss: boss ? (boss.dead ? 'scrapped at ' + Math.floor(g.time / 60) + ':' + String(Math.floor(g.time % 60)).padStart(2, '0') : Math.round(100 * boss.hp / boss.maxHp) + '% HP left') : '-',
           hpCurve: hpCurve.join(' '),
@@ -155,7 +156,7 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 console.log(`\n${difficulty}, ${runs} run(s) per operative per bot${god ? ' (god mode: damage counted, not applied)' : ''}\n`);
 for (const r of results) {
-  console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.won ? 'EVAC ' : 'died '} ${fmt(r.time).padStart(5)}  L${String(r.level).padEnd(3)} ${String(r.kills).padStart(6)} kills  [${r.weapons}]  mech: ${r.boss}  dmg: ${r.damage}`);
+  console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.won ? 'EVAC ' : 'died '} ${fmt(r.time).padStart(5)}  L${String(r.level).padEnd(3)} ${String(r.kills).padStart(6)} kills ${String(r.payout).padStart(4)} cr  [${r.weapons}]  mech: ${r.boss}  dmg: ${r.damage}`);
 }
 if (god) {
   console.log('\nShambler HP multiplier at each minute mark (0:00, 1:00, ...):');
