@@ -4,7 +4,7 @@ A bio-horror horde survival game for the browser. You play one operative inside 
 
 The core loop follows the Vampire Survivors formula: move only, auto-firing weapons, XP gems (DNA samples here), a pick-one-of-three upgrade screen, weapon and passive slots, elites that drop supply cases, and a wave script that escalates until you're overrun or extracted.
 
-**Status:** v0.4.0. Playable start to finish, solo or 2-player online co-op, with cover, ranged infected, invincible stampedes, enemy leveling, a late-game surge, weapon evolutions and an Armory between runs.
+**Status:** v0.5.0. Playable start to finish, solo or 2-player online co-op, with cover, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions and an Armory between runs.
 
 ## Play it
 
@@ -25,7 +25,7 @@ No install, no build step.
 | Mute | M | Sound button |
 | Debug overlay | ` (backtick) | — |
 
-With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heals, **B** spawns The Stalker, **J** adds a strain level. The overlay also shows the strain breakdown, the current one-hit-kill share and a shambler's HP at the current level, which is the quickest way to judge the enemy scaling while you play.
+With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heals, **B** spawns The Stalker, **N** spawns the Hare Trigger, **J** adds a strain level. The overlay also shows the strain breakdown, the current one-hit-kill share and a shambler's HP at the current level, which is the quickest way to judge the enemy scaling while you play.
 
 ## What's in the game
 
@@ -52,7 +52,14 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 | Sawblade Drones | Speed Loader | Buzzsaw Halo (never stops) |
 | Tesla Coil | Scavenger Pack | Arc Storm |
 
-**Infected:** Shambler, Rot Hound, Skinner, Bloater (explodes in bile, hurts you and other infected), Spitter (keeps its distance, swells up, then lobs acid at where you're heading; the pool lingers), Burster (only arrives in stampedes, can't be damaged by anything, explodes on impact), Brute (elite, drops a supply case), The Stalker (boss at 5:00, 10:00 and 14:00, telegraphs and charges).
+**Infected:** Shambler, Rot Hound, Skinner, Bloater (explodes in bile, hurts you and other infected), Spitter (keeps its distance, swells up, then lobs acid at where you're heading; the pool lingers), Burster (only arrives in stampedes, can't be damaged by anything, explodes on impact), Brute (elite, drops a supply case), The Stalker (boss at 5:00 and 10:00, telegraphs and charges).
+
+**Final boss: the HARE TRIGGER (14:00).** Lab subject B-0, a small white rabbit called Biscuit, has stolen a combat mech and wants a word with you. It rocket-jumps in on a marked spot, then hunts the nearest operative:
+- **Stomp walk.** It turns its whole frame to follow you and can't strafe, so circling it works. It is slower than you.
+- **Rocket leap.** It crouches and a red reticle marks where you're heading, then it jumps (can't be hit in the air) and lands with a shockwave. Cover doesn't help, so get out of the ring. It staggers briefly after landing; that's your window. If you run far away, it leaps after you.
+- **Carrot missiles.** Orange reticles go down on you, ahead of you and around you, and a volley arcs in one after another. Cover blocks the blasts, and they hurt the horde too.
+- **Overdrive (below half health).** Faster, shorter pauses, bigger volleys, and a **visor laser**: a dashed line tracks you, goes solid when it locks, then the beam sweeps toward you. Walls stop it; outrun the sweep up close or put an obstacle between you.
+- Destroy it and it drops a big supply case and herbs, and Biscuit ejects by parachute, unharmed and furious. Tuning lives in `OO.ENEMIES.mecha.mech`; the AI is in `js/boss.js`.
 
 **Stampedes:** a rumble, rising screen shake and distant shrieks give 3 seconds of warning. A red lane shows where the row of Bursters will run, with a STAMPEDE arrow on the screen edge they come from. The lane follows you until it locks 0.8s before launch. Bursters are invincible: auto-aim ignores them and bullets glance off their carapace, so you can't thin the row out. Get behind a car, barrier or pillar: obstacles stop Bursters and block every blast, including Bloater bile. The two-slot gap in the row is also safe.
 
@@ -70,6 +77,8 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 
 **Late-game surge:** from 6:00, enemy HP compounds +20% and enemy damage +12% every minute on top of the strain level (The Stalker gets half the HP rate; Burster blasts skip the damage surge). A banner announces it and the strain line on the HUD turns red with the live multipliers. A shambler's contact hit goes from 15 to 24 at 10:00 and from 18 to 49 at 15:00. Tuning lives in `OO.CONFIG.SURGE`.
 
+**HP cap at 13:00:** enemy HP stops growing at 13:00 (`OO.CONFIG.LEVELING.hpCapTime`). The clock part of the strain level, the surge HP multiplier and the adaptive bonus all freeze there, so infected spawning in the last two minutes have the same HP as at 13:00. A Standard shambler tops out at x26.6 its base HP instead of reaching about x50 by 15:00. The HUD marks the HP multiplier with (MAX). Enemy damage keeps rising.
+
 **Threat levels:** Standard uses what v0.2 called Nightmare (35% tougher, 25% harder-hitting, 25% bigger waves). Nightmare is locked until it gets its own tuning in a future update.
 
 **Pickups:** DNA samples (XP), Green Herb (heal), Scanner (pulls every sample on the map), Airstrike Flare (clears the screen), credits, supply cases. Supply crates spawn around the map; shoot them open. Items on the ground despawn (DNA samples after 60s, other items after 45s; supply cases never) and blink for their last 5 seconds. If 320 samples are already on the ground, the oldest one is recycled and its XP rides along with the new drop. Tuning lives in `OO.CONFIG.PICKUPS`.
@@ -82,7 +91,12 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 - Each player banks their own payout. After a run, **Back to lobby** keeps the room open for another go.
 - If your partner drops, the host keeps playing solo; if the host drops, the run ends for the partner.
 
+- The host's lobby shows **Joining…** as soon as someone dials in, and explains if their connection couldn't get through. The room stays open for another try.
+- The lobby shows whether your link is **direct** or goes **via relay server**.
+
 Co-op needs an internet connection and a page served over http(s) (GitHub Pages, or `npm start` locally). It won't work inside the in-chat preview, which can't open network connections. Tuning lives in `OO.CONFIG.COOP`.
+
+**Can't connect?** Strict firewalls (offices, schools, some mobile and public Wi-Fi) block direct browser-to-browser links. The game then routes through a TURN relay server: first any relay you set under **Co-op > Connection settings**, then the free Open Relay servers on ports 80 and 443 (UDP, TCP and TLS, which nearly every firewall allows), then the PeerJS relays. The joiner tries every route first and, if nothing opens within 10 seconds, retries over relays only. Free public relays are best effort. If they're busy, a free TURN account (for example Metered or Cloudflare) gives you your own: paste its `turn:` address, username and password into Connection settings, or a Metered credentials URL (`https://<app>.metered.live/api/v1/turn/credentials?apiKey=...`) as the server. The settings are saved in your browser. The player on the strict network is the one who needs it.
 
 **Presentation:** flashlight darkness with glowing eyes in the dark, blood and bile decals, screen shake, damage numbers, synthesized sound (Web Audio, no files), a low-HP heartbeat, edge markers for off-screen bosses, elites and supply cases. Screen shake and damage numbers can be switched off from the pause screen.
 
@@ -104,6 +118,7 @@ js/
   ui.js             DOM screens: menu, level up, supply case, pause, results
   game.js           run state, fixed-timestep loop, simulation (any number of players)
   net.js            PeerJS wrapper: rooms, 3-digit codes, the data channel
+  boss.js           the Hare Trigger final boss (AI, attacks, co-op state)
   coop.js           co-op lobby, host snapshots, client mirroring
   vendor/peerjs.min.js  PeerJS 1.5.5 (MIT), vendored so the game has no CDN dependency
   main.js           boot
@@ -137,6 +152,8 @@ npm run sim                       # 2 runs per operative per bot
 npm run sim -- standard 3         # threat level, runs per combination
 ```
 
+`npm run sim -- standard 1 god` makes the bots unkillable (damage is counted but not applied), so they reach the last minutes. It prints a shambler's HP multiplier at every minute mark (it should go flat from 13:00) and how much of the Hare Trigger's health each bot took off.
+
 The bots play nothing like a person, so treat this as a smoke test (does a run still play through without errors, did a change move things wildly) and do the real balance judgement by playing. v0.3's enemy leveling was tuned by hand play, not by the bots.
 
 ## Roadmap
@@ -148,6 +165,8 @@ Done in v0.2: weapon evolutions, the Armory, cover, Spitters, Burster stampedes,
 Done in v0.3: enemy leveling (strain), harder Standard baseline, invincible Bursters.
 
 Done in v0.4: late-game surge, pickup despawn and cap fix, 2-player online co-op.
+
+Done in v0.5: co-op through strict firewalls (TURN relays, relay fallback, sturdier handshake), the 13:00 HP cap, the Hare Trigger final boss.
 
 Next up: give **Nightmare** its own tuning (faster strain growth, more stampedes) and unlock it.
 
@@ -175,6 +194,17 @@ npx peer --port 9000 --host 127.0.0.1    # terminal 1: local signalling server
 npm start                                # terminal 2: serves the game on :8080
 # open http://localhost:8080/?peer=127.0.0.1:9000 in two windows
 ```
+
+Connection steps:
+1. The joiner dials the host's room id.
+2. If the signalling server says the room doesn't exist, the joiner retries twice before showing "There is no room". This covers a host who is still opening the room, or who is briefly reconnecting.
+3. The joiner says `hello` once a second until the host answers `welcome`, so a message lost in a race at channel open can't strand the lobby.
+4. If the host loses the signalling server, it reconnects under the same room id with backoff. An open game link doesn't need the signalling server, so a running game is not affected.
+
+URL options for testing:
+- `?turn=turn:host:port&turnuser=...&turnpass=...` adds a relay.
+- `?relays=off` drops the built-in public relays.
+- `?ice=relay` forces relay-only links.
 
 Both players must be on the same game version; the host turns away a mismatched version with a clear message.
 
