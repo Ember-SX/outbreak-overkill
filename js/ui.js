@@ -19,12 +19,18 @@
       this.buildDifficulty();
       this.updateSettings();
       $('btn-start').addEventListener('click', () => this.startRun());
-      $('btn-armory').addEventListener('click', () => this.showArmory());
+      $('btn-armory').addEventListener('click', () => this.showArmory('upgrades'));
+      $('btn-outfit').addEventListener('click', () => { this.wardrobeChar = this.selectedChar; this.showArmory('wardrobe'); });
       $('armory-back').addEventListener('click', () => this.showMenu());
-      $('armory-refund').addEventListener('click', () => { this.g.refundArmory(); this.showArmory(); });
+      $('armory-refund').addEventListener('click', () => { this.g.refundArmory(); this.showArmory('upgrades'); });
+      $('tab-upgrades').addEventListener('click', () => this.showArmory('upgrades'));
+      $('tab-wardrobe').addEventListener('click', () => this.showArmory('wardrobe'));
+      this.wardrobeChar = this.selectedChar;
+      this.armoryTab = 'upgrades';
       $('btn-reroll').addEventListener('click', () => { if (performance.now() >= this.lockUntil) this.g.requestReroll(); });
       $('set-shake').addEventListener('click', () => { this.g.toggleSetting('shake'); this.updateSettings(); });
       $('set-numbers').addEventListener('click', () => { this.g.toggleSetting('damageNumbers'); this.updateSettings(); });
+      $('set-fx').addEventListener('click', () => { this.g.toggleSetting('fx'); this.updateSettings(); });
       $('btn-skip').addEventListener('click', () => { if (performance.now() >= this.lockUntil) this.g.requestSkip(); });
       $('btn-resume').addEventListener('click', () => this.g.resume());
       $('btn-quit').addEventListener('click', () => this.g.quitToMenu());
@@ -130,21 +136,36 @@
       const list = $('char-list');
       list.innerHTML = '';
       for (const id in OO.CHARACTERS) {
-        const c = OO.CHARACTERS[id], w = OO.WEAPONS[c.weapon];
+        const c = OO.CHARACTERS[id];
         const b = document.createElement('button');
-        b.className = 'char-card';
+        b.type = 'button';
+        b.className = 'char-tab';
         b.id = 'char-' + id;
-        b.setAttribute('aria-pressed', String(id === this.selectedChar));
-        b.innerHTML = `
-          <span class="char-photo"><img src="${OO.Icons.url(w.icon, 36, '#d9ceb2')}" alt=""></span>
-          <span class="char-body">
-            <span class="char-name">${esc(c.name)}</span>
-            <span class="char-role">${esc(c.role)}</span>
-            <span class="char-kit">Starts with ${esc(w.name)}</span>
-            <span class="char-bonus">${esc(c.bonusText)}</span>
-          </span>`;
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(id === this.selectedChar));
+        b.innerHTML = `<span class="char-thumb"></span><span class="char-tab-name">${esc(c.name.split(' ')[0])}</span>`;
         b.addEventListener('click', () => this.selectChar(id));
         list.appendChild(b);
+      }
+      this.refreshDossier();
+    }
+
+    /** The operative dossier on the main menu: big portrait in the equipped outfit plus the facts. */
+    refreshDossier() {
+      const id = this.selectedChar, c = OO.CHARACTERS[id], w = OO.WEAPONS[c.weapon];
+      const skin = OO.Characters.skinOf(id, this.g.skinFor(id));
+      const wrap = $('dossier-portrait');
+      wrap.innerHTML = '';
+      wrap.appendChild(OO.Characters.portraitElement(id, skin.id, 228, 'portrait'));
+      $('dossier-name').textContent = c.name;
+      $('dossier-role').textContent = c.role;
+      $('dossier-weapon').textContent = w.name;
+      $('dossier-bonus').textContent = c.bonusText;
+      $('dossier-outfit').textContent = skin.name;
+      for (const cid in OO.CHARACTERS) {
+        const thumb = $('char-' + cid).querySelector('.char-thumb');
+        thumb.innerHTML = '';
+        thumb.appendChild(OO.Characters.portraitElement(cid, this.g.skinFor(cid), 54, 'thumb'));
       }
     }
 
@@ -174,11 +195,15 @@
       const s = this.g.settings;
       $('set-shake').textContent = 'Screen shake: ' + (s.shake ? 'on' : 'off');
       $('set-numbers').textContent = 'Damage numbers: ' + (s.damageNumbers ? 'on' : 'off');
+      $('set-fx').textContent = 'Atmosphere: ' + ({ auto: 'auto', high: 'high', low: 'low' }[s.fx] || 'auto');
+      $('set-fx').title = 'Haze, dust and film grain. Auto turns them down if the frame rate drops.';
     }
 
     selectChar(id) {
       this.selectedChar = id;
-      for (const cid in OO.CHARACTERS) $('char-' + cid).setAttribute('aria-pressed', String(cid === id));
+      U.storage.set('oo.char', id);
+      for (const cid in OO.CHARACTERS) $('char-' + cid).setAttribute('aria-checked', String(cid === id));
+      this.refreshDossier();
       OO.Audio.init();
       OO.Audio.play('select');
     }
@@ -189,7 +214,28 @@
       $('records').textContent = r.runs
         ? `Longest survival ${U.formatTime(r.bestTime)} · Most kills ${r.bestKills} · Evacuated ${r.wins} of ${r.runs} runs`
         : 'No runs on file yet.';
+      this.refreshDossier();
       $('screen-menu').hidden = false;
+      this.startMenuEcg();
+    }
+
+    /** The heartbeat line under the logo. Runs only while the menu is on screen. */
+    startMenuEcg() {
+      if (this._ecgRun) return;
+      const c = $('menu-ecg');
+      this._ecgRun = true;
+      const loop = (now) => {
+        if ($('screen-menu').hidden) { this._ecgRun = false; return; }
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        const w = c.clientWidth, h = c.clientHeight;
+        if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+        const ctx = c.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+        OO.ECG.draw(ctx, 0, 0, w, h, now / 1000, { bpm: 64, color: '#52e6c6', reduced: this.g.reducedMotion, grid: false });
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
     }
 
     hideAll() { for (const s of this.screens) $(s).hidden = true; }
@@ -203,11 +249,23 @@
     }
 
     // ------------------------------------------------------------ armory
-    showArmory() {
+    showArmory(tab) {
       this.hideAll();
       const g = this.g;
+      this.armoryTab = tab || this.armoryTab || 'upgrades';
+      const wardrobe = this.armoryTab === 'wardrobe';
+      $('tab-upgrades').setAttribute('aria-selected', String(!wardrobe));
+      $('tab-wardrobe').setAttribute('aria-selected', String(wardrobe));
+      $('armory-upgrades').hidden = wardrobe;
+      $('armory-wardrobe').hidden = !wardrobe;
+      $('armory-refund').hidden = wardrobe;
       $('armory-bank').textContent = g.meta.bank.toLocaleString();
-      const list = $('armory-list');
+      if (wardrobe) this.renderWardrobe(); else this.renderUpgrades();
+      $('screen-armory').hidden = false;
+    }
+
+    renderUpgrades() {
+      const g = this.g, list = $('armory-list');
       list.innerHTML = '';
       for (const item of OO.ARMORY) {
         const r = g.rank(item.id), maxed = r >= item.max, cost = maxed ? 0 : item.cost[r];
@@ -215,7 +273,7 @@
         row.className = 'armory-item' + (maxed ? ' maxed' : '');
         const pips = Array.from({ length: item.max }, (_, i) => `<i class="${i < r ? 'on' : ''}"></i>`).join('');
         row.innerHTML = `
-          <img src="${OO.Icons.url(item.icon, 28, '#e3a33b')}" alt="">
+          <img src="${OO.Icons.url(item.icon, 28, '#52e6c6')}" alt="">
           <div class="armory-body">
             <span class="armory-name">${esc(item.name)}</span>
             <span class="armory-text">${esc(item.text)}</span>
@@ -226,11 +284,57 @@
         b.className = 'btn-small btn-buy';
         b.textContent = maxed ? 'Maxed' : cost + ' cr';
         b.disabled = maxed || g.meta.bank < cost;
-        b.addEventListener('click', () => { if (g.buyArmory(item.id)) { OO.Audio.init(); OO.Audio.play('chest'); this.showArmory(); } });
+        b.addEventListener('click', () => { if (g.buyArmory(item.id)) { OO.Audio.init(); OO.Audio.play('chest'); this.showArmory('upgrades'); } });
         row.appendChild(b);
         list.appendChild(row);
       }
-      $('screen-armory').hidden = false;
+    }
+
+    /** Wardrobe: five outfits per operative. Buy with banked credits, then equip. */
+    renderWardrobe() {
+      const g = this.g, cid = this.wardrobeChar in OO.CHARACTERS ? this.wardrobeChar : this.selectedChar;
+      $('skin-cost').textContent = OO.SKIN_COST.toLocaleString();
+      const seg = $('wardrobe-chars');
+      seg.innerHTML = '';
+      for (const id in OO.CHARACTERS) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'seg-btn';
+        b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(id === cid));
+        b.textContent = OO.CHARACTERS[id].name;
+        b.addEventListener('click', () => { this.wardrobeChar = id; this.showArmory('wardrobe'); });
+        seg.appendChild(b);
+      }
+      const list = $('wardrobe-list');
+      list.innerHTML = '';
+      const equipped = g.skinFor(cid);
+      for (const skin of OO.SKINS[cid]) {
+        const owned = g.ownsSkin(cid, skin.id), on = equipped === skin.id;
+        const card = document.createElement('article');
+        card.className = 'outfit' + (on ? ' equipped' : '') + (owned ? '' : ' locked');
+        const fig = document.createElement('div');
+        fig.className = 'outfit-fig';
+        fig.appendChild(OO.Characters.portraitElement(cid, skin.id, 132, 'portrait'));
+        card.appendChild(fig);
+        const body = document.createElement('div');
+        body.className = 'outfit-body';
+        body.innerHTML = `<h3 class="outfit-name">${esc(skin.name)}</h3><p class="outfit-text">${esc(skin.text)}</p>`;
+        const b = document.createElement('button');
+        b.type = 'button';
+        if (on) { b.className = 'btn-small btn-equipped'; b.textContent = 'Equipped'; b.disabled = true; }
+        else if (owned) {
+          b.className = 'btn-small'; b.textContent = 'Equip';
+          b.addEventListener('click', () => { g.equipSkin(cid, skin.id); OO.Audio.init(); OO.Audio.play('select'); this.showArmory('wardrobe'); });
+        } else {
+          const short = skin.cost - g.meta.bank;
+          b.className = 'btn-small btn-buy'; b.textContent = 'Buy ' + skin.cost.toLocaleString() + ' cr';
+          b.disabled = short > 0;
+          if (short > 0) b.title = 'You need ' + short.toLocaleString() + ' more credits';
+          b.addEventListener('click', () => { if (g.buySkin(cid, skin.id)) { OO.Audio.init(); OO.Audio.play('chest'); this.showArmory('wardrobe'); } });
+        }
+        body.appendChild(b);
+        card.appendChild(body);
+        list.appendChild(card);
+      }
     }
 
     // ------------------------------------------------------------ level up
@@ -256,7 +360,7 @@
             <span class="card-type">${esc(d.type)}</span>
             <span class="card-badge">${esc(d.badge)}</span>
           </span>
-          <img class="card-icon" src="${OO.Icons.url(d.icon, 40, '#1b1a17')}" alt="">
+          <img class="card-icon" src="${OO.Icons.url(d.icon, 40, d.isNew ? '#f2b23a' : '#52e6c6')}" alt="">
           <span class="card-name">${esc(d.name)}</span>
           <span class="card-text">${esc(d.text)}</span>`;
         b.addEventListener('click', () => this.pick(i));
@@ -321,7 +425,10 @@
       $('res-title').textContent = r.victory ? 'You made the chopper' : 'You were overrun';
       $('screen-results').classList.toggle('won', r.victory);
       const team = r.coop && r.team ? ' · Co-op: ' + r.team.map((t) => esc(t.tag + ' ' + t.name)).join(', ') : '';
-      $('res-payout').innerHTML = `Banked <strong>+${r.payout.toLocaleString()}</strong> credits for the Armory (${r.bank.toLocaleString()} total) · ${esc(r.difficulty)}${team}`;
+      const locked = Object.keys(OO.SKINS).some((c) => OO.SKINS[c].some((k) => !this.g.ownsSkin(c, k.id)));
+      const toGo = OO.SKIN_COST - r.bank;
+      const outfit = !locked ? '' : toGo > 0 ? ` · ${toGo.toLocaleString()} more for a new outfit` : ' · Enough for a new outfit in the Wardrobe';
+      $('res-payout').innerHTML = `Banked <strong>+${r.payout.toLocaleString()}</strong> credits for the Armory (${r.bank.toLocaleString()} total) · ${esc(r.difficulty)}${team}${outfit}`;
       $('btn-retry').textContent = r.coop && this.g.net ? 'Back to lobby' : 'Deploy again';
       $('res-stats').innerHTML = [
         ['Survived', U.formatTime(r.time)], ['Level', r.level], ['Kills', r.kills], ['Credits', r.credits], ['Strain', 'LV ' + r.strain],

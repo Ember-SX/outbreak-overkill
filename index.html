@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Outbreak Overkill</title>
   <meta name="description" content="A bio-horror horde survival game. Survive 15 minutes in the Cold Harbor quarantine zone until evac arrives.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@600;800&family=IBM+Plex+Mono:wght@500;700&family=Special+Elite&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -24,30 +21,44 @@
   <!-- Main menu -->
   <section id="screen-menu" class="screen screen-menu" hidden>
     <div class="menu">
-      <header class="menu-head">
-        <p class="file-no">Case file 09-27 · Cold Harbor quarantine zone</p>
-        <h1 class="logo"><span class="logo-top">Outbreak</span><span class="logo-bottom">Overkill</span></h1>
-      </header>
+      <div class="menu-main">
+        <header class="menu-head">
+          <p class="zone">Cold Harbor quarantine zone</p>
+          <h1 class="logo"><span class="logo-top">Outbreak</span><span class="logo-bottom">Overkill</span></h1>
+          <canvas id="menu-ecg" class="menu-ecg" aria-hidden="true"></canvas>
+        </header>
 
-      <article class="brief">
-        <span class="stamp">Classified</span>
-        <p>Helix Biotech's Lazarus strain got out of Sub-Level 4 at 02:10. By dawn, Cold Harbor stopped answering the radio.</p>
-        <p>Evac lands in <strong>15:00</strong>. Your weapons fire on their own. Keep moving, collect the DNA samples the infected drop, and pick an upgrade each time you level.</p>
-      </article>
+        <p class="brief">Helix Biotech's Lazarus strain got out of Sub-Level 4 at 02:10. By dawn the town stopped answering the radio. Evac lands in <strong>15:00</strong>. Your weapons fire on their own: keep moving, collect the DNA samples the infected drop, and pick an upgrade every level.</p>
 
-      <h2 class="section-label">Choose operative</h2>
-      <div id="char-list" class="chars"></div>
+        <div class="field">
+          <h2 class="field-label">Threat level</h2>
+          <div id="diff-list" class="threat"></div>
+        </div>
 
-      <h2 class="section-label">Threat level</h2>
-      <div id="diff-list" class="threat"></div>
-
-      <div class="menu-actions">
-        <button id="btn-start" class="btn btn-primary" type="button">Deploy</button>
-        <button id="btn-armory" class="btn btn-ghost" type="button">Armory</button>
-        <button id="btn-coop" class="btn btn-ghost" type="button">Co-op</button>
+        <div class="menu-actions">
+          <button id="btn-start" class="btn btn-primary" type="button">Deploy</button>
+          <button id="btn-armory" class="btn btn-ghost" type="button">Armory</button>
+          <button id="btn-coop" class="btn btn-ghost" type="button">Co-op</button>
+        </div>
+        <p class="controls"><kbd>WASD</kbd> or arrows or drag to move, <kbd>Esc</kbd> pause, <kbd>M</kbd> mute, <kbd>`</kbd> debug</p>
+        <p id="records" class="records"></p>
       </div>
-      <p class="controls"><kbd>WASD</kbd> or arrows or drag to move · <kbd>Esc</kbd> pause · <kbd>M</kbd> mute · <kbd>`</kbd> debug</p>
-      <p id="records" class="records"></p>
+
+      <aside class="dossier" aria-labelledby="dossier-name">
+        <div class="dossier-stage">
+          <div id="dossier-portrait" class="dossier-portrait"></div>
+          <div class="dossier-id">
+            <h2 id="dossier-name" class="dossier-name"></h2>
+            <p id="dossier-role" class="dossier-role"></p>
+          </div>
+        </div>
+        <dl class="dossier-facts">
+          <div><dt>Starting weapon</dt><dd id="dossier-weapon"></dd></div>
+          <div><dt>Field bonus</dt><dd id="dossier-bonus"></dd></div>
+          <div><dt>Outfit</dt><dd><span id="dossier-outfit"></span> <button id="btn-outfit" class="link-btn" type="button">Change</button></dd></div>
+        </dl>
+        <div id="char-list" class="char-tabs" role="radiogroup" aria-label="Choose operative"></div>
+      </aside>
     </div>
   </section>
 
@@ -105,15 +116,30 @@
   <!-- Armory -->
   <section id="screen-armory" class="screen screen-dim" hidden>
     <div class="panel panel-armory">
-      <p class="eyebrow">Between deployments</p>
-      <h2 class="panel-title">Armory</h2>
-      <p class="armory-bank">Banked credits <strong id="armory-bank">0</strong></p>
-      <div id="armory-list" class="armory-list"></div>
+      <div class="armory-head">
+        <h2 class="panel-title">Armory</h2>
+        <p class="armory-bank"><span>Banked credits</span> <strong id="armory-bank">0</strong></p>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Armory sections">
+        <button id="tab-upgrades" class="tab" role="tab" type="button" aria-selected="true" aria-controls="armory-upgrades">Upgrades</button>
+        <button id="tab-wardrobe" class="tab" role="tab" type="button" aria-selected="false" aria-controls="armory-wardrobe">Wardrobe</button>
+      </div>
+
+      <div id="armory-upgrades" role="tabpanel" aria-labelledby="tab-upgrades">
+        <div id="armory-list" class="armory-list"></div>
+        <p class="hint">Upgrades last across runs. Refund all gives every credit back so you can rebuild.</p>
+      </div>
+
+      <div id="armory-wardrobe" role="tabpanel" aria-labelledby="tab-wardrobe" hidden>
+        <div id="wardrobe-chars" class="seg" role="radiogroup" aria-label="Operative"></div>
+        <div id="wardrobe-list" class="wardrobe"></div>
+        <p class="hint">Outfits are cosmetic. Each one costs <span id="skin-cost">1,800</span> credits, about three full evacuations. Your partner sees your outfit in co-op.</p>
+      </div>
+
       <div class="panel-actions">
         <button id="armory-back" class="btn btn-primary" type="button">Back</button>
-        <button id="armory-refund" class="btn btn-ghost" type="button">Refund all</button>
+        <button id="armory-refund" class="btn btn-ghost" type="button">Refund upgrades</button>
       </div>
-      <p class="hint">Every run banks the credits you picked up, plus a payout for kills and time survived.</p>
     </div>
   </section>
 
@@ -157,6 +183,7 @@
       <div class="settings">
         <button id="set-shake" class="btn-small" type="button"></button>
         <button id="set-numbers" class="btn-small" type="button"></button>
+        <button id="set-fx" class="btn-small" type="button"></button>
       </div>
       <div class="panel-actions">
         <button id="btn-resume" class="btn btn-primary" type="button">Resume</button>
@@ -187,9 +214,11 @@
   <script src="js/audio.js"></script>
   <script src="js/input.js"></script>
   <script src="js/icons.js"></script>
+  <script src="js/characters.js"></script>
   <script src="js/world.js"></script>
   <script src="js/weapons.js"></script>
   <script src="js/spawner.js"></script>
+  <script src="js/scenery.js"></script>
   <script src="js/render.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/game.js"></script>

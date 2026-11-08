@@ -34,8 +34,10 @@
       this.grid = new U.SpatialHash(64);
       this._sepBuf = []; this._prBuf = []; this._exBuf = []; this._zoneBuf = [];
       this.records = U.storage.get('oo.records', { bestTime: 0, bestKills: 0, runs: 0, wins: 0 });
-      this.settings = Object.assign({ muted: false, damageNumbers: true, shake: true, difficulty: 'standard' }, U.storage.get('oo.settings', {}));
-      this.meta = Object.assign({ bank: 0, ranks: {} }, U.storage.get('oo.meta', {}));
+      this.settings = Object.assign({ muted: false, damageNumbers: true, shake: true, difficulty: 'standard', fx: 'auto' }, U.storage.get('oo.settings', {}));
+      this.meta = Object.assign({ bank: 0, ranks: {}, skins: {}, outfit: {} }, U.storage.get('oo.meta', {}));
+      if (!this.meta.skins || typeof this.meta.skins !== 'object') this.meta.skins = {};
+      if (!this.meta.outfit || typeof this.meta.outfit !== 'object') this.meta.outfit = {};
       // A save from v0.2 may still have Nightmare selected; fall back to Standard while it is locked.
       const sel = OO.DIFFICULTY[this.settings.difficulty];
       if (!sel || sel.locked) { this.settings.difficulty = 'standard'; U.storage.set('oo.settings', this.settings); }
@@ -95,12 +97,13 @@
       this.world.update(0, 0);
     }
 
-    makePlayer(slot, charId, ranks, local) {
+    makePlayer(slot, charId, ranks, local, skin) {
       const ch = OO.CHARACTERS[charId] || OO.CHARACTERS.mara;
       const P = OO.CONFIG.PLAYER;
       ranks = ranks || {};
       const p = {
         slot, local, charId: OO.CHARACTERS[charId] ? charId : 'mara', name: ch.name, char: ch,
+        skin: OO.Characters.skinOf(OO.CHARACTERS[charId] ? charId : 'mara', skin).id,
         tag: 'P' + (slot + 1), tint: SLOT_TINTS[slot] || '#fff', vest: ch.vest || PLAYER_COLORS[slot],
         x: slot * 44, y: 0, r: P.radius, hp: 1, vx: 0, vy: 0,
         faceAngle: 0, aimAngle: 0, aimT: 0, moving: false, walk: 0, iframes: 0, hurt: 0,
@@ -117,7 +120,7 @@
     start(charId) {
       this.mode = 'solo';
       this.resetRun(Math.floor(Math.random() * 1e9));
-      this.players = [this.makePlayer(0, charId, this.meta.ranks, true)];
+      this.players = [this.makePlayer(0, charId, this.meta.ranks, true, this.skinFor(charId))];
       this.player = this.players[0];
       this.charId = charId;
       this.director = new OO.Director(this);
@@ -190,7 +193,11 @@
     }
 
     toggleSetting(key) {
-      this.settings[key] = !this.settings[key];
+      if (key === 'fx') {
+        // Atmosphere effects: auto (drops to low when the frame rate sags) -> high -> low
+        const order = ['auto', 'high', 'low'];
+        this.settings.fx = order[(order.indexOf(this.settings.fx) + 1) % order.length];
+      } else this.settings[key] = !this.settings[key];
       U.storage.set('oo.settings', this.settings);
     }
 
@@ -221,6 +228,38 @@
       return true;
     }
 
+    // ------------------------------------------------------------ wardrobe (skins)
+    /** The default skin is always owned. */
+    ownsSkin(charId, skinId) {
+      const s = OO.SKINS[charId] && OO.SKINS[charId].find((k) => k.id === skinId);
+      return !!s && (s.cost === 0 || ((this.meta.skins || {})[charId] || []).includes(skinId));
+    }
+
+    skinFor(charId) {
+      const id = (this.meta.outfit || {})[charId];
+      return this.ownsSkin(charId, id) ? id : 'tactical';
+    }
+
+    buySkin(charId, skinId) {
+      const s = OO.SKINS[charId] && OO.SKINS[charId].find((k) => k.id === skinId);
+      if (!s || this.ownsSkin(charId, skinId) || this.meta.bank < s.cost) return false;
+      this.meta.bank -= s.cost;
+      this.meta.skins = this.meta.skins || {}; this.meta.outfit = this.meta.outfit || {};
+      (this.meta.skins[charId] = this.meta.skins[charId] || []).push(skinId);
+      this.meta.outfit[charId] = skinId;
+      this.saveMeta();
+      return true;
+    }
+
+    equipSkin(charId, skinId) {
+      if (!this.ownsSkin(charId, skinId)) return false;
+      this.meta.outfit = this.meta.outfit || {};
+      this.meta.outfit[charId] = skinId;
+      this.saveMeta();
+      return true;
+    }
+
+    /** Refunds Armory upgrades only. Skins are cosmetic purchases and stay owned. */
     refundArmory() {
       for (const item of OO.ARMORY) {
         for (let i = 0; i < this.rank(item.id); i++) this.meta.bank += item.cost[i];
@@ -1326,7 +1365,7 @@
     }
 
     addDecal(x, y, r, kind) {
-      const v = U.randInt(0, 5), rot = U.rand(0, U.TAU);
+      const v = U.randInt(0, 7), rot = U.rand(0, U.TAU);
       if (this.decals.length > 200) this.decals.shift();
       this.decals.push({ x, y, r, kind, rot, v, life: 40 });
       this.emitNear(x, y, ['d', x, y, r, kind, rot, v]);
