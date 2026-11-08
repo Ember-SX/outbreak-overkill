@@ -61,6 +61,22 @@
       $('coop-deploy').addEventListener('click', () => this.g.coopDeploy());
       $('coop-leave').addEventListener('click', () => { this.g.leaveSession(); this.renderCoop({ view: 'choose' }); });
       $('coop-back').addEventListener('click', () => { this.g.leaveSession(); this.showMenu(); });
+      const relayState = () => {
+        const r = OO.Net.relaySettings();
+        $('relay-state').textContent = r.server ? 'Your relay is on' : 'Using public relays';
+      };
+      const fillRelay = () => {
+        const r = OO.Net.relaySettings();
+        $('relay-server').value = r.server || ''; $('relay-user').value = r.username || ''; $('relay-pass').value = r.credential || '';
+        relayState();
+      };
+      $('relay-save').addEventListener('click', () => {
+        OO.Net.saveRelaySettings({ server: $('relay-server').value, username: $('relay-user').value, credential: $('relay-pass').value });
+        relayState();
+        $('relay-state').textContent += ' · saved';
+      });
+      $('relay-clear').addEventListener('click', () => { OO.Net.saveRelaySettings({}); fillRelay(); });
+      fillRelay();
     }
 
     joinFromInput() {
@@ -71,7 +87,7 @@
 
     /**
      * view: 'choose' (Host or Join) | 'room' (code, status, roster).
-     * Other fields: code, status, roster [{tag, name, you}], canDeploy, isHost, error, busy.
+     * Other fields: code, status, roster [{tag, name, you, host, pending}], canDeploy, isHost, error, notice, busy.
      */
     renderCoop(v) {
       this.hideAll();
@@ -82,11 +98,14 @@
       $('coop-host').disabled = !!v.busy;
       $('coop-join').disabled = !!v.busy;
       if (v.view === 'choose' && v.status) { $('coop-error').hidden = false; $('coop-error').textContent = v.status; }
+      if (v.notice) { $('coop-error').hidden = false; $('coop-error').textContent = v.notice; }
+      $('coop-error').className = v.error ? 'coop-error' : 'coop-notice';
+      $('coop-relay').hidden = v.view === 'room';
       if (v.view === 'room') {
         $('coop-room-code').textContent = v.code || '---';
         $('coop-status').textContent = v.status || '';
         $('coop-roster').innerHTML = (v.roster || []).map((r) =>
-          `<li><b class="tag-${esc(r.tag)}">${esc(r.tag)}</b> ${esc(r.name)}${r.you ? ' <em>(you)</em>' : ''}${r.host ? ' <em>host</em>' : ''}</li>`).join('');
+          `<li${r.pending ? ' class="pending"' : ''}><b class="tag-${esc(r.tag)}">${esc(r.tag)}</b> ${esc(r.name)}${r.you ? ' <em>(you)</em>' : ''}${r.host ? ' <em>host</em>' : ''}</li>`).join('');
         $('coop-deploy').hidden = !v.isHost;
         $('coop-deploy').disabled = !v.canDeploy;
       }

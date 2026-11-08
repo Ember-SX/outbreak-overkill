@@ -545,6 +545,18 @@ kbd {
 .coop-roster .tag-P1 { color: var(--dna); }
 .coop-roster .tag-P2 { color: #ff9f4a; }
 .coop-roster em { font-style: normal; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.coop-roster .pending { color: var(--muted); animation: coop-blink 1.2s ease-in-out infinite; }
+@keyframes coop-blink { 50% { opacity: 0.45; } }
+.coop-notice { margin: 0; padding: 8px 10px; font-family: var(--font-mono); font-size: 12px; color: #f1d39a; background: rgba(227, 163, 59, 0.12); border-left: 3px solid var(--amber); }
+.coop-relay { font-size: 13px; color: #b3ac9b; }
+.coop-relay summary { cursor: pointer; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.coop-relay[open] { display: grid; gap: 6px; }
+.coop-relay[hidden] { display: none; }
+.coop-relay[open] summary { margin-bottom: 4px; }
+.coop-relay .coop-note { margin: 0; font-size: 13px; }
+.coop-input.coop-input-wide { width: 100%; font-family: var(--font-mono); font-weight: 400; font-size: 13px; letter-spacing: normal; text-align: left; padding: 7px 9px; }
+.coop-relay-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.coop-relay-actions { display: flex; align-items: center; gap: 8px; }
 .coop-error { margin: 0; padding: 8px 10px; font-family: var(--font-mono); font-size: 12px; color: #ffb3a8; background: rgba(163, 32, 27, 0.18); border-left: 3px solid var(--blood); }
 
 .lu-wait { margin: 0; padding: 24px 0; font-family: var(--font-display); font-weight: 800; font-size: 26px; text-transform: uppercase; color: var(--bone); }

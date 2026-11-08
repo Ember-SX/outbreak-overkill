@@ -33,13 +33,16 @@
   G.hostSession = function (charId) {
     if (!OO.Net.available()) { this.ui.renderCoop({ view: 'choose', error: OO.Coop.unavailableText() }); return; }
     this.leaveSession();
-    this.lobby = { role: 'host', charId, code: null, partner: null };
+    const L = this.lobby = { role: 'host', charId, code: null, partner: null, joining: false, notice: null, netStatus: '' };
     this.ui.renderCoop({ view: 'choose', busy: true, status: 'Opening a room…' });
     this.net = new OO.Net({
-      onHosting: (code) => { this.lobby.code = code; this.renderLobby(); },
+      onHosting: (code) => { L.code = code; this.renderLobby(); },
+      onIncoming: () => { L.joining = true; L.notice = null; OO.Audio.play('select'); this.renderLobby(); },
       onConnected: () => this.renderLobby(),
+      onLinkFailed: (text) => { L.joining = false; L.notice = text; this.renderLobby(); },
       onMessage: (m) => this.onNetMessage(m),
       onDisconnected: () => this.onPartnerLeft(),
+      onStatus: (text) => { L.netStatus = text; this.renderLobby(); },
       onError: (text) => this.lobbyError(text),
     });
     this.net.host();
@@ -48,20 +51,37 @@
   G.joinSession = function (code, charId) {
     if (!OO.Net.available()) { this.ui.renderCoop({ view: 'choose', error: OO.Coop.unavailableText() }); return; }
     this.leaveSession();
-    this.lobby = { role: 'client', charId, code, connected: false, hostName: null };
+    const L = this.lobby = { role: 'client', charId, code, linked: false, connected: false, hostName: null, netStatus: '' };
     this.renderLobby();
+    const hello = () => this.netSend({
+      t: 'hello', v: OO.VERSION, charId, name: OO.CHARACTERS[charId].name,
+      ranks: this.meta.ranks, view: { w: this.viewW, h: this.viewH },
+    });
     this.net = new OO.Net({
       onHosting: () => {},
-      onConnected: () => this.netSend({
-        t: 'hello', v: OO.VERSION, charId, name: OO.CHARACTERS[charId].name,
-        ranks: this.meta.ranks, view: { w: this.viewW, h: this.viewH },
-      }),
+      onIncoming: () => {},
+      onLinkFailed: () => {},
+      onConnected: () => {
+        // Say hello until the host answers: the first message can race the host's side of the link.
+        L.linked = true;
+        hello();
+        clearInterval(this.helloTimer);
+        this.helloTimer = setInterval(() => { if (!this.lobby || this.lobby.connected) clearInterval(this.helloTimer); else hello(); }, 1000);
+        this.renderLobby();
+      },
       onMessage: (m) => this.onNetMessage(m),
       onDisconnected: () => this.onHostLeft(),
+      onStatus: (text) => { L.netStatus = text; this.renderLobby(); },
       onError: (text) => this.lobbyError(text),
     });
     this.net.join(code);
   };
+
+  /** How the link is routed, for the lobby status line. */
+  function linkText(net) {
+    if (!net || !net.connected) return '';
+    return net.link === 'relay' ? ' Link: via relay server.' : net.link === 'direct' ? ' Link: direct.' : '';
+  }
 
   G.renderLobby = function () {
     const L = this.lobby;
@@ -70,16 +90,25 @@
     if (L.role === 'host') {
       const roster = [{ tag: 'P1', name: me, you: true, host: true }];
       if (L.partner) roster.push({ tag: 'P2', name: L.partner.name });
+      else if (L.joining) roster.push({ tag: 'P2', name: 'Joining…', pending: true });
+      const status = L.netStatus ? L.netStatus
+        : !L.code ? 'Opening a room…'
+        : L.partner ? 'Partner connected. Deploy when you are both ready.' + linkText(this.net)
+        : L.joining ? (this.net && this.net.connected ? 'Partner linked. Waiting for their operative…' : 'Someone is joining. Setting up the connection…')
+        : 'Waiting for your partner. Give them this code.';
       this.ui.renderCoop({
-        view: 'room', code: L.code, isHost: true, canDeploy: !!L.partner, roster,
-        status: !L.code ? 'Opening a room…' : L.partner ? 'Partner connected. Deploy when you are both ready.' : 'Waiting for your partner. Give them this code.',
+        view: 'room', code: L.code, isHost: true, canDeploy: !!L.partner && !!this.net && this.net.connected, roster,
+        status, notice: L.partner || L.joining ? null : L.notice,
       });
     } else {
-      const roster = [{ tag: 'P1', name: L.hostName || 'Host', host: true }, { tag: 'P2', name: me, you: true }];
-      this.ui.renderCoop({
-        view: 'room', code: L.code, isHost: false, roster,
-        status: L.connected ? 'Connected. Waiting for the host to deploy.' : 'Connecting to room ' + L.code + '…',
-      });
+      const roster = [];
+      if (L.connected) roster.push({ tag: 'P1', name: L.hostName || 'Host', host: true });
+      roster.push({ tag: 'P2', name: me, you: true });
+      const status = L.connected ? 'Connected. Waiting for the host to deploy.' + linkText(this.net)
+        : L.netStatus ? L.netStatus
+        : L.linked ? 'Linked. Waiting for the host to answer…'
+        : 'Connecting to room ' + L.code + '…';
+      this.ui.renderCoop({ view: 'room', code: L.code, isHost: false, roster, status });
     }
   };
 
@@ -92,6 +121,7 @@
 
   /** Close the connection and forget the room (safe to call any time). */
   G.leaveSession = function () {
+    clearInterval(this.helloTimer);
     if (this.net) { this.netSend({ t: 'bye' }); this.net.close(); }
     this.net = null;
     this.lobby = null;
@@ -130,11 +160,13 @@
           this.netSend({ t: 'reject', reason: 'Version mismatch: the host runs v' + OO.VERSION + ', you run v' + m.v + '. Both of you need the same version.' });
           return;
         }
+        // Hellos repeat until our welcome lands, so answer every one but only greet once.
+        if (!L.partner) OO.Audio.play('select');
         L.partner = { charId: OO.CHARACTERS[m.charId] ? m.charId : 'mara', name: String(m.name || 'Partner').slice(0, 24), ranks: sanitizeRanks(m.ranks) };
+        L.joining = false; L.notice = null;
         this.remoteView = sanitizeView(m.view);
         this.updateSpawnRadius();
         this.netSend({ t: 'welcome', name: OO.CHARACTERS[L.charId].name });
-        OO.Audio.play('select');
         this.renderLobby();
         break;
       case 'view':
@@ -156,7 +188,12 @@
   G.onClientMessage = function (m) {
     const L = this.lobby;
     switch (m.t) {
-      case 'welcome': L.connected = true; L.hostName = m.name; OO.Audio.play('select'); this.renderLobby(); break;
+      case 'welcome':
+        clearInterval(this.helloTimer);
+        if (!L.connected) OO.Audio.play('select');
+        L.connected = true; L.hostName = m.name;
+        this.renderLobby();
+        break;
       case 'reject': this.lobbyError(m.reason); break;
       case 'full': this.lobbyError('Room ' + L.code + ' already has two players.'); break;
       case 'start': this.startClient(m); break;
@@ -179,6 +216,7 @@
   G.onPartnerLeft = function () {
     if (!this.lobby) return;
     this.lobby.partner = null;
+    this.lobby.joining = false;
     this.remoteView = null;
     this.updateSpawnRadius();
     const remote = this.players.find((p) => !p.local);

@@ -81,6 +81,23 @@
       </div>
 
       <p id="coop-error" class="coop-error" role="alert" hidden></p>
+
+      <details id="coop-relay" class="coop-relay">
+        <summary>Connection settings</summary>
+        <p class="coop-note">Can't connect from a work, school or public network? Games normally go through free public relay servers on ports 80 and 443. If those are busy, add your own relay (a TURN server, e.g. a free Metered or Cloudflare account) and enter it here. Only the person on the strict network needs it, but it helps if both of you set it.</p>
+        <label class="coop-label" for="relay-server">Relay server</label>
+        <input id="relay-server" class="coop-input coop-input-wide" type="text" autocomplete="off" spellcheck="false" placeholder="turn:relay.example.com:443?transport=tcp  or  https://… credentials URL">
+        <div class="coop-relay-row">
+          <div><label class="coop-label" for="relay-user">Username</label><input id="relay-user" class="coop-input coop-input-wide" type="text" autocomplete="off" spellcheck="false"></div>
+          <div><label class="coop-label" for="relay-pass">Password</label><input id="relay-pass" class="coop-input coop-input-wide" type="password" autocomplete="off"></div>
+        </div>
+        <div class="coop-relay-row coop-relay-actions">
+          <button id="relay-save" class="btn-small" type="button">Save</button>
+          <button id="relay-clear" class="btn-small" type="button">Clear</button>
+          <span id="relay-state" class="coop-label"></span>
+        </div>
+      </details>
+
       <div><button id="coop-back" class="btn-small" type="button">Back to menu</button></div>
     </div>
   </section>
