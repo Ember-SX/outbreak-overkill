@@ -10,12 +10,15 @@
   const TAU = Math.PI * 2;
   const FONT_DISPLAY = '"Big Shoulders Stencil Display", Impact, "Arial Narrow", sans-serif';
   const FONT_MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
-  const HEAD = { burster: 0.9, spitter: 0.3, shambler: 0.45, hound: 1.45, skinner: 0.35, bloater: 0.6, brute: 0.55, stalker: 0.5 };
-  const ANIM = { burster: 18, spitter: 6, shambler: 5, hound: 16, skinner: 9, bloater: 4, brute: 3, stalker: 4 };   // anim speed (rad/s)
+  const HEAD = { burster: 0.9, spitter: 0.3, shambler: 0.45, hound: 1.45, skinner: 0.35, bloater: 0.6, brute: 0.55, stalker: 0.5, mecha: 1.12 };
+  const ANIM = { burster: 18, spitter: 6, shambler: 5, hound: 16, skinner: 9, bloater: 4, brute: 3, stalker: 4, mecha: 5 };   // anim speed (rad/s)
   const FRAMES = 8;
   const SPRITE_SCALE = 2;
 
   function circle(ctx, x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+  function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
+  /** Height (0..1) of a mech mid rocket-jump, shared by body, eyes and shadow. */
+  function mechLift(e) { return e.ai && e.ai.mode === 'air' ? Math.sin(Math.PI * U.clamp(e.ai.k || 0, 0, 1)) : 0; }
 
   class Renderer {
     constructor(game, canvas) {
@@ -26,10 +29,11 @@
       this.dctx = this.dark.getContext('2d');
       this.groundTile = this.makeGround();
       this.pattern = this.ctx.createPattern(this.groundTile, 'repeat');
-      this.splats = { red: [], bile: [] };
+      this.splats = { red: [], bile: [], scorch: [] };
       for (let i = 0; i < 6; i++) {
         this.splats.red.push(this.makeSplat('#4f0a08', '#7a130f'));
         this.splats.bile.push(this.makeSplat('#4d5a17', '#8b9c2b'));
+        this.splats.scorch.push(this.makeSplat('#141210', '#2e2924'));
       }
       this.menuEyes = [];
       for (let i = 0; i < 14; i++) this.menuEyes.push({ x: Math.random(), y: Math.random(), p: Math.random() * 10, s: U.rand(0.7, 1.3) });
@@ -175,6 +179,7 @@
       this.drawStampedeLanes(ctx);
       this.drawHazards(ctx);
       this.drawEnemyShots(ctx);
+      this.drawMechFx(ctx);
       this.drawProjectiles(ctx);
       this.drawEffects(ctx, true);
       this.drawTexts(ctx);
@@ -420,8 +425,8 @@
       const x = c.getContext('2d');
       x.scale(SPRITE_SCALE, SPRITE_SCALE);
       x.translate(half, half);
-      const h = HEAD[type] * r, sp = Math.max(2.6, r * 0.2);
-      const big = d.boss ? 2.2 : d.elite ? 1.6 : 1;
+      const h = HEAD[type] * r, sp = type === 'mecha' ? r * 0.97 : Math.max(2.6, r * 0.2);   // the mech's "eyes" are its cannon muzzles
+      const big = type === 'mecha' ? 1.5 : d.boss ? 2.2 : d.elite ? 1.6 : 1;
       x.fillStyle = d.eye + '44';
       circle(x, h, sp, 3.4 * big); circle(x, h, -sp, 3.4 * big);
       x.fillStyle = d.eye;
@@ -432,6 +437,7 @@
     }
 
     drawEnemy(ctx, e) {
+      if (e.def.mech) { this.drawMecha(ctx, e); return; }
       const r = e.r;
       ctx.drawImage(this.shadow, e.x - r * 1.1, e.y + r * 0.25, r * 2.2, r * 0.9);
       const period = TAU / ANIM[e.type];
@@ -454,6 +460,145 @@
         ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(e.x, e.y, r * 1.5, 0, TAU); ctx.stroke();
       }
+    }
+
+    /** The Hare Trigger: shadow, overdrive glow, jump height and thrusters around the cached sprite. */
+    drawMecha(ctx, e) {
+      const r = e.r, ai = e.ai, lift = mechLift(e);
+      const sh = 1 - lift * 0.45;
+      ctx.globalAlpha = 1 - lift * 0.4;
+      ctx.drawImage(this.shadow, e.x - r * 1.3 * sh, e.y + r * 0.2 - r * 0.5 * sh, r * 2.6 * sh, r * 1.1 * sh);
+      ctx.globalAlpha = 1;
+      if (ai.over) {
+        const pulse = 0.35 + Math.sin(e.t * 10) * 0.15;
+        ctx.fillStyle = `rgba(255,40,70,${pulse * (1 - lift)})`;
+        ctx.beginPath(); ctx.ellipse(e.x, e.y + r * 0.2, r * 1.5, r * 1.1, 0, 0, TAU); ctx.fill();
+      }
+      const walking = ai.mode === 'walk' || ai.mode === undefined;
+      const period = TAU / ANIM.mecha;
+      const frame = walking ? Math.floor(((e.t % period) / period) * FRAMES) % FRAMES : 0;
+      const spr = this.enemySprite('mecha', frame, e.flash > 0);
+      const crouch = ai.mode === 'crouch' ? 0.1 : ai.mode === 'recover' ? 0.06 : 0;
+      const scale = (1 + lift * 0.45) * (1 - crouch);
+      ctx.save();
+      ctx.translate(e.x, e.y - lift * 70);
+      ctx.rotate(e.a);
+      ctx.scale(scale, scale);
+      if (ai.mode === 'air' || (ai.mode === 'crouch' && ai.timer < 0.25)) {
+        // rocket boots
+        ctx.globalCompositeOperation = 'lighter';
+        for (const sgn of [-1, 1]) {
+          const fx = -r * 0.05, fy = sgn * r * 0.62, fr = r * (0.35 + Math.random() * 0.15);
+          const grd = ctx.createRadialGradient(fx, fy, 0, fx, fy, fr);
+          grd.addColorStop(0, 'rgba(255,240,200,0.95)'); grd.addColorStop(0.4, 'rgba(255,150,40,0.7)'); grd.addColorStop(1, 'rgba(255,60,0,0)');
+          ctx.fillStyle = grd; circle(ctx, fx, fy, fr);
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      ctx.drawImage(spr, -spr.half, -spr.half, spr.half * 2, spr.half * 2);
+      ctx.restore();
+    }
+
+    /** Telegraphs for the Hare Trigger, drawn over the darkness so they're always readable. */
+    drawMechFx(ctx) {
+      const g = this.g, time = g.time;
+      for (const m of g.missiles || []) {
+        const k = U.clamp(m.t / m.dur, 0, 1), warm = m.t < 0 ? 0.45 : 0.55 + k * 0.45;
+        if (this.inView(m.x1, m.y1, m.r + 10)) {
+          // ground reticle: fills in as the missile comes down
+          ctx.fillStyle = `rgba(255,120,30,${0.08 + k * 0.22})`; circle(ctx, m.x1, m.y1, m.r * Math.max(0.15, k));
+          ctx.strokeStyle = `rgba(255,140,40,${warm})`; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(m.x1, m.y1, m.r, 0, TAU); ctx.stroke();
+          ctx.save(); ctx.translate(m.x1, m.y1); ctx.rotate(time * 2.5);
+          ctx.lineWidth = 2.5;
+          for (let i = 0; i < 4; i++) { ctx.rotate(TAU / 4); ctx.beginPath(); ctx.moveTo(m.r * 0.55, 0); ctx.lineTo(m.r * 0.85, 0); ctx.stroke(); }
+          ctx.restore();
+        }
+        if (m.t < 0) continue;
+        // the carrot itself, on a high arc
+        const x = U.lerp(m.x0, m.x1, k), y = U.lerp(m.y0, m.y1, k), h = Math.sin(Math.PI * k) * 130;
+        if (!this.inView(x, y - h, 30)) continue;
+        const k2 = Math.min(1, k + 0.03);
+        const ang = Math.atan2((U.lerp(m.y0, m.y1, k2) - Math.sin(Math.PI * k2) * 130) - (y - h), U.lerp(m.x0, m.x1, k2) - x);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; circle(ctx, x, y, 4);
+        ctx.save(); ctx.translate(x, y - h); ctx.rotate(ang);
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = 'rgba(255,170,60,0.8)'; circle(ctx, -12, 0, 4 + Math.random() * 3);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#ff8a2a';
+        ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(-7, -4.5); ctx.lineTo(-7, 4.5); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#c45a12'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(2, -2.4); ctx.lineTo(4, 0); ctx.moveTo(-2, 3); ctx.lineTo(0, 1); ctx.stroke();
+        ctx.fillStyle = '#5dbb4a';
+        ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(-12, -5); ctx.lineTo(-10, 0); ctx.lineTo(-12, 5); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+      for (const e of g.enemies) {
+        if (e.dead || !e.def.mech) continue;
+        const ai = e.ai, M = e.def.mech;
+        if (ai.mode === 'crouch' || ai.mode === 'air') {
+          const R = M.leap.r, k = ai.mode === 'air' ? U.clamp(ai.k || 0, 0, 1) : 0;
+          const blink = 0.55 + Math.sin(time * 18) * 0.3;
+          ctx.fillStyle = `rgba(255,30,40,${0.08 + k * 0.2})`; circle(ctx, ai.tx, ai.ty, R);
+          ctx.strokeStyle = `rgba(255,50,50,${blink})`; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(ai.tx, ai.ty, R, 0, TAU); ctx.stroke();
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(ai.tx, ai.ty, R * Math.max(0.08, k), 0, TAU); ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(ai.tx - R - 10, ai.ty); ctx.lineTo(ai.tx - R * 0.6, ai.ty); ctx.moveTo(ai.tx + R * 0.6, ai.ty); ctx.lineTo(ai.tx + R + 10, ai.ty);
+          ctx.moveTo(ai.tx, ai.ty - R - 10); ctx.lineTo(ai.tx, ai.ty - R * 0.6); ctx.moveTo(ai.tx, ai.ty + R * 0.6); ctx.lineTo(ai.tx, ai.ty + R + 10);
+          ctx.stroke();
+        }
+        if ((ai.mode === 'charge' || ai.mode === 'laser') && ai.ll > 0) {
+          const c = Math.cos(ai.la), sn = Math.sin(ai.la);
+          const ox = e.x + c * e.r * 0.6, oy = e.y + sn * e.r * 0.6, ex = e.x + c * ai.ll, ey = e.y + sn * ai.ll;
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.lineCap = 'round';
+          if (ai.mode === 'charge') {
+            const locked = ai.timer <= 0.3;
+            ctx.strokeStyle = locked ? 'rgba(255,220,240,0.9)' : `rgba(255,80,170,${0.25 + Math.random() * 0.35})`;
+            ctx.lineWidth = locked ? 2.5 : 1.5;
+            ctx.setLineDash(locked ? [] : [10, 8]);
+            ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(255,90,180,0.8)'; circle(ctx, ox, oy, 4 + (1 - ai.timer / M.laser.charge) * 7);
+          } else {
+            const w = M.laser.width;
+            for (const [col, lw] of [['rgba(255,40,140,0.35)', w * 2.2], ['rgba(255,90,180,0.7)', w], ['rgba(255,240,250,0.95)', w * 0.35]]) {
+              ctx.strokeStyle = col; ctx.lineWidth = lw * (0.9 + Math.random() * 0.2);
+              ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.stroke();
+            }
+            ctx.fillStyle = 'rgba(255,200,230,0.9)'; circle(ctx, ex, ey, w * 0.8 + Math.random() * 4);
+          }
+          ctx.restore();
+        }
+      }
+    }
+
+    /** Biscuit floating away under a little parachute after the mech is destroyed. */
+    drawEject(ctx, f, a) {
+      const k = 1 - a, x = f.x + f.drift * k * 70 + Math.sin(k * 9) * 8, y = f.y - 30 - k * 110;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, a * 2.5);
+      ctx.translate(x, y);
+      ctx.rotate(Math.sin(k * 9) * 0.15);
+      // canopy
+      for (let i = 0; i < 4; i++) {
+        ctx.fillStyle = i % 2 ? '#f2ede4' : '#d9342b';
+        ctx.beginPath(); ctx.moveTo(0, -22); ctx.arc(0, -22, 22, Math.PI + (i / 4) * Math.PI, Math.PI + ((i + 1) / 4) * Math.PI); ctx.closePath(); ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(240,235,225,0.8)'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); for (const sx of [-21, -8, 8, 21]) { ctx.moveTo(sx, -22); ctx.lineTo(0, 0); } ctx.stroke();
+      // bunny (side-on this time)
+      ctx.fillStyle = '#f5f0ea';
+      ctx.beginPath(); ctx.ellipse(-3, -9, 2.6, 8, -0.25, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(3, -9, 2.6, 8, 0.25, 0, TAU); ctx.fill();
+      circle(ctx, 0, 2, 7);
+      ctx.fillStyle = '#f4a6c0'; ctx.beginPath(); ctx.ellipse(-3, -9, 1.2, 5.5, -0.25, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(3, -9, 1.2, 5.5, 0.25, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#1a1416'; circle(ctx, -2.5, 1, 1.1); circle(ctx, 2.5, 1, 1.1);
+      ctx.fillStyle = '#ef7fa2'; circle(ctx, 0, 3.5, 1);
+      ctx.restore();
     }
 
     drawEnemyShape(ctx, type, d, r, t, fl) {
@@ -563,6 +708,73 @@
           ctx.fillStyle = fl ? '#fff' : '#5e0f0c'; ctx.fillRect(-r * 0.6, -r * 0.2, r * 0.5, r * 0.15);
           break;
         }
+        case 'mecha': {
+          // Combat frame seen from above, facing +x, with Biscuit in the cockpit.
+          const metal = fl ? '#ffffff' : body, dark = fl ? '#ffffff' : '#23272e', yel = fl ? '#ffffff' : skin, seam = fl ? '#dddddd' : '#16191d';
+          const step = Math.sin(t * 5) * r * 0.32;
+          // big feet, long enough to stride out past the hull
+          for (const [sg, off] of [[-1, step], [1, -step]]) {
+            ctx.fillStyle = dark; rrect(ctx, -r * 0.45 + off, sg * r * 0.5 - r * 0.2, r * 1.2, r * 0.4, r * 0.1); ctx.fill();
+            ctx.strokeStyle = seam; ctx.lineWidth = 1.2; ctx.stroke();
+            ctx.fillStyle = yel; rrect(ctx, -r * 0.45 + off + r * 1.0, sg * r * 0.5 - r * 0.17, r * 0.18, r * 0.34, r * 0.06); ctx.fill();
+          }
+          ctx.fillStyle = metal; rrect(ctx, -r * 0.78, -r * 0.72, r * 1.36, r * 1.44, r * 0.24); ctx.fill();
+          ctx.strokeStyle = seam; ctx.lineWidth = 1.4; ctx.stroke();
+          // hazard-striped back plate
+          ctx.save();
+          rrect(ctx, -r * 0.76, -r * 0.5, r * 0.24, r * 1.0, r * 0.06); ctx.clip();
+          ctx.fillStyle = yel; ctx.fillRect(-r, -r, r * 2, r * 2);
+          if (!fl) { ctx.strokeStyle = '#1b1b1b'; ctx.lineWidth = r * 0.08; for (let i = -6; i < 6; i++) { ctx.beginPath(); ctx.moveTo(-r * 0.8, i * r * 0.2); ctx.lineTo(-r * 0.5, i * r * 0.2 + r * 0.3); ctx.stroke(); } }
+          ctx.restore();
+          // shoulder missile pods (carrot tips showing)
+          for (const sg of [-1, 1]) {
+            ctx.fillStyle = yel; rrect(ctx, -r * 0.48, sg * r * 0.97 - r * 0.25, r * 0.88, r * 0.5, r * 0.1); ctx.fill();
+            ctx.strokeStyle = seam; ctx.lineWidth = 1.2; ctx.stroke();
+            for (let i = 0; i < 3; i++) {
+              const mx = -r * 0.28 + i * r * 0.27, my = sg * r * 0.97;
+              ctx.fillStyle = fl ? '#fff' : '#1c1d20'; circle(ctx, mx, my, r * 0.1);
+              ctx.fillStyle = fl ? '#fff' : '#ff8a2a'; circle(ctx, mx, my, r * 0.07);
+            }
+            // arm cannon
+            ctx.fillStyle = dark; ctx.fillRect(r * 0.3, sg * r * 0.97 - r * 0.1, r * 0.82, r * 0.2);
+            ctx.fillStyle = metal; ctx.fillRect(r * 1.02, sg * r * 0.97 - r * 0.13, r * 0.12, r * 0.26);
+          }
+          // antenna with a blinking tip
+          ctx.strokeStyle = dark; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(-r * 0.6, -r * 0.38); ctx.lineTo(-r * 1.08, -r * 0.55); ctx.stroke();
+          ctx.fillStyle = fl ? '#fff' : Math.sin(t * 5) > 0 ? '#ff3b5c' : '#5a1020'; circle(ctx, -r * 1.08, -r * 0.55, r * 0.06);
+          // cockpit
+          ctx.fillStyle = fl ? '#fff' : '#1b2a33'; circle(ctx, r * 0.12, 0, r * 0.5);
+          // Biscuit: ears first (they flop back over the canopy rim), then head and face
+          const sway = Math.sin(t * 5) * 0.08;
+          for (const sg of [-1, 1]) {
+            ctx.save();
+            ctx.translate(r * 0.04, sg * r * 0.12);
+            ctx.rotate(Math.PI + sg * (0.38 + sway));
+            ctx.fillStyle = fl ? '#fff' : '#f5f0ea';
+            ctx.beginPath(); ctx.ellipse(r * 0.27, 0, r * 0.3, r * 0.1, 0, 0, TAU); ctx.fill();
+            ctx.fillStyle = fl ? '#fff' : '#f4a6c0';
+            ctx.beginPath(); ctx.ellipse(r * 0.29, 0, r * 0.21, r * 0.048, 0, 0, TAU); ctx.fill();
+            ctx.restore();
+          }
+          ctx.fillStyle = fl ? '#fff' : '#f5f0ea'; circle(ctx, r * 0.2, 0, r * 0.26);
+          if (!fl) {
+            ctx.fillStyle = 'rgba(255,140,170,0.55)'; circle(ctx, r * 0.31, -r * 0.15, r * 0.06); circle(ctx, r * 0.31, r * 0.15, r * 0.06);
+            ctx.fillStyle = '#1a1416'; circle(ctx, r * 0.33, -r * 0.09, r * 0.05); circle(ctx, r * 0.33, r * 0.09, r * 0.05);
+            ctx.fillStyle = '#ffffff'; circle(ctx, r * 0.345, -r * 0.1, r * 0.018); circle(ctx, r * 0.345, r * 0.08, r * 0.018);
+            ctx.fillStyle = '#ef7fa2'; circle(ctx, r * 0.44, 0, r * 0.035);
+            // determined little frown
+            ctx.strokeStyle = '#1a1416'; ctx.lineWidth = 1.1;
+            ctx.beginPath(); ctx.moveTo(r * 0.27, -r * 0.16); ctx.lineTo(r * 0.3, -r * 0.05); ctx.moveTo(r * 0.27, r * 0.16); ctx.lineTo(r * 0.3, r * 0.05); ctx.stroke();
+          }
+          // canopy glass and rim
+          ctx.fillStyle = fl ? 'rgba(255,255,255,0.3)' : 'rgba(150,215,235,0.2)'; circle(ctx, r * 0.12, 0, r * 0.5);
+          ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(r * 0.12, 0, r * 0.4, -2.5, -1.6); ctx.stroke();
+          ctx.strokeStyle = yel; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(r * 0.12, 0, r * 0.5, 0, TAU); ctx.stroke();
+          break;
+        }
         case 'stalker': {
           ctx.strokeStyle = fl ? '#fff' : '#6b3f7d'; ctx.lineWidth = 5;
           for (let i = -1; i <= 1; i++) {
@@ -587,8 +799,10 @@
       for (const e of this.g.enemies) {
         if (e.dead || e.def.crate || !this.inView(e.x, e.y, e.r * 2)) continue;
         const spr = this.eyeSprite(e.type);
+        const lift = e.def.mech ? mechLift(e) : 0;
         ctx.save();
-        ctx.translate(e.x, e.y);
+        ctx.translate(e.x, e.y - lift * 70);
+        if (lift) ctx.scale(1 + lift * 0.45, 1 + lift * 0.45);
         ctx.rotate(e.a);
         ctx.drawImage(spr, -spr.half, -spr.half, spr.half * 2, spr.half * 2);
         ctx.restore();
@@ -850,9 +1064,12 @@
           ctx.restore();
         } else if (f.kind === 'burst' && !overDark) {
           const r = f.r * (1.1 - a * 0.6);
-          ctx.fillStyle = f.blood ? `rgba(200,40,30,${0.5 * a})` : `rgba(185,201,74,${0.45 * a})`; circle(ctx, f.x, f.y, r);
-          ctx.strokeStyle = f.blood ? `rgba(255,170,120,${0.85 * a})` : `rgba(230,255,140,${0.8 * a})`; ctx.lineWidth = 3;
+          const fire = f.tint === 'fire';
+          ctx.fillStyle = fire ? `rgba(255,120,30,${0.5 * a})` : f.blood ? `rgba(200,40,30,${0.5 * a})` : `rgba(185,201,74,${0.45 * a})`; circle(ctx, f.x, f.y, r);
+          ctx.strokeStyle = fire ? `rgba(255,220,140,${0.9 * a})` : f.blood ? `rgba(255,170,120,${0.85 * a})` : `rgba(230,255,140,${0.8 * a})`; ctx.lineWidth = 3;
           ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.stroke();
+        } else if (f.kind === 'eject' && overDark) {
+          this.drawEject(ctx, f, a);
         } else if (f.kind === 'bolt' && overDark) {
           ctx.globalCompositeOperation = 'lighter';
           const pts = f.points;
@@ -1000,7 +1217,7 @@
       const S = g.strain, sl = S.level;
       ctx.font = `700 11px ${FONT_MONO}`;
       ctx.fillStyle = sl >= 12 ? '#ff5a4a' : sl >= 6 ? '#e3a33b' : '#ebe2cf';
-      const surge = g.surgeMinutes() > 0 ? '  \u00B7  SURGE HP x' + g.surgeHp().toFixed(1) + ' DMG x' + g.surgeDmg().toFixed(1) : '';
+      const surge = g.surgeMinutes() > 0 ? '  \u00B7  SURGE HP x' + g.surgeHp().toFixed(1) + (S.capped ? ' (MAX)' : '') + ' DMG x' + g.surgeDmg().toFixed(1) : '';
       if (surge) ctx.fillStyle = '#ff5a4a';
       const strainText = 'STRAIN LV ' + sl + (S.rising > 0 ? '  \u25B2 ADAPTING' : '') + surge;
       ctx.fillText(strainText, W / 2, top + 72);
@@ -1065,7 +1282,14 @@
         ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
         ctx.font = `800 15px ${FONT_DISPLAY}`;
         ctx.fillStyle = '#ff5a4a';
-        ctx.fillText(bosses.length > 1 ? 'THE STALKERS' : 'THE STALKER', W / 2, by - 2);
+        const mech = bosses.find((b) => b.def.mech);
+        const label = mech ? 'HARE TRIGGER' + (mech.ai.over ? '  \u00B7  OVERDRIVE' : '') : bosses.length > 1 ? 'THE STALKERS' : 'THE STALKER';
+        ctx.fillText(label, W / 2, by - 2);
+        if (mech) {
+          ctx.textBaseline = 'top'; ctx.font = `700 10px ${FONT_MONO}`; ctx.fillStyle = '#f4a6c0';
+          ctx.fillText('PILOT: BISCUIT (LAB SUBJECT B-0)', W / 2, by + 11);
+          ctx.textBaseline = 'bottom';
+        }
         ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(bx - 2, by - 1, bw + 4, 10);
         ctx.fillStyle = '#5e0f0c'; ctx.fillRect(bx, by + 1, bw, 6);
         ctx.fillStyle = '#d4291f'; ctx.fillRect(bx, by + 1, bw * (hp / max), 6);

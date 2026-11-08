@@ -2,6 +2,46 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
+## [0.5.0] - 2026-11-08
+
+Branch `feature/v0.5-final-boss`.
+
+### Fixed
+- **Co-op across networks: the joiner saw the host, but the host never saw the joiner and couldn't deploy.**
+  - When a strict firewall or NAT blocked the direct WebRTC link, the data channel never opened. The joiner's lobby still listed a placeholder "Host" row, which looked like a connection.
+  - The host kept that dead connection as its partner slot, so every retry was turned away as "room full".
+  - Now:
+    - Unopened links are dropped and replaced.
+    - The host shows **Joining…** as soon as someone dials in, and explains when their connection couldn't get through. The room stays open.
+    - The joiner only lists the host once the host has actually answered.
+- **"Room not found" and failed links behind strict firewalls.**
+  - Peers now get TURN relays:
+    - your own relay (Co-op > Connection settings, saved in the browser, or `?turn=`);
+    - the free Open Relay servers on ports 80/443 over UDP, TCP and TLS (time-limited credentials computed in the browser);
+    - the PeerJS relays, plus two STUN servers.
+  - The joiner retries over relays only if the first attempt doesn't open in 10s.
+  - A "peer unavailable" answer is retried twice before "There is no room" is shown.
+  - The host reconnects to the signalling server under the same room code if it drops. A running game no longer ends because the signalling server hiccuped.
+  - `hello` is re-sent until the host's `welcome` arrives.
+  - The lobby shows whether the link is direct or relayed.
+- Text fields no longer lose arrow and space keys to the game's movement controls.
+
+### Changed
+- **Enemy HP stops scaling at 13:00** (`OO.CONFIG.LEVELING.hpCapTime = 780`):
+  - The clock part of the strain level, the surge HP multiplier and the adaptive bonus all freeze there.
+  - A Standard shambler tops out at x26.6 base HP instead of about x50 at 15:00.
+  - Enemy damage keeps rising. The HUD marks the capped HP multiplier with (MAX).
+
+### Added
+- **Final boss: the HARE TRIGGER**, a combat mech piloted by lab subject B-0, "Biscuit" (a small, cross rabbit). It replaces the twin Stalkers at 14:00.
+  - Rocket-jump entrance, stomp-walk hunting with a turn rate, and a telegraphed rocket leap with a landing shockwave (it can't be hit in the air; it staggers after landing). It leaps after you if you run far away.
+  - Carrot-missile volleys onto marked ground (cover blocks them; they hurt the horde too).
+  - Overdrive below half HP: faster, bigger volleys, and a tracking visor laser that locks before it sweeps; obstacles stop the beam.
+  - Its own sprite (Biscuit visible in the cockpit), sounds, boss bar with pilot name, and a parachute ejection on defeat with a big supply case and herbs.
+  - Fully mirrored in co-op, including missile reticles and laser state. Its HP is doubled in co-op like everything else.
+  - Code in `js/boss.js`, tuning in `OO.ENEMIES.mecha.mech`. Debug key **N** spawns it.
+- `npm run sim -- standard 1 god`: unkillable bots for checking the late game (HP-multiplier curve per minute, boss damage taken). The bots also dodge the boss's reticles.
+
 ## [0.4.0] - 2026-10-13
 
 Branch `feature/v0.4-coop`.

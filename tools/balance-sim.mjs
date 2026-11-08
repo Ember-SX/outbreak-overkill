@@ -2,6 +2,8 @@
 //
 //   npm run sim                      Standard, 2 runs per operative per bot
 //   npm run sim -- standard 3        threat level, runs per combination (locked levels fall back to Standard)
+//   npm run sim -- standard 1 god    bots can't die: damage is only counted. Use it to see the late game
+//                                    (HP scaling, the final boss) that the bots never reach on their own
 //
 // Bots: "random" picks upgrades at random; "smart" prefers owned weapons and evolution
 // partners, and runs behind the nearest obstacle when a stampede is coming.
@@ -17,6 +19,7 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const difficulty = process.argv[2] || 'standard';
 const runs = Number(process.argv[3] || 2);
+const god = process.argv[4] === 'god';
 
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
@@ -24,7 +27,7 @@ page.on('pageerror', (e) => console.error('page error:', e.message));
 await page.goto(pathToFileURL(join(root, 'index.html')).href);
 await page.waitForFunction(() => window.OO && OO.game);
 
-const results = await page.evaluate(({ difficulty, runs }) => {
+const results = await page.evaluate(({ difficulty, runs, god }) => {
   const g = OO.game;
   g.ui.banner = () => {};
   g.setDifficulty(difficulty);
@@ -32,11 +35,25 @@ const results = await page.evaluate(({ difficulty, runs }) => {
   const savedMeta = JSON.stringify(g.meta), savedRecords = JSON.stringify(g.records);
   g.meta = { bank: 0, ranks: {} };
 
-  // Attribute damage taken to its source.
+  // Attribute damage taken to its source. In god mode damage is counted but never applied.
   const src = {};
-  for (const fn of ['updateEnemies', 'processExplosions', 'updateHazards', 'updateEnemyShots']) {
+  let cur = 'other';
+  const origHurt = g.hurtPlayer.bind(g);
+  g.hurtPlayer = (p, dmg, ignoreIframes) => {
+    if (!god) return origHurt(p, dmg, ignoreIframes);
+    if (g.state !== 'playing' || (p.iframes > 0 && !ignoreIframes)) return;
+    src[cur] = (src[cur] || 0) + Math.max(1, Math.round(dmg - p.stats.armor));
+    p.iframes = OO.CONFIG.PLAYER.iframes;
+  };
+  for (const fn of ['updateEnemies', 'processExplosions', 'updateHazards', 'updateEnemyShots', 'updateMissiles']) {
     const orig = g[fn].bind(g);
-    g[fn] = (...a) => { const h = g.player.hp; const r = orig(...a); const d = h - g.player.hp; if (d > 0) src[fn] = (src[fn] || 0) + d; return r; };
+    g[fn] = (...a) => {
+      cur = fn;
+      const h = g.player.hp; const r = orig(...a); const d = h - g.player.hp;
+      if (d > 0 && !god) src[fn] = (src[fn] || 0) + d;
+      cur = 'other';
+      return r;
+    };
   }
 
   const PREF = ['might', 'amount', 'cooldown', 'area', 'maxhp', 'armor', 'magnet', 'speed'];
@@ -71,6 +88,16 @@ const results = await page.evaluate(({ difficulty, runs }) => {
       const dx = p.x - s.x1, dy = p.y - s.y1, d2 = dx * dx + dy * dy;
       if (d2 < (s.r + 30) ** 2) { fx += (dx / Math.max(d2, 50)) * 4; fy += (dy / Math.max(d2, 50)) * 4; }
     }
+    // Final boss telegraphs: carrot-missile reticles and the leap landing ring.
+    for (const s of g.missiles) {
+      const dx = p.x - s.x1, dy = p.y - s.y1, d2 = dx * dx + dy * dy;
+      if (d2 < (s.r + 30) ** 2) { fx += (dx / Math.max(d2, 50)) * 4; fy += (dy / Math.max(d2, 50)) * 4; }
+    }
+    for (const e of g.enemies) {
+      if (e.dead || !e.def.mech || !(e.ai.mode === 'crouch' || e.ai.mode === 'air')) continue;
+      const dx = p.x - e.ai.tx, dy = p.y - e.ai.ty, d2 = dx * dx + dy * dy;
+      if (d2 < (e.def.mech.leap.r + 40) ** 2) { fx += (dx / Math.max(d2, 50)) * 6; fy += (dy / Math.max(d2, 50)) * 6; }
+    }
     fx += Math.cos(g.time * 0.25) * 0.004; fy += Math.sin(g.time * 0.25) * 0.004;
     if (!danger) {
       let best = null, bd = 260 * 260;
@@ -98,16 +125,23 @@ const results = await page.evaluate(({ difficulty, runs }) => {
       for (let r = 0; r < runs; r++) {
         for (const k in src) delete src[k];
         g.start(ch);
-        let steps = 0;
+        let steps = 0, boss = null, minute = 0;
+        const hpCurve = [];
         while (g.state !== 'results' && steps++ < 60 * 60 * 16) {
           steer(bot);
-          if (g.state === 'playing') g.update(1 / 60);
+          if (g.state === 'playing') {
+            g.update(1 / 60);
+            if (!boss) boss = g.enemies.find((e) => e.def.mech) || null;
+            if (g.time >= minute * 60) { hpCurve.push(g.enemyHpMul(OO.ENEMIES.shambler, g.strain.level).toFixed(1)); minute += 1; }
+          }
           else if (g.state === 'levelup') { const opts = g.player.luOptions; g.chooseUpgrade(g.player, bot === 'smart' ? opts.indexOf(smartPick(opts)) : Math.floor(Math.random() * opts.length)); }
           else if (g.state === 'chest') g.closeChest();
         }
         out.push({
           ch, bot, won: g.time >= OO.CONFIG.RUN_LENGTH, time: Math.round(g.time), level: g.team.level, kills: g.kills,
           weapons: g.player.weapons.map((w) => w.id + (w.def.evolved ? '*' : w.level)).join(' '),
+          boss: boss ? (boss.dead ? 'scrapped at ' + Math.floor(g.time / 60) + ':' + String(Math.floor(g.time % 60)).padStart(2, '0') : Math.round(100 * boss.hp / boss.maxHp) + '% HP left') : '-',
+          hpCurve: hpCurve.join(' '),
           damage: Object.entries(src).map(([k, v]) => k.replace(/^(update|process)/, '') + ' ' + Math.round(v)).join(', '),
         });
       }
@@ -116,12 +150,16 @@ const results = await page.evaluate(({ difficulty, runs }) => {
   g.meta = JSON.parse(savedMeta); g.saveMeta();
   g.records = JSON.parse(savedRecords); OO.U.storage.set('oo.records', g.records);
   return out;
-}, { difficulty, runs });
+}, { difficulty, runs, god });
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-console.log(`\n${difficulty}, ${runs} run(s) per operative per bot\n`);
+console.log(`\n${difficulty}, ${runs} run(s) per operative per bot${god ? ' (god mode: damage counted, not applied)' : ''}\n`);
 for (const r of results) {
-  console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.won ? 'EVAC ' : 'died '} ${fmt(r.time).padStart(5)}  L${String(r.level).padEnd(3)} ${String(r.kills).padStart(6)} kills  [${r.weapons}]  dmg: ${r.damage}`);
+  console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.won ? 'EVAC ' : 'died '} ${fmt(r.time).padStart(5)}  L${String(r.level).padEnd(3)} ${String(r.kills).padStart(6)} kills  [${r.weapons}]  mech: ${r.boss}  dmg: ${r.damage}`);
+}
+if (god) {
+  console.log('\nShambler HP multiplier at each minute mark (0:00, 1:00, ...):');
+  for (const r of results) console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.hpCurve}`);
 }
 for (const bot of ['random', 'smart']) {
   const rs = results.filter((r) => r.bot === bot);

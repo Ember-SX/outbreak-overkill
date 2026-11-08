@@ -13,6 +13,8 @@
 
   I.attach = function (canvas) {
     window.addEventListener('keydown', (e) => {
+      const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
+      if (typing) return;   // let text fields (room code, relay settings) have their keys
       if (MOVE_KEYS.includes(e.code)) e.preventDefault();
       if (!e.repeat) I.pressed.add(e.code);
       I.keys.add(e.code);
