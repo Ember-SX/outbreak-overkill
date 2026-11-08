@@ -31,6 +31,9 @@
     // infected start soaking hits again. It never goes below 0 or above `max`.
     LEVELING: {
       perMinute: 1,
+      // Enemy HP stops growing at 13:00: the clock part of the strain level, the surge HP
+      // multiplier and the adaptive bonus all freeze there (damage keeps climbing).
+      hpCapTime: 780,
       hpGrowth: { normal: 0.14, elite: 0.12, boss: 0.10 },
       adapt: {
         target: 0.4,     // aim for at most ~40% of regular kills being one-hit kills

@@ -88,7 +88,7 @@
       this.netEvents = [];
       this.gemCount = 0; this.otherCount = 0; this.nextPickupId = 0; this.nextProjId = 0; this._immuneT = -9;
       this.team = { level: 1, xp: 0, xpNext: OO.CONFIG.xpToNext(1), pending: 0 };
-      this.strain = { level: 0, peak: 0, timeLevel: 0, adapt: 0, oneShot: 0, samples: 0, rising: 0 };
+      this.strain = { level: 0, peak: 0, timeLevel: 0, capped: false, adapt: 0, oneShot: 0, samples: 0, rising: 0 };
       this.shakeAmt = 0; this.flashWhite = 0; this.xpCombo = 0; this.xpComboT = 0; this.heartT = 0;
       this.seed = seed;
       this.world = new OO.World(seed);
@@ -612,10 +612,11 @@
      */
     updateStrain(dt) {
       const S = this.strain, C = OO.CONFIG.LEVELING, A = C.adapt;
-      S.timeLevel = (this.time / 60) * C.perMinute;
+      S.capped = this.time >= C.hpCapTime;
+      S.timeLevel = (Math.min(this.time, C.hpCapTime) / 60) * C.perMinute;
       S.rising = Math.max(0, S.rising - dt);
       if (this.time > A.grace && S.samples >= A.minSamples) {
-        if (S.oneShot > A.target) {
+        if (S.oneShot > A.target && !S.capped) {
           S.adapt = Math.min(A.max, S.adapt + (S.oneShot - A.target) * A.gain * dt);
           S.rising = 2;
         } else if (S.oneShot < A.target - 0.1) {
@@ -641,9 +642,11 @@
 
     // ------------------------------------------------------------ late-game surge (after 6:00)
     surgeMinutes() { return Math.max(0, this.time / 60 - OO.CONFIG.SURGE.start); }
+    /** Surge minutes that count toward HP: frozen at the 13:00 cap. */
+    surgeHpMinutes() { return Math.max(0, Math.min(this.time, OO.CONFIG.LEVELING.hpCapTime) / 60 - OO.CONFIG.SURGE.start); }
     surgeHp(d) {
       const S = OO.CONFIG.SURGE;
-      return Math.pow(1 + (d && d.boss ? S.hpPerMin * S.bossHpScale : S.hpPerMin), this.surgeMinutes());
+      return Math.pow(1 + (d && d.boss ? S.hpPerMin * S.bossHpScale : S.hpPerMin), this.surgeHpMinutes());
     }
     surgeDmg() { return Math.pow(1 + OO.CONFIG.SURGE.dmgPerMin, this.surgeMinutes()); }
 
