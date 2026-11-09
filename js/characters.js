@@ -35,15 +35,15 @@
   // ---------------------------------------------------------------- data
   // Builds are in portrait units (the portrait is drawn on a 240 x 320 grid).
   const BUILDS = {
-    mara: { neck: 8, sh: 43, chest: 34, waist: 26, hip: 38, arm: 8, headRx: 19.5, headRy: 24, headY: 56, bust: 1, bulk: 0.92, jaw: 0.8 },
+    mara: { neck: 7.5, sh: 43, chest: 34, waist: 24, hip: 38, arm: 7.5, headRx: 19, headRy: 23.5, headY: 54, bust: 1, bulk: 0.92, jaw: 0.78 },
     dex:  { neck: 15, sh: 63, chest: 52, waist: 39, hip: 40, arm: 14, headRx: 23, headRy: 26, headY: 54, bust: 0, bulk: 1.14, jaw: 1 },
-    rin:  { neck: 7.5, sh: 40, chest: 32, waist: 25, hip: 37, arm: 7.5, headRx: 19, headRy: 23.5, headY: 58, bust: 1, bulk: 0.9, jaw: 0.75 },
+    rin:  { neck: 7, sh: 40, chest: 32, waist: 23, hip: 37, arm: 7, headRx: 18.5, headRy: 23, headY: 55, bust: 1, bulk: 0.9, jaw: 0.72 },
   };
 
   const LOOKS = {
-    mara: { skin: '#c99677', hair: '#5a2618', lips: '#a3524b', eyes: '#3b2a1c', brow: '#3c1a10' },
-    dex:  { skin: '#6a422e', hair: '#141010', lips: '#4e2a22', eyes: '#1b120d', brow: '#100b09' },
-    rin:  { skin: '#e3bc99', hair: '#121318', lips: '#b8706a', eyes: '#1d1714', brow: '#15121a' },
+    mara: { skin: '#c99677', hair: '#5a2618', lips: '#b0504a', eyes: '#3b2a1c', iris: '#6f7b3a', brow: '#3c1a10' },
+    dex:  { skin: '#6a422e', hair: '#141010', lips: '#5a2e25', eyes: '#1b120d', iris: '#4a2a18', brow: '#100b09' },
+    rin:  { skin: '#e3bc99', hair: '#121318', lips: '#c46a6c', eyes: '#1d1714', iris: '#4b3226', brow: '#15121a' },
   };
 
   /** Skin price: three full evacuations' worth of payout (a clean 15:00 run banks ~550-650 credits). */
@@ -92,10 +92,10 @@
         vest: null, belt: null, holster: null, hair: 'shaved', head: null, gloves: null, accent: '#ffd23f', pack: 'shotgun', whistle: '#ffd23f' },
     ],
     rin: [
-      { id: 'tactical', name: 'Containment suit', text: 'Helix\'s powered biohazard suit: sealed helmet, air unit, sensor seams that glow when it\'s running.',
-        top: '#dfe6e8', topKind: 'suit', sleeves: 'long', legs: '#dfe6e8', legKind: 'suit', panel: '#2a8f86',
-        vest: null, belt: '#3a4448', holster: null, hair: 'hidden', head: 'helmet', headColor: '#e9eef0', visor: '#5ff5d8',
-        gloves: '#4b5a60', accent: '#5ff5d8', pack: 'tank', glow: true },
+      { id: 'tactical', name: 'Field agent', text: 'Helix field response kit: a fitted tech jacket with sensor piping, a comms earpiece and the coil gauntlet. Built to move.',
+        top: '#1c252b', topKind: 'techjacket', sleeves: 'long', legs: '#1f272c', legKind: 'pants', panel: '#2a363d', kneepads: '#2a363d',
+        vest: null, belt: '#2c353b', holster: 'pouch', hair: 'bob', head: 'earpiece', headColor: '#1c252b',
+        gloves: '#14181b', accent: '#5ff5d8', pack: null, glow: true },
       { id: 'covert', name: 'Ghost protocol', text: 'A black stealth bodysuit with dimmed sensor lines and a heads-up visor.',
         top: '#11161a', topKind: 'suit', sleeves: 'long', legs: '#11161a', legKind: 'suit', panel: '#1c2a30',
         vest: null, belt: '#0b0f12', holster: null, hair: 'bob', head: 'visor', visor: '#5ff5d8',
@@ -235,8 +235,8 @@
         ctx.fillStyle = alpha('#ffffff', 0.08);
         for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(CX + s * 22, 296, 8, 14, 0, 0, TAU); ctx.fill(); }
       }
-      if (k.legKind === 'suit' && k.panel) {
-        ctx.fillStyle = k.panel;
+      if ((k.legKind === 'suit' && k.panel) || k.kneepads) {
+        ctx.fillStyle = k.kneepads || k.panel;
         for (const s of [-1, 1]) { rr(ctx, CX + s * 22 - 11, 286, 22, 20, 6); ctx.fill(); }
       }
       // knee/fold shadow
@@ -256,6 +256,12 @@
       ctx.strokeStyle = alpha('#000000', 0.28); ctx.lineWidth = 1.6;
       for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(CX + s * 30, 284); ctx.quadraticCurveTo(CX + s * 20, 300, CX + s * 22, 324); ctx.stroke(); }
       ctx.restore();
+    }
+    if (k.holster === 'pouch') {
+      ctx.fillStyle = '#20282d'; rr(ctx, CX + 18, 230, 20, 26, 4); ctx.fill();
+      ctx.fillStyle = '#2c363c'; rr(ctx, CX + 18, 230, 20, 8, 3); ctx.fill();
+      ctx.strokeStyle = '#14181b'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(CX + 14, 246); ctx.lineTo(CX + 42, 246); ctx.stroke();
     }
     if (k.holster === 'thigh') {
       const hx = CX - 26;
@@ -347,6 +353,16 @@
     ctx.quadraticCurveTo(CX, 98, CX + b.neck, 92); ctx.lineTo(CX + b.neck, b.headY + b.headRy * 0.55); ctx.closePath(); ctx.fill();
     ctx.fillStyle = alpha('#000000', 0.18);
     ctx.beginPath(); ctx.ellipse(CX, b.headY + b.headRy * 0.98, b.neck * 0.95, 5, 0, 0, TAU); ctx.fill();
+    if (k.topKind === 'techjacket') {
+      // high stand collar, slightly open at the zip
+      ctx.fillStyle = lit(ctx, k.top, CX - 30, CX + 30, 0.3);
+      ctx.beginPath();
+      ctx.moveTo(CX - b.neck - 5, 94); ctx.lineTo(CX - b.neck - 3, b.headY + b.headRy * 0.9);
+      ctx.quadraticCurveTo(CX, b.headY + b.headRy * 1.08, CX + b.neck + 3, b.headY + b.headRy * 0.9);
+      ctx.lineTo(CX + b.neck + 5, 94); ctx.quadraticCurveTo(CX, 100, CX - b.neck - 5, 94); ctx.fill();
+      ctx.strokeStyle = alpha(k.accent, 0.8); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(CX - b.neck - 3, b.headY + b.headRy * 0.9); ctx.quadraticCurveTo(CX, b.headY + b.headRy * 1.08, CX + b.neck + 3, b.headY + b.headRy * 0.9); ctx.stroke();
+    }
     if (k.topKind === 'suit' || k.topKind === 'hoodie') {
       // collar ring
       ctx.fillStyle = lit(ctx, k.topKind === 'suit' && k.panel ? k.panel : shade(k.top, -0.15), CX - 30, CX + 30, 0.3);
@@ -435,7 +451,7 @@
     if (k.topKind === 'bare') return;
     if (k.topKind === 'bikini') { drawBikiniTop(ctx, b, k); return; }
     ctx.save(); ctx.clip(torso);
-    const bottom = k.topKind === 'shirt' || k.topKind === 'tee' ? 212 : k.topKind === 'coat' ? 330 : k.topKind === 'suit' ? 340 : 226;
+    const bottom = k.topKind === 'shirt' || k.topKind === 'tee' ? 212 : k.topKind === 'coat' ? 330 : k.topKind === 'suit' ? 340 : k.topKind === 'techjacket' ? 222 : 226;
     if (k.topKind === 'jacket' || k.topKind === 'coat') {
       // inner layer first, then two open panels
       ctx.fillStyle = lit(ctx, k.inner, CX - 40, CX + 40, 0.25); ctx.fillRect(0, 84, PW, bottom - 84);
@@ -466,6 +482,33 @@
         // fitted fabric still shows Dex's chest
         ctx.fillStyle = alpha('#000000', 0.16);
         for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(CX + s * 21, 146, 19, 4, s * -0.1, 0, TAU); ctx.fill(); }
+      }
+      if (k.topKind === 'techjacket') {
+        // shoulder yoke panels
+        ctx.fillStyle = lit(ctx, k.panel, CX - b.sh, CX + b.sh, 0.3);
+        for (const s of [-1, 1]) {
+          ctx.beginPath(); ctx.moveTo(CX + s * (b.neck + 2), 88); ctx.lineTo(CX + s * 90, 96); ctx.lineTo(CX + s * 90, 120);
+          ctx.lineTo(CX + s * (b.chest - 2), 118); ctx.quadraticCurveTo(CX + s * 20, 112, CX + s * (b.neck + 6), 104); ctx.closePath(); ctx.fill();
+        }
+        // side panels from the ribs to the hem
+        for (const s of [-1, 1]) {
+          ctx.beginPath(); ctx.moveTo(CX + s * b.chest, 140); ctx.lineTo(CX + s * (b.waist - 5), 222); ctx.lineTo(CX + s * 90, 222); ctx.lineTo(CX + s * 90, 140); ctx.closePath(); ctx.fill();
+        }
+        // asymmetric zip, collar side to opposite hip
+        ctx.strokeStyle = shade(k.top, -0.45); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(CX - 4, 88); ctx.quadraticCurveTo(CX + 2, 150, CX + 12, 222); ctx.stroke();
+        ctx.fillStyle = '#9aa4aa'; rr(ctx, CX - 6, 96, 4, 7, 1); ctx.fill();
+        // sensor piping
+        ctx.save();
+        ctx.shadowColor = k.accent; ctx.shadowBlur = 6;
+        ctx.strokeStyle = alpha(k.accent, 0.9); ctx.lineWidth = 1.3;
+        for (const s of [-1, 1]) {
+          ctx.beginPath(); ctx.moveTo(CX + s * (b.neck + 6), 104); ctx.quadraticCurveTo(CX + s * 20, 112, CX + s * (b.chest - 2), 118); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(CX + s * (b.chest - 1), 142); ctx.lineTo(CX + s * (b.waist - 4), 220); ctx.stroke();
+        }
+        ctx.restore();
+        // hem band
+        ctx.fillStyle = shade(k.top, -0.25); ctx.fillRect(0, 216, PW, 6);
       }
       if (k.topKind === 'tee') {
         ctx.strokeStyle = shade(k.top, -0.35); ctx.lineWidth = 2;
@@ -627,6 +670,123 @@
     ctx.restore();
   }
 
+  /** Glossy strands over a hairstyle: a soft sheen band plus a few light and dark strokes. */
+  function hairShine(ctx, hair, hx, hy, rx, ry, style) {
+    ctx.save();
+    ctx.lineCap = 'round';
+    const top = hy - ry * (style === 'bob' ? 1.02 : 0.98);
+    ctx.strokeStyle = alpha('#ffffff', 0.16); ctx.lineWidth = 3.2;
+    ctx.beginPath(); ctx.arc(hx + 2, hy - 2, rx * 0.95, -2.35, -1.05); ctx.stroke();
+    ctx.lineWidth = 0.9;
+    for (let i = 0; i < 6; i++) {
+      const o = -rx * 0.7 + i * rx * 0.28;
+      ctx.strokeStyle = i % 2 ? alpha('#ffffff', 0.14) : alpha('#000000', 0.25);
+      ctx.beginPath();
+      ctx.moveTo(hx + o * 0.4, top + 2);
+      ctx.quadraticCurveTo(hx + o * 1.1, hy - ry * 0.55, hx + o * 1.25, hy - ry * (style === 'bob' ? 0.05 : 0.35));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Illustrated face: almond eyes with a gradient iris and catchlights, lined lids (with lashes
+   * and a wing for Mara and Rin), shaped brows, a shaded nose, full lips with a highlight and a
+   * slight confident smirk, cheek colour. Dex gets a heavier brow and a broader nose.
+   */
+  function drawFace(ctx, b, L, hx, ey, ex, rx, masked) {
+    if (masked) return;
+    const fem = !!b.bust;
+    for (const s of [-1, 1]) {
+      const cx = hx + s * ex, ew = fem ? 5.3 : 5, eh = fem ? 3 : 2.4;
+      const inner = [cx - s * ew, ey + 0.4], outer = [cx + s * ew, ey - (fem ? 1.1 : 0.3)];
+      // socket shade and upper-lid crease
+      ctx.fillStyle = alpha('#3a1a10', fem ? 0.12 : 0.18);
+      ctx.beginPath(); ctx.ellipse(cx, ey - 1.6, ew + 2.2, eh + 2.8, 0, 0, TAU); ctx.fill();
+      const eye = new Path2D();
+      eye.moveTo(inner[0], inner[1]);
+      eye.quadraticCurveTo(cx, ey - eh * 1.7, outer[0], outer[1]);
+      eye.quadraticCurveTo(cx, ey + eh * 1.15, inner[0], inner[1]);
+      ctx.fillStyle = '#f3eee8'; ctx.fill(eye);
+      ctx.save(); ctx.clip(eye);
+      const ig = ctx.createRadialGradient(cx + 0.3, ey - 0.6, 0.3, cx + 0.3, ey - 0.4, eh * 1.15);
+      ig.addColorStop(0, shade(L.iris, 0.35)); ig.addColorStop(0.65, L.iris); ig.addColorStop(1, shade(L.iris, -0.55));
+      ctx.fillStyle = ig; circle(ctx, cx + 0.3, ey - 0.4, eh * 1.12);
+      ctx.fillStyle = '#0b0807'; circle(ctx, cx + 0.3, ey - 0.4, eh * 0.48);
+      ctx.fillStyle = alpha('#000000', 0.3); ctx.fillRect(cx - ew - 1, ey - eh * 2, ew * 2 + 2, eh * 0.9);   // lid shadow
+      ctx.restore();
+      ctx.fillStyle = '#ffffff'; circle(ctx, cx + 1.3, ey - 1.5, 0.95); circle(ctx, cx - 0.9, ey + 0.5, 0.45);
+      // upper lid line, lashes and wing
+      ctx.strokeStyle = '#140c0a'; ctx.lineCap = 'round';
+      ctx.lineWidth = fem ? 1.7 : 1.2;
+      ctx.beginPath(); ctx.moveTo(inner[0], inner[1]); ctx.quadraticCurveTo(cx, ey - eh * 1.7, outer[0], outer[1]); ctx.stroke();
+      if (fem) {
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(outer[0], outer[1]); ctx.lineTo(outer[0] + s * 2.4, outer[1] - 1.6); ctx.stroke();
+        ctx.lineWidth = 0.7;
+        for (let i = 0; i < 3; i++) {
+          const t = 0.55 + i * 0.17, lx = U.lerp(inner[0], outer[0], t), ly = ey - eh * (1.15 - i * 0.12);
+          ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + s * 1.4, ly - 1.8); ctx.stroke();
+        }
+      }
+      // lower lid
+      ctx.strokeStyle = alpha('#3a1a10', 0.35); ctx.lineWidth = 0.7;
+      ctx.beginPath(); ctx.moveTo(inner[0] + s * 1, inner[1] + 0.6); ctx.quadraticCurveTo(cx, ey + eh * 1.25, outer[0], outer[1] + 0.8); ctx.stroke();
+      // brow: a tapered filled stroke, arched for Mara and Rin, straight and heavy for Dex
+      const by = ey - eh - (fem ? 5 : 4);
+      ctx.fillStyle = L.brow;
+      ctx.beginPath();
+      if (fem) {
+        ctx.moveTo(cx - s * (ew - 0.5), by + 1.8);
+        ctx.quadraticCurveTo(cx + s * 1.5, by - 2.6, cx + s * (ew + 2.4), by + 0.8);
+        ctx.quadraticCurveTo(cx + s * 1.5, by - 1.2, cx - s * (ew - 0.5), by + 3.4);
+      } else {
+        ctx.moveTo(cx - s * (ew - 0.5), by + 2.4);
+        ctx.quadraticCurveTo(cx + s * 1.5, by - 1.2, cx + s * (ew + 2.6), by + 0.6);
+        ctx.lineTo(cx + s * (ew + 2.2), by + 2.2);
+        ctx.quadraticCurveTo(cx + s * 1.5, by + 1.6, cx - s * (ew - 0.5), by + 5.2);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+    // nose: bridge shadow, tip highlight, nostrils
+    const nw = fem ? 2.4 : 3.5;
+    ctx.fillStyle = alpha('#3a1a10', 0.14);
+    ctx.beginPath(); ctx.ellipse(hx - 1.8, ey + 6, 1.4, 6, 0.05, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx, ey + 11.2, nw + 1.5, 2, 0, 0, Math.PI); ctx.fill();
+    ctx.fillStyle = alpha('#ffffff', 0.22); circle(ctx, hx + 0.8, ey + 9, 1.4);
+    ctx.fillStyle = alpha('#2a120c', 0.55);
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(hx + s * nw, ey + 11.4, 1.2, 0.7, s * 0.4, 0, TAU); ctx.fill(); }
+    // cheeks
+    if (fem) {
+      for (const s of [-1, 1]) {
+        const g = ctx.createRadialGradient(hx + s * rx * 0.55, ey + 9, 0, hx + s * rx * 0.55, ey + 9, 6);
+        g.addColorStop(0, 'rgba(235,110,120,0.28)'); g.addColorStop(1, 'rgba(235,110,120,0)');
+        ctx.fillStyle = g; circle(ctx, hx + s * rx * 0.55, ey + 9, 6);
+      }
+    }
+    ctx.fillStyle = alpha('#ffffff', 0.1); ctx.beginPath(); ctx.ellipse(hx + rx * 0.52, ey + 5, 3.5, 2, -0.4, 0, TAU); ctx.fill();
+    // lips, corners slightly lifted on one side
+    const my = ey + (fem ? 17 : 16.5), mw = fem ? 5.6 : 6.2, lipC = L.lips;
+    const lc = [hx - mw, my + 0.2], rc = [hx + mw, my - 0.7];
+    ctx.fillStyle = shade(lipC, -0.18);
+    ctx.beginPath();
+    ctx.moveTo(lc[0], lc[1]);
+    ctx.quadraticCurveTo(hx - 2.6, my - (fem ? 2.6 : 1.6), hx - 1.2, my - (fem ? 2.3 : 1.4));
+    ctx.quadraticCurveTo(hx, my - 1.3, hx + 1.2, my - (fem ? 2.3 : 1.4));
+    ctx.quadraticCurveTo(hx + 2.6, my - (fem ? 2.6 : 1.6), rc[0], rc[1]);
+    ctx.quadraticCurveTo(hx, my + 0.4, lc[0], lc[1]);
+    ctx.fill();
+    const lg = ctx.createLinearGradient(0, my, 0, my + 4);
+    lg.addColorStop(0, lipC); lg.addColorStop(1, shade(lipC, -0.2));
+    ctx.fillStyle = lg;
+    ctx.beginPath(); ctx.moveTo(lc[0], lc[1]); ctx.quadraticCurveTo(hx, my + 0.4, rc[0], rc[1]);
+    ctx.quadraticCurveTo(hx + 1, my + (fem ? 4.2 : 3.4), lc[0], lc[1]); ctx.fill();
+    ctx.fillStyle = alpha('#ffffff', fem ? 0.38 : 0.18); ctx.beginPath(); ctx.ellipse(hx + 1, my + 1.7, 2.2, 0.8, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = alpha('#2a100c', 0.6); ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(lc[0], lc[1]); ctx.quadraticCurveTo(hx, my + 0.4, rc[0], rc[1]); ctx.stroke();
+    ctx.fillStyle = alpha('#3a1a10', 0.15); ctx.beginPath(); ctx.ellipse(hx, my + 6, 3, 1.2, 0, 0, TAU); ctx.fill();
+  }
+
   function drawHead(ctx, b, L, k, charId) {
     const hx = CX, hy = b.headY, rx = b.headRx, ry = b.headRy;
     const headgear = k.head;
@@ -658,7 +818,7 @@
 
     // ears + face
     ctx.fillStyle = shade(L.skin, -0.12);
-    if (!headgear || headgear === 'beanie' || headgear === 'glasses' || headgear === 'goggles' || headgear === 'shades' || headgear === 'visor') {
+    if (!headgear || headgear === 'beanie' || headgear === 'glasses' || headgear === 'goggles' || headgear === 'shades' || headgear === 'visor' || headgear === 'earpiece') {
       for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(hx + s * rx, hy + 3, 4, 7, 0, 0, TAU); ctx.fill(); }
     }
     const face = new Path2D();
@@ -678,23 +838,9 @@
     }
     ctx.restore();
 
-    // features
-    const ey = hy + 1, ex = rx * 0.42;
-    for (const s of [-1, 1]) {
-      ctx.fillStyle = '#f1ebe4';
-      ctx.beginPath(); ctx.ellipse(hx + s * ex, ey, 4.4, 2.3, 0, 0, TAU); ctx.fill();
-      ctx.fillStyle = L.eyes; circle(ctx, hx + s * ex + 0.6, ey, 2.1);
-      ctx.fillStyle = '#ffffff'; circle(ctx, hx + s * ex + 1.3, ey - 0.8, 0.6);
-      ctx.strokeStyle = shade(L.brow, 0); ctx.lineWidth = 1.3;
-      ctx.beginPath(); ctx.ellipse(hx + s * ex, ey + 0.4, 4.6, 2.6, 0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
-      ctx.lineWidth = b.bust ? 1.8 : 2.6; ctx.strokeStyle = L.brow;
-      ctx.beginPath(); ctx.moveTo(hx + s * (ex - 4.5), ey - 6.5 + (b.bust ? 0 : 0.6)); ctx.lineTo(hx + s * (ex + 4.5), ey - 7.5 - (b.bust ? 0.6 : 0)); ctx.stroke();
-    }
-    ctx.strokeStyle = alpha('#000000', 0.3); ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(hx + 0.5, ey + 2); ctx.lineTo(hx + 2, ey + 10); ctx.lineTo(hx - 1.5, ey + 11); ctx.stroke();
-    ctx.strokeStyle = L.lips; ctx.lineWidth = b.bust ? 2.4 : 2;
-    ctx.beginPath(); ctx.moveTo(hx - 5, ey + 17); ctx.quadraticCurveTo(hx, ey + 16, hx + 5, ey + 17); ctx.stroke();
-    if (b.bust) { ctx.fillStyle = alpha(L.lips, 0.6); ctx.beginPath(); ctx.ellipse(hx, ey + 18.5, 3.6, 1.4, 0, 0, TAU); ctx.fill(); }
+    // features: illustrated eyes, brows, nose and lips
+    const ey = hy + 1, ex = rx * 0.43;
+    drawFace(ctx, b, L, hx, ey, ex, rx, headgear === 'mask');
 
     // hair on top
     if (k.hair === 'bun' || k.hair === 'down' || k.hair === 'ponytail') {
@@ -706,19 +852,20 @@
         ctx.quadraticCurveTo(hx + rx - 2, hy - 12, hx + 4, hy - ry * 0.6);
         ctx.quadraticCurveTo(hx - 8, hy - 10, hx - rx + 2, hy - 2);
         ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = alpha('#ffffff', 0.12); ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(hx - 8, hy - ry * 0.9); ctx.quadraticCurveTo(hx + 6, hy - ry * 1.02, hx + rx - 2, hy - ry * 0.5); ctx.stroke();
+        hairShine(ctx, L.hair, hx, hy, rx, ry, 'up');
       }
     } else if (k.hair === 'bob') {
+      // sleek bob, side part, fringe swept across the forehead
       ctx.fillStyle = lit(ctx, L.hair, hx - rx, hx + rx, 0.2);
       ctx.beginPath();
-      ctx.moveTo(hx - rx - 4, hy + ry * 0.7);
-      ctx.bezierCurveTo(hx - rx - 7, hy - ry * 1.35, hx + rx + 7, hy - ry * 1.35, hx + rx + 4, hy + ry * 0.7);
-      ctx.lineTo(hx + rx - 3, hy + ry * 0.7);
-      ctx.lineTo(hx + rx - 4, hy - 7);
-      ctx.lineTo(hx - rx + 4, hy - 7);    // straight fringe
-      ctx.lineTo(hx - rx + 3, hy + ry * 0.7);
+      ctx.moveTo(hx - rx - 4, hy + ry * 0.72);
+      ctx.bezierCurveTo(hx - rx - 8, hy - ry * 1.4, hx + rx + 8, hy - ry * 1.4, hx + rx + 5, hy + ry * 0.82);
+      ctx.lineTo(hx + rx - 2, hy + ry * 0.82);
+      ctx.quadraticCurveTo(hx + rx - 1, hy - 2, hx + rx * 0.35, hy - ry * 0.45);
+      ctx.quadraticCurveTo(hx - rx * 0.1, hy - ry * 0.25, hx - rx * 0.75, hy - ry * 0.5);
+      ctx.quadraticCurveTo(hx - rx + 2, hy - ry * 0.2, hx - rx + 2.5, hy + ry * 0.72);
       ctx.closePath(); ctx.fill();
+      hairShine(ctx, L.hair, hx, hy, rx, ry, 'bob');
     } else if (k.hair === 'shaved') {
       ctx.fillStyle = alpha(L.hair, 0.55);
       ctx.beginPath(); ctx.ellipse(hx, hy - ry * 0.55, rx * 0.98, ry * 0.5, 0, Math.PI, TAU); ctx.fill();
@@ -754,6 +901,14 @@
       ctx.fillStyle = alpha(k.visor, 0.75); rr(ctx, hx - rx - 2, ey - 4.5, (rx + 2) * 2, 8, 4); ctx.fill();
       ctx.restore();
       ctx.fillStyle = '#20262a'; ctx.fillRect(hx - rx - 4, ey - 2, 4, 4); ctx.fillRect(hx + rx, ey - 2, 4, 4);
+    } else if (headgear === 'earpiece') {
+      // comms earpiece with a mic boom, LED on
+      ctx.fillStyle = '#20282d';
+      ctx.beginPath(); ctx.ellipse(hx - rx - 1, hy + 3, 4.5, 6.5, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#20282d'; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(hx - rx - 1, hy + 7); ctx.quadraticCurveTo(hx - rx + 2, hy + 18, hx - 8, hy + 19); ctx.stroke();
+      ctx.lineCap = 'butt';
+      ctx.save(); ctx.shadowColor = k.accent; ctx.shadowBlur = 6; ctx.fillStyle = k.accent; circle(ctx, hx - rx - 1, hy + 1.5, 1.6); ctx.restore();
     } else if (headgear === 'glasses') {
       ctx.strokeStyle = k.headColor; ctx.lineWidth = 1.4;
       for (const s of [-1, 1]) { rr(ctx, hx + s * ex - 6, ey - 4, 12, 8, 2); ctx.stroke(); }
@@ -912,6 +1067,7 @@
       if (g === 'goggles') { ctx.fillStyle = k.headColor; ctx.fillRect(hx - hrr * 0.05, -hrr * 0.85, 2.6, hrr * 1.7); }
       if (g === 'shades') { ctx.fillStyle = k.headColor; ctx.fillRect(hx - hrr * 0.25, -hrr * 0.75, 2.4, hrr * 1.5); }
       if (g === 'glasses') { ctx.fillStyle = '#222'; ctx.fillRect(hx + hrr * 0.62, -hrr * 0.6, 1.4, hrr * 1.2); }
+      if (g === 'earpiece') { ctx.fillStyle = k.accent; ctx.fillRect(hx - 1, -hrr - 1.2, 2.2, 2.2); }
     }
     ctx.restore();
   }

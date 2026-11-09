@@ -2,6 +2,74 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
+## [Unreleased]
+
+Branch `feature/v0.8-cover-armor`.
+
+### Changed
+- **Stampedes run dead straight.** Once launched, Bursters never turn toward you and can't be knocked off their line, so cover between you and the lane always holds. (Removed `STAMPEDE.homing`.)
+- **Hare Trigger leap.**
+  - The red landing ring locks the moment the leap starts and no longer follows you.
+  - The shockwave does 0.6x contact damage (was 1.25x) and throws you clear of the mech's feet.
+- **No Hare Trigger one-shots.** Each hit is capped at a share of the target's max HP before armor (`mech.hitCaps`): slam 45%, contact 50%, missile 40%, laser tick 30%. At 14:40 a 100 HP operative standing in the ring takes 45 instead of 207.
+- **Health and armor upgrades buffed:**
+
+  | Upgrade | Before | Now |
+  |---|---|---|
+  | Kevlar Vest (gear) | +1 armor | +1 armor and 7% damage reduction per rank (35% at rank 5) |
+  | Field Medkit (gear) | +20 max HP, 0.25 HP/s | +35 max HP, 0.6 HP/s per rank, and a 25 HP heal when taken |
+  | Vitality Serum (Armory) | +10 max HP | +25 max HP and 0.3 HP/s per rank |
+  | Trauma Plates (Armory) | +1 armor | +2 armor and 6% damage reduction per rank |
+
+  Percentage reduction applies before flat armor and is capped at 50% (`CONFIG.MITIGATION`). The pause screen shows armor with its reduction. A fully protected operative takes 17 from a 10:00 Stalker hit instead of 55.
+
+## [0.7.0] - 2026-11-09
+
+Branch `feature/v0.7-portraits-pacing`.
+
+### Added
+- **Portrait image pipeline** (`js/portraits.js`, `assets/portraits/`). The menu dossier, operative tabs and wardrobe load image files listed in `assets/portraits/manifest.js`.
+  - Missing files fall back to the procedural portrait.
+  - Images are preloaded at boot with a 2.5 s cap.
+  - `npm run portraits` renders the baseline set (15 WebP files at 768 x 1024). `--keep` preserves commissioned art.
+  - The bundle inlines the images. GitHub Pages deploys `assets/`.
+- **Secret codes** (`js/secrets.js`), cosmetic only:
+  - `BISCUIT` (or seven taps on the wordmark) gives the infected bunny ears.
+  - The Konami code turns on a found-footage VHS overlay.
+  - Found codes get switches on the pause screen.
+
+### Changed
+- **Rin's default outfit is now "Field agent"**: a fitted charcoal tech jacket with a stand collar, asymmetric zip and teal sensor piping, a comms earpiece, fingerless gloves, a utility belt and pouch, knee-padded trousers and the coil gauntlet. No helmet, air tank or glasses. The sealed containment suit is retired; Level A remains her hazmat option.
+- **Portrait illustration pass:**
+  - Almond eyes with gradient irises and catchlights.
+  - Lined lids with lashes and a wing on Mara and Rin.
+  - Shaped brows, a shaded nose, full lips with a highlight and a slight smirk, cheek colour.
+  - Hair sheen; Rin's bob now has a side-swept fringe.
+  - Slimmer waists and longer necks for Mara and Rin.
+- **Encounter pacing:**
+  - Second Stalker at 7:00 (was 10:00).
+  - New twin-Stalker wave at 10:00.
+  - The Hare Trigger at 13:00 (was 14:00), so you have two minutes to take it down.
+  - The brutes that shared those moments moved to 7:30 and 12:45.
+- The boss bar tracks only the Hare Trigger while it's up, even if Stalkers are still alive.
+- **Mid-game damage taper** (`SURGE.dmgCurve`, `bossDmgScale`, `hitCap`):
+  - The damage surge keeps its +12%/min rate from 6:00 to 8:00, slows to about +3%/min from 8:00 to 12:00, catches up to the old 12:00 level by 13:00, then climbs at +12%/min again.
+  - Stalkers take half the damage surge. The Hare Trigger takes all of it.
+  - Until 13:00, a single contact hit is capped at 55% of the operative's max HP.
+
+  Per-hit damage, old -> new:
+
+  | Enemy | 10:00 | 12:00 | 13:00 / 15:00 |
+  |---|---|---|---|
+  | Stalker | 89 -> 55 (65 uncapped) | 118 -> 55 | |
+  | Brute | 53 -> 45 | 71 -> 51 | |
+  | Shambler | 24 -> 20 | | 36 -> 33 / 49 -> 43 |
+  | Hare Trigger | | | 146 -> 130 contact at 13:00 |
+- The balance sim (god mode) prints average damage taken and the largest single hit for each minute.
+
+### Fixed
+- Scripted events listed out of order (the 2:15 Spitter banner, the 4:45 stampede) fired late. The event list is now sorted by time at load.
+
 ## [0.6.0] - 2026-11-08
 
 Branch `feature/v0.6-presentation-skins`.

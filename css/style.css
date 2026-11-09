@@ -219,7 +219,7 @@ kbd {
   overflow: hidden;
 }
 .dossier-portrait { height: 304px; display: grid; place-items: end center; }
-.dossier-portrait canvas { display: block; }
+.dossier-portrait .portrait { display: block; }
 .dossier-id {
   position: absolute;
   left: 0; bottom: 0; right: 0;
@@ -228,6 +228,7 @@ kbd {
 }
 .dossier-name { margin: 0; font-size: 26px; font-weight: 700; line-height: 1.05; }
 .dossier-role { margin: 0; font-size: 13px; color: var(--dim); }
+.portrait-img { object-fit: cover; -webkit-user-drag: none; }
 .dossier-facts { margin: 0; display: grid; gap: 6px; }
 .dossier-facts div { display: grid; grid-template-columns: 112px 1fr; gap: 8px; align-items: baseline; }
 .dossier-facts dt { font-size: 12px; color: var(--mute); }
@@ -256,7 +257,7 @@ kbd {
   overflow: hidden;
 }
 .char-thumb { height: 50px; overflow: hidden; display: block; }
-.char-thumb canvas { display: block; margin-top: -4px; }
+.char-thumb .thumb { display: block; margin-top: -4px; }
 .char-tab-name { font-size: 13px; font-weight: 600; color: var(--dim); }
 .char-tab[aria-checked="true"] { border-color: var(--scan); background: rgba(82, 230, 198, 0.08); }
 .char-tab[aria-checked="true"] .char-tab-name { color: var(--bone); }
@@ -420,6 +421,8 @@ kbd {
 .evo-list em { font-style: normal; font-size: 12px; color: var(--hazard); }
 
 .settings { display: flex; flex-wrap: wrap; gap: 8px; }
+.settings-secrets { display: contents; }
+.btn-secret { color: #f4a6c0; border-color: #6b3a52; }
 
 .lu-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .lu-actions .hint { margin-left: auto; }
@@ -492,8 +495,8 @@ kbd {
     radial-gradient(ellipse at 50% 90%, rgba(82, 230, 198, 0.14), transparent 70%);
   border-bottom: 1px solid var(--wire);
 }
-.outfit-fig canvas { display: block; }
-.outfit.locked .outfit-fig canvas { filter: saturate(0.25) brightness(0.62); }
+.outfit-fig .portrait { display: block; }
+.outfit.locked .outfit-fig .portrait { filter: saturate(0.25) brightness(0.62); }
 .outfit-body { display: grid; gap: 6px; align-content: start; padding: 10px; }
 .outfit-name { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.15; }
 .outfit-text { margin: 0; font-size: 12px; line-height: 1.4; color: #9fb3ae; }
@@ -640,7 +643,7 @@ kbd {
   .controls { order: 6; }
   .records { order: 7; }
   .dossier-portrait { height: 210px; }
-  .dossier-portrait canvas { width: 156px !important; height: auto !important; }
+  .dossier-portrait .portrait { width: 156px !important; height: auto !important; }
   .dossier-name { font-size: 22px; }
 }
 @media (max-width: 480px) {

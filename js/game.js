@@ -303,13 +303,14 @@
       const m = (id) => p.ranks[id] || 0;     // that player's own Armory ranks
       p.stats = {
         might: 1 + (b.might || 0) + lv('might') * 0.1 + m('power') * 0.05,
-        armor: (b.armor || 0) + lv('armor') + m('plating'),
+        armor: (b.armor || 0) + lv('armor') + m('plating') * OO.CONFIG.MITIGATION.platesArmor,
+        dr: Math.min(OO.CONFIG.MITIGATION.maxDr, lv('armor') * OO.CONFIG.MITIGATION.vestDr + m('plating') * OO.CONFIG.MITIGATION.platesDr),
         speed: P.speed * (1 + (b.speed || 0) + lv('speed') * 0.08 + m('stride') * 0.05),
         area: 1 + lv('area') * 0.1,
         cooldown: 1 - lv('cooldown') * 0.08,
         magnet: P.pickupRange * (1 + (b.magnet || 0) + lv('magnet') * 0.3 + m('collector') * 0.15),
-        maxHp: P.maxHp + (b.maxHp || 0) + lv('maxhp') * 20 + m('vitality') * 10,
-        regen: lv('maxhp') * 0.25,
+        maxHp: P.maxHp + (b.maxHp || 0) + lv('maxhp') * 35 + m('vitality') * 25,
+        regen: lv('maxhp') * 0.6 + m('vitality') * 0.3,
         amount: lv('amount'),
         growth: 1 + m('growth') * 0.08,
       };
@@ -390,6 +391,7 @@
         if (!p.passives[opt.id]) { p.passives[opt.id] = 1; p.passiveOrder.push(opt.id); }
         else p.passives[opt.id]++;
         this.recalcStats(p);
+        if (opt.id === 'maxhp') this.heal(p, 25);      // a medkit patches you up as well
       } else if (opt.kind === 'herb') {
         this.heal(p, 40);
       } else {
@@ -689,7 +691,22 @@
       const S = OO.CONFIG.SURGE;
       return Math.pow(1 + (d && d.boss ? S.hpPerMin * S.bossHpScale : S.hpPerMin), this.surgeHpMinutes());
     }
-    surgeDmg() { return Math.pow(1 + OO.CONFIG.SURGE.dmgPerMin, this.surgeMinutes()); }
+    /** Effective surge minutes for damage, following SURGE.dmgCurve. */
+    surgeDmgMinutes(time = this.time) {
+      const pts = OO.CONFIG.SURGE.dmgCurve, m = time / 60;
+      if (m <= pts[0][0]) return 0;
+      for (let i = 1; i < pts.length; i++) {
+        const [m0, e0] = pts[i - 1], [m1, e1] = pts[i];
+        if (m <= m1) return e0 + (e1 - e0) * (m - m0) / (m1 - m0);
+      }
+      const [mL, eL] = pts[pts.length - 1];
+      return eL + (m - mL);
+    }
+    surgeDmg(d, time) {
+      const S = OO.CONFIG.SURGE;
+      // Stalkers take half the exponent; the final boss is the late-game test and takes it all.
+      return Math.pow(1 + S.dmgPerMin, this.surgeDmgMinutes(time) * (d && d.boss && !d.final ? S.bossDmgScale : 1));
+    }
 
     /** Called for every regular kill: feeds the rolling one-hit-kill share. */
     recordKill(e) {
@@ -707,7 +724,7 @@
         id: ++this.nextId, type, def: d, x, y, level, hits: 0,
         hp: d.hp * hpMul, maxHp: d.hp * hpMul,
         speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)),
-        dmg: d.dmg * this.enemyDmgScale(), r: d.r, mass: d.mass,
+        dmg: d.dmg * this.enemyDmgScale(true, d), r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
       if (!d.crate && !d.burster && this.world) this.world.resolveCircle(e, e.r);
@@ -798,7 +815,7 @@
         e.kbx *= k; e.kby *= k;
         if (e.def.ranged) e.a = Math.atan2(dy, dx);   // always faces its target, even while backing off
 
-        for (const q of alive) if (U.dist2(e.x, e.y, q.x, q.y) < (e.r + q.r) ** 2) this.hurtPlayer(q, e.dmg);
+        for (const q of alive) if (U.dist2(e.x, e.y, q.x, q.y) < (e.r + q.r) ** 2) this.contactHit(q, e);
       }
     }
 
@@ -924,10 +941,15 @@
       this.addPickup(kind, e.x, e.y, kind === 'credit' ? { value: U.randInt(10, 25) } : {});
     }
 
+    /** Damage after the operative's protection: percentage reduction first, then flat armor. */
+    mitigate(p, dmg) {
+      return Math.max(1, Math.round(dmg * (1 - (p.stats.dr || 0)) - p.stats.armor));
+    }
+
     hurtPlayer(p, dmg, ignoreIframes) {
       if (this.state !== 'playing' || p.downed) return;
       if (p.iframes > 0 && !ignoreIframes) return;
-      const d = Math.max(1, Math.round(dmg - p.stats.armor));
+      const d = this.mitigate(p, dmg);
       p.hp -= d;
       p.iframes = OO.CONFIG.PLAYER.iframes;
       p.hurt = 0.3;
@@ -1054,16 +1076,12 @@
     }
 
     updateBurster(e, dt) {
+      // Locked in at launch: the heading never changes and nothing pushes them off their line,
+      // so whatever stands between them and you takes the hit.
       const p = this.nearestPlayer(e.x, e.y), ai = e.ai;
-      let cur = Math.atan2(ai.dy, ai.dx);
-      let diff = Math.atan2(p.y - e.y, p.x - e.x) - cur;
-      while (diff > Math.PI) diff -= U.TAU;
-      while (diff < -Math.PI) diff += U.TAU;
-      if (Math.abs(diff) < 0.8) cur += U.clamp(diff, -OO.CONFIG.STAMPEDE.homing * dt, OO.CONFIG.STAMPEDE.homing * dt);
-      ai.dx = Math.cos(cur); ai.dy = Math.sin(cur); e.a = cur;
       const step = e.speed * dt;
-      e.x += ai.dx * step + e.kbx * dt; e.y += ai.dy * step + e.kby * dt;
-      e.kbx *= 0.85; e.kby *= 0.85;
+      e.x += ai.dx * step; e.y += ai.dy * step;
+      e.kbx = 0; e.kby = 0;
       ai.travel += step;
       if (Math.random() < 0.25) this.particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, life: 0.35, max: 0.35, color: '#5e0f0c', size: 3 });
       // Far from everyone they scramble over wrecks; close in, they slam into whatever is in the way.
@@ -1081,8 +1099,15 @@
     }
 
     /** Damage multiplier for enemy attacks at the current time. */
-    enemyDmgScale(withSurge = true) {
-      return (1 + (this.time / 60) * 0.05) * this.difficulty.dmg * (withSurge ? this.surgeDmg() : 1);
+    enemyDmgScale(withSurge = true, d, time = this.time) {
+      return (1 + (time / 60) * 0.05) * this.difficulty.dmg * (withSurge ? this.surgeDmg(d, time) : 1);
+    }
+
+    /** Contact damage from an infected, with the pre-13:00 one-shot guard (SURGE.hitCap). */
+    contactHit(p, e) {
+      const C = OO.CONFIG.SURGE.hitCap;
+      const dmg = C && this.time < C.until ? Math.min(e.dmg, p.stats.maxHp * C.frac) : e.dmg;
+      this.hurtPlayer(p, dmg);
     }
 
     spit(e) {

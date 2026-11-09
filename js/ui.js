@@ -156,7 +156,7 @@
       const skin = OO.Characters.skinOf(id, this.g.skinFor(id));
       const wrap = $('dossier-portrait');
       wrap.innerHTML = '';
-      wrap.appendChild(OO.Characters.portraitElement(id, skin.id, 228, 'portrait'));
+      wrap.appendChild(OO.Portraits.element(id, skin.id, 228, 'portrait'));
       $('dossier-name').textContent = c.name;
       $('dossier-role').textContent = c.role;
       $('dossier-weapon').textContent = w.name;
@@ -165,7 +165,7 @@
       for (const cid in OO.CHARACTERS) {
         const thumb = $('char-' + cid).querySelector('.char-thumb');
         thumb.innerHTML = '';
-        thumb.appendChild(OO.Characters.portraitElement(cid, this.g.skinFor(cid), 54, 'thumb'));
+        thumb.appendChild(OO.Portraits.element(cid, this.g.skinFor(cid), 54, 'thumb'));
       }
     }
 
@@ -197,6 +197,17 @@
       $('set-numbers').textContent = 'Damage numbers: ' + (s.damageNumbers ? 'on' : 'off');
       $('set-fx').textContent = 'Atmosphere: ' + ({ auto: 'auto', high: 'high', low: 'low' }[s.fx] || 'auto');
       $('set-fx').title = 'Haze, dust and film grain. Auto turns them down if the frame rate drops.';
+      // switches for secret codes you've found
+      const box = $('set-secrets');
+      box.innerHTML = '';
+      if (this.g.secrets) {
+        for (const b of this.g.secrets.settingButtons()) {
+          const el = document.createElement('button');
+          el.type = 'button'; el.className = 'btn-small btn-secret'; el.textContent = b.label;
+          el.addEventListener('click', () => this.g.secrets.toggle(b.id, false));
+          box.appendChild(el);
+        }
+      }
     }
 
     selectChar(id) {
@@ -313,7 +324,7 @@
         card.className = 'outfit' + (on ? ' equipped' : '') + (owned ? '' : ' locked');
         const fig = document.createElement('div');
         fig.className = 'outfit-fig';
-        fig.appendChild(OO.Characters.portraitElement(cid, skin.id, 132, 'portrait'));
+        fig.appendChild(OO.Portraits.element(cid, skin.id, 132, 'portrait'));
         card.appendChild(fig);
         const body = document.createElement('div');
         body.className = 'outfit-body';
@@ -411,7 +422,7 @@
       const s = p.stats;
       $('pause-coop').hidden = !this.g.coop;
       $('pause-stats').innerHTML = [
-        ['Max HP', Math.round(s.maxHp)], ['Armor', s.armor], ['Damage', Math.round(s.might * 100) + '%'],
+        ['Max HP', Math.round(s.maxHp)], ['Armor', s.armor + (s.dr ? '  \u2212' + Math.round(s.dr * 100) + '%' : '')], ['Damage', Math.round(s.might * 100) + '%'],
         ['Area', Math.round(s.area * 100) + '%'], ['Cooldown', Math.round(s.cooldown * 100) + '%'],
         ['Speed', Math.round(s.speed)], ['Pickup range', Math.round(s.magnet)], ['Time', U.formatTime(this.g.time)],
       ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');

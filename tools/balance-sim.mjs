@@ -37,12 +37,18 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
 
   // Attribute damage taken to its source. In god mode damage is counted but never applied.
   const src = {};
+  const perMin = [];          // damage taken per minute of the run (all sources)
+  const biggest = [];         // largest single hit per minute
   let cur = 'other';
   const origHurt = g.hurtPlayer.bind(g);
   g.hurtPlayer = (p, dmg, ignoreIframes) => {
     if (!god) return origHurt(p, dmg, ignoreIframes);
     if (g.state !== 'playing' || (p.iframes > 0 && !ignoreIframes)) return;
-    src[cur] = (src[cur] || 0) + Math.max(1, Math.round(dmg - p.stats.armor));
+    const d = g.mitigate(p, dmg);
+    src[cur] = (src[cur] || 0) + d;
+    const mi = Math.floor(g.time / 60);
+    perMin[mi] = (perMin[mi] || 0) + d;
+    biggest[mi] = Math.max(biggest[mi] || 0, d);
     p.iframes = OO.CONFIG.PLAYER.iframes;
   };
   for (const fn of ['updateEnemies', 'processExplosions', 'updateHazards', 'updateEnemyShots', 'updateMissiles']) {
@@ -124,6 +130,7 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
     for (const bot of ['random', 'smart']) {
       for (let r = 0; r < runs; r++) {
         for (const k in src) delete src[k];
+        perMin.length = 0; biggest.length = 0;
         const bank0 = g.meta.bank;
         g.start(ch);
         let steps = 0, boss = null, minute = 0;
@@ -143,6 +150,8 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
           weapons: g.player.weapons.map((w) => w.id + (w.def.evolved ? '*' : w.level)).join(' '),
           boss: boss ? (boss.dead ? 'scrapped at ' + Math.floor(g.time / 60) + ':' + String(Math.floor(g.time % 60)).padStart(2, '0') : Math.round(100 * boss.hp / boss.maxHp) + '% HP left') : '-',
           hpCurve: hpCurve.join(' '),
+          perMin: Array.from({ length: 15 }, (_, i) => perMin[i] || 0),
+          biggest: Array.from({ length: 15 }, (_, i) => biggest[i] || 0),
           damage: Object.entries(src).map(([k, v]) => k.replace(/^(update|process)/, '') + ' ' + Math.round(v)).join(', '),
         });
       }
@@ -161,6 +170,11 @@ for (const r of results) {
 if (god) {
   console.log('\nShambler HP multiplier at each minute mark (0:00, 1:00, ...):');
   for (const r of results) console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.hpCurve}`);
+  const avg = (key) => Array.from({ length: 15 }, (_, i) => Math.round(results.reduce((a, r) => a + r[key][i], 0) / results.length));
+  const max = (key) => Array.from({ length: 15 }, (_, i) => Math.max(...results.map((r) => r[key][i])));
+  console.log('\nMinute:                   ' + Array.from({ length: 15 }, (_, i) => String(i + 1).padStart(5)).join(''));
+  console.log('Avg damage taken per min: ' + avg('perMin').map((v) => String(v).padStart(5)).join(''));
+  console.log('Largest single hit:       ' + max('biggest').map((v) => String(v).padStart(5)).join(''));
 }
 for (const bot of ['random', 'smart']) {
   const rs = results.filter((r) => r.bot === bot);

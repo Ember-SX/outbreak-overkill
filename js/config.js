@@ -6,7 +6,7 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.6.0';
+  OO.VERSION = '0.7.0';
 
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory)
@@ -51,7 +51,17 @@
     // HP x(1 + hpPerMin)^(minutes past start), damage x(1 + dmgPerMin)^(minutes past start).
     // The Stalker gets hpPerMin * bossHpScale. Burster blasts skip the damage surge (they're
     // already lethal and can't be fought).
-    SURGE: { start: 6, hpPerMin: 0.20, dmgPerMin: 0.12, bossHpScale: 0.5 },
+    SURGE: {
+      start: 6, hpPerMin: 0.20, dmgPerMin: 0.12, bossHpScale: 0.5,
+      // Damage surge pacing as [minute, effective surge minutes] points, interpolated linearly
+      // (past the last point it climbs one effective minute per minute). Full rate 6:00-8:00,
+      // a taper 8:00-12:00 so the Stalker phase isn't one-shot territory, then a catch-up to
+      // the old 12:00 level by the time the Hare Trigger lands at 13:00.
+      dmgCurve: [[6, 0], [8, 2], [12, 3], [13, 6]],
+      bossDmgScale: 0.5,          // Stalkers (and the mech) get half the damage surge exponent
+      // Safety rail: until 13:00 one contact hit can take at most this share of your max HP.
+      hitCap: { until: 780, frac: 0.55 },
+    },
     // Co-op (2 players over P2P). Enemy HP is multiplied while a partner is connected.
     // A player at 0 HP goes down; standing within reviveRadius of them for reviveTime seconds
     // brings them back at reviveHp of max HP. The run ends when both are down.
@@ -65,10 +75,13 @@
       peerPrefix: 'outbreak-overkill-v1-',   // room 427 is peer id outbreak-overkill-v1-427
     },
     // Burster stampede: warning time, when the lane locks (seconds before launch), row spacing.
-    STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44, homing: 0.12 },
+    // Bursters charge in a dead-straight line once launched (no homing), so cover always works.
+    STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44 },
     // Spitters hang back and are easy to ignore, so cap how many can be alive: 1 + 0.5/min, max 7.
     spitterCap(minute) { return Math.min(7, 1 + Math.floor(minute * 0.5)); },
     PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.45 },
+    // Damage reduction from Kevlar Vest (per rank) and Trauma Plates (per Armory rank), capped.
+    MITIGATION: { vestDr: 0.07, platesDr: 0.06, platesArmor: 2, maxDr: 0.5 },
     xpToNext(level) {
       if (level < 20) return 5 + (level - 1) * 8;
       if (level < 40) return 157 + (level - 20) * 12;
@@ -104,7 +117,10 @@
                 mech: {
                   turn: 2.4,                         // body turn rate (rad/s)
                   attackGap: [2.2, 3.4],             // seconds of walking between attacks (x0.7 in overdrive)
-                  leap: { range: [200, 640], crouch: 0.75, air: 0.95, r: 125, dmg: 1.25, farLeap: 720 },
+                  // landing shockwave: dmg x contact damage; the target ring locks when the leap starts
+                  leap: { range: [200, 640], crouch: 0.75, air: 0.95, r: 125, dmg: 0.6, farLeap: 720 },
+                  // no single hit can take more than this share of the target's max HP (before armor)
+                  hitCaps: { slam: 0.45, contact: 0.5, missile: 0.4, laser: 0.3 },
                   missiles: { count: 6, overdrive: 9, aim: 0.45, flight: 1.25, stagger: 0.09, r: 58, dmg: 0.6, spread: 150 },
                   laser: { charge: 1.0, sweep: 1.6, turn: 0.6, length: 560, width: 15, dmg: 0.4, tick: 0.12 },
                   overdrive: 0.5,                    // below this share of HP: faster, more missiles, adds the laser
@@ -247,12 +263,12 @@
   // ---------------------------------------------------------------- PASSIVES
   OO.PASSIVES = {
     might:    { name: 'Hollow Points',  icon: 'might',    max: 5, text: '+10% damage for all weapons.' },
-    armor:    { name: 'Kevlar Vest',    icon: 'armor',    max: 5, text: '+1 armor. Every hit you take is reduced.' },
+    armor:    { name: 'Kevlar Vest',    icon: 'armor',    max: 5, text: '+1 armor and 7% less damage from every hit.' },
     speed:    { name: 'Adrenaline',     icon: 'speed',    max: 5, text: '+8% move speed.' },
     area:     { name: 'Thermite Mix',   icon: 'area',     max: 5, text: '+10% weapon area.' },
     cooldown: { name: 'Speed Loader',   icon: 'cooldown', max: 5, text: '-8% weapon cooldown.' },
     magnet:   { name: 'Scavenger Pack', icon: 'magnet',   max: 5, text: '+30% pickup range.' },
-    maxhp:    { name: 'Field Medkit',   icon: 'maxhp',    max: 5, text: '+20 max HP and slow regeneration.' },
+    maxhp:    { name: 'Field Medkit',   icon: 'maxhp',    max: 5, text: '+35 max HP, +0.6 HP/s regeneration, and patches you up for 25 HP.' },
     amount:   { name: 'Extended Mag',   icon: 'amount',   max: 2, text: '+1 projectile, blade or bolt for every weapon.' },
   };
 
@@ -269,9 +285,9 @@
   // ---------------------------------------------------------------- ARMORY (meta progression)
   // Permanent upgrades bought between runs with banked credits. cost[i] = price of rank i+1.
   OO.ARMORY = [
-    { id: 'vitality', name: 'Vitality Serum',      icon: 'maxhp',    max: 5, cost: [60, 100, 150, 220, 300], text: '+10 max HP per rank.' },
+    { id: 'vitality', name: 'Vitality Serum',      icon: 'maxhp',    max: 5, cost: [60, 100, 150, 220, 300], text: '+25 max HP and +0.3 HP/s regeneration per rank.' },
     { id: 'power',    name: 'Hollow-Point Stock',  icon: 'might',    max: 5, cost: [80, 130, 190, 260, 350], text: '+5% damage per rank.' },
-    { id: 'plating',  name: 'Trauma Plates',       icon: 'armor',    max: 3, cost: [150, 260, 400],          text: '+1 armor per rank.' },
+    { id: 'plating',  name: 'Trauma Plates',       icon: 'armor',    max: 3, cost: [150, 260, 400],          text: '+2 armor and 6% less damage taken per rank.' },
     { id: 'stride',   name: 'Field Training',      icon: 'speed',    max: 3, cost: [70, 130, 200],           text: '+5% move speed per rank.' },
     { id: 'collector',name: 'Sample Collector',    icon: 'magnet',   max: 3, cost: [50, 90, 140],            text: '+15% pickup range per rank.' },
     { id: 'growth',   name: 'Lab Notes',           icon: 'dna',      max: 3, cost: [90, 160, 250],           text: '+8% XP from DNA samples per rank.' },
@@ -334,20 +350,23 @@
     { t: 360, kind: 'pack',  enemy: 'spitter',  count: 5, text: 'A nest of Spitters' },
     { t: 390, kind: 'pack',  enemy: 'hound',    count: 40 },
     { t: 405, kind: 'stampede', count: 11 },
-    { t: 420, kind: 'elite', enemy: 'brute',    count: 2 },
+    { t: 420, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'The Stalker is back, and angrier' },
+    { t: 450, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 480, kind: 'ring',  enemy: 'bloater',  count: 18, text: 'Bloaters closing in. Keep your distance' },
     { t: 510, kind: 'stampede', count: 11, ranks: 2, text: 'Double stampede' },
     { t: 540, kind: 'elite', enemy: 'brute',    count: 2 },
-    { t: 600, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'The Stalker is back, and angrier' },
+    { t: 600, kind: 'boss',  enemy: 'stalker',  count: 2, text: 'Two Stalkers. They hunt as a pair' },
     { t: 645, kind: 'stampede', count: 13, ranks: 2 },
     { t: 660, kind: 'pack',  enemy: 'hound',    count: 60 },
     { t: 690, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 720, kind: 'ring',  enemy: 'skinner',  count: 70, text: 'Skinners in the walls' },
     { t: 735, kind: 'stampede', count: 13, ranks: 2 },
-    { t: 780, kind: 'elite', enemy: 'brute',    count: 3 },
+    { t: 765, kind: 'elite', enemy: 'brute',    count: 3 },
     { t: 815, kind: 'stampede', count: 15, ranks: 2 },
-    { t: 840, kind: 'boss',  enemy: 'mecha',    count: 1, text: 'Lab subject B-0 has stolen the HARE TRIGGER. Evac is one minute out' },
+    { t: 780, kind: 'boss',  enemy: 'mecha',    count: 1, text: 'Lab subject B-0 has stolen the HARE TRIGGER. Evac is two minutes out' },
     { t: 870, kind: 'banner', text: 'Evac helicopter inbound. Hold on' },
     { t: 880, kind: 'stampede', count: 15, ranks: 2, text: 'One last stampede' },
   ];
+  // The Director walks this list in order, so keep it sorted by time.
+  OO.EVENTS.sort((a, b) => a.t - b.t);
 })(window.OO = window.OO || {});

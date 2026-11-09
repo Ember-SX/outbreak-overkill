@@ -5,7 +5,7 @@
  * Behaviour (host / solo only; the co-op client just mirrors the state it is sent):
  *   drop     arrives by rocket-jumping in from off screen onto a marked spot near you
  *   walk     strides after the nearest operative, turning its whole body (it can't strafe)
- *   crouch   telegraph for a leap: a target reticle appears where you are heading
+ *   crouch   telegraph for a leap: a target reticle locks onto where you are heading, then stays put
  *   air      rocket jump; it can't be hit up there. Lands with a shockwave (cover doesn't help: move)
  *   recover  a short stagger after landing, the best moment to unload on it
  *   aim      opens its shoulder pods and marks the ground, then launches a carrot-missile volley
@@ -84,8 +84,7 @@
         break;
       }
       case 'crouch': {
-        // Keep tracking the landing spot until the last 0.25 s, then it's committed.
-        if (ai.timer > 0.25) this.mechaAim(e, p);
+        // The landing spot was locked when the leap started; it doesn't follow you.
         e.a += U.clamp(angDiff(e.a, Math.atan2(ai.ty - e.y, ai.tx - e.x)), -6 * dt, 6 * dt);
         if (ai.timer <= 0) {
           ai.mode = 'air'; ai.timer = ai.airDur; ai.sx = e.x; ai.sy = e.y; ai.k = 0;
@@ -134,7 +133,7 @@
           const ox = e.x + Math.cos(ai.la) * e.r * 0.6, oy = e.y + Math.sin(ai.la) * e.r * 0.6;
           const ex = e.x + Math.cos(ai.la) * ai.ll, ey = e.y + Math.sin(ai.la) * ai.ll;
           for (const q of alive) {
-            if (U.distToSegment(q.x, q.y, ox, oy, ex, ey) < L.width / 2 + q.r) this.hurtPlayer(q, e.dmg * L.dmg);
+            if (U.distToSegment(q.x, q.y, ox, oy, ex, ey) < L.width / 2 + q.r) this.mechHit(q, e.dmg * L.dmg, 'laser');
           }
           this.burst(ex, ey, '#ff7ac0', 3, 120);
           this.addLight(ex, ey, 70, 0.8, 0.12);
@@ -146,8 +145,17 @@
 
     e.kbx *= Math.max(0, 1 - dt * 9); e.kby *= Math.max(0, 1 - dt * 9);
     if (!e.airborne) {
-      for (const q of alive) if (U.dist2(e.x, e.y, q.x, q.y) < (e.r + q.r) ** 2) this.hurtPlayer(q, e.dmg);
+      for (const q of alive) if (U.dist2(e.x, e.y, q.x, q.y) < (e.r + q.r) ** 2) this.mechHit(q, e.dmg, 'contact');
     }
+  };
+
+  /**
+   * Every Hare Trigger hit is heavy but none is a one-shot: each kind is capped at a share of the
+   * target's max HP (mech.hitCaps), before armor.
+   */
+  G.mechHit = function (q, dmg, kind) {
+    const caps = OO.ENEMIES.mecha.mech.hitCaps;
+    this.hurtPlayer(q, Math.min(dmg, q.stats.maxHp * (caps[kind] || 1)));
   };
 
   /** Entrance: rocket-jump in from where it spawned (off screen) onto a marked spot near the player. */
@@ -236,7 +244,12 @@
     this.world.resolveCircle(e, e.r);
     // Shockwave: hurts players in the ring (cover is no help) and flings the horde aside.
     for (const q of this.alivePlayers()) {
-      if (U.dist2(e.x, e.y, q.x, q.y) < (M.r + q.r) ** 2) this.hurtPlayer(q, e.dmg * M.dmg);
+      const dx = q.x - e.x, dy = q.y - e.y, d = Math.hypot(dx, dy) || 1;
+      if (d >= M.r + q.r) continue;
+      this.mechHit(q, e.dmg * M.dmg, 'slam');
+      // the blast throws you clear of the mech's feet, so it can't land on you and stomp again
+      const out = e.r + q.r + 18;
+      if (d < out) { q.x = e.x + (dx / d) * out; q.y = e.y + (dy / d) * out; this.world.resolveCircle(q, q.r); }
     }
     this.grid.query(e.x, e.y, M.r + 32, buf);
     for (const o of buf) {
@@ -302,7 +315,7 @@
       m.dead = true;
       // Cover blocks the blast, just like Burster explosions.
       for (const p of this.alivePlayers()) {
-        if (U.dist2(m.x1, m.y1, p.x, p.y) < (m.r + p.r) ** 2 && !this.world.blocked(m.x1, m.y1, p.x, p.y)) this.hurtPlayer(p, m.dmg);
+        if (U.dist2(m.x1, m.y1, p.x, p.y) < (m.r + p.r) ** 2 && !this.world.blocked(m.x1, m.y1, p.x, p.y)) this.mechHit(p, m.dmg, 'missile');
       }
       this.grid.query(m.x1, m.y1, m.r + 32, buf);
       for (const o of buf) {
