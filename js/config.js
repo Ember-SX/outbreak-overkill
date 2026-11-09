@@ -75,10 +75,13 @@
       peerPrefix: 'outbreak-overkill-v1-',   // room 427 is peer id outbreak-overkill-v1-427
     },
     // Burster stampede: warning time, when the lane locks (seconds before launch), row spacing.
-    STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44, homing: 0.12 },
+    // Bursters charge in a dead-straight line once launched (no homing), so cover always works.
+    STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44 },
     // Spitters hang back and are easy to ignore, so cap how many can be alive: 1 + 0.5/min, max 7.
     spitterCap(minute) { return Math.min(7, 1 + Math.floor(minute * 0.5)); },
     PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.45 },
+    // Damage reduction from Kevlar Vest (per rank) and Trauma Plates (per Armory rank), capped.
+    MITIGATION: { vestDr: 0.07, platesDr: 0.06, platesArmor: 2, maxDr: 0.5 },
     xpToNext(level) {
       if (level < 20) return 5 + (level - 1) * 8;
       if (level < 40) return 157 + (level - 20) * 12;
@@ -114,7 +117,10 @@
                 mech: {
                   turn: 2.4,                         // body turn rate (rad/s)
                   attackGap: [2.2, 3.4],             // seconds of walking between attacks (x0.7 in overdrive)
-                  leap: { range: [200, 640], crouch: 0.75, air: 0.95, r: 125, dmg: 1.25, farLeap: 720 },
+                  // landing shockwave: dmg x contact damage; the target ring locks when the leap starts
+                  leap: { range: [200, 640], crouch: 0.75, air: 0.95, r: 125, dmg: 0.6, farLeap: 720 },
+                  // no single hit can take more than this share of the target's max HP (before armor)
+                  hitCaps: { slam: 0.45, contact: 0.5, missile: 0.4, laser: 0.3 },
                   missiles: { count: 6, overdrive: 9, aim: 0.45, flight: 1.25, stagger: 0.09, r: 58, dmg: 0.6, spread: 150 },
                   laser: { charge: 1.0, sweep: 1.6, turn: 0.6, length: 560, width: 15, dmg: 0.4, tick: 0.12 },
                   overdrive: 0.5,                    // below this share of HP: faster, more missiles, adds the laser
@@ -257,12 +263,12 @@
   // ---------------------------------------------------------------- PASSIVES
   OO.PASSIVES = {
     might:    { name: 'Hollow Points',  icon: 'might',    max: 5, text: '+10% damage for all weapons.' },
-    armor:    { name: 'Kevlar Vest',    icon: 'armor',    max: 5, text: '+1 armor. Every hit you take is reduced.' },
+    armor:    { name: 'Kevlar Vest',    icon: 'armor',    max: 5, text: '+1 armor and 7% less damage from every hit.' },
     speed:    { name: 'Adrenaline',     icon: 'speed',    max: 5, text: '+8% move speed.' },
     area:     { name: 'Thermite Mix',   icon: 'area',     max: 5, text: '+10% weapon area.' },
     cooldown: { name: 'Speed Loader',   icon: 'cooldown', max: 5, text: '-8% weapon cooldown.' },
     magnet:   { name: 'Scavenger Pack', icon: 'magnet',   max: 5, text: '+30% pickup range.' },
-    maxhp:    { name: 'Field Medkit',   icon: 'maxhp',    max: 5, text: '+20 max HP and slow regeneration.' },
+    maxhp:    { name: 'Field Medkit',   icon: 'maxhp',    max: 5, text: '+35 max HP, +0.6 HP/s regeneration, and patches you up for 25 HP.' },
     amount:   { name: 'Extended Mag',   icon: 'amount',   max: 2, text: '+1 projectile, blade or bolt for every weapon.' },
   };
 
@@ -279,9 +285,9 @@
   // ---------------------------------------------------------------- ARMORY (meta progression)
   // Permanent upgrades bought between runs with banked credits. cost[i] = price of rank i+1.
   OO.ARMORY = [
-    { id: 'vitality', name: 'Vitality Serum',      icon: 'maxhp',    max: 5, cost: [60, 100, 150, 220, 300], text: '+10 max HP per rank.' },
+    { id: 'vitality', name: 'Vitality Serum',      icon: 'maxhp',    max: 5, cost: [60, 100, 150, 220, 300], text: '+25 max HP and +0.3 HP/s regeneration per rank.' },
     { id: 'power',    name: 'Hollow-Point Stock',  icon: 'might',    max: 5, cost: [80, 130, 190, 260, 350], text: '+5% damage per rank.' },
-    { id: 'plating',  name: 'Trauma Plates',       icon: 'armor',    max: 3, cost: [150, 260, 400],          text: '+1 armor per rank.' },
+    { id: 'plating',  name: 'Trauma Plates',       icon: 'armor',    max: 3, cost: [150, 260, 400],          text: '+2 armor and 6% less damage taken per rank.' },
     { id: 'stride',   name: 'Field Training',      icon: 'speed',    max: 3, cost: [70, 130, 200],           text: '+5% move speed per rank.' },
     { id: 'collector',name: 'Sample Collector',    icon: 'magnet',   max: 3, cost: [50, 90, 140],            text: '+15% pickup range per rank.' },
     { id: 'growth',   name: 'Lab Notes',           icon: 'dna',      max: 3, cost: [90, 160, 250],           text: '+8% XP from DNA samples per rank.' },

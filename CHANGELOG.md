@@ -2,6 +2,27 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
+## [Unreleased]
+
+Branch `feature/v0.8-cover-armor`.
+
+### Changed
+- **Stampedes run dead straight.** Once launched, Bursters never turn toward you and can't be knocked off their line, so cover between you and the lane always holds. (Removed `STAMPEDE.homing`.)
+- **Hare Trigger leap.**
+  - The red landing ring locks the moment the leap starts and no longer follows you.
+  - The shockwave does 0.6x contact damage (was 1.25x) and throws you clear of the mech's feet.
+- **No Hare Trigger one-shots.** Each hit is capped at a share of the target's max HP before armor (`mech.hitCaps`): slam 45%, contact 50%, missile 40%, laser tick 30%. At 14:40 a 100 HP operative standing in the ring takes 45 instead of 207.
+- **Health and armor upgrades buffed:**
+
+  | Upgrade | Before | Now |
+  |---|---|---|
+  | Kevlar Vest (gear) | +1 armor | +1 armor and 7% damage reduction per rank (35% at rank 5) |
+  | Field Medkit (gear) | +20 max HP, 0.25 HP/s | +35 max HP, 0.6 HP/s per rank, and a 25 HP heal when taken |
+  | Vitality Serum (Armory) | +10 max HP | +25 max HP and 0.3 HP/s per rank |
+  | Trauma Plates (Armory) | +1 armor | +2 armor and 6% damage reduction per rank |
+
+  Percentage reduction applies before flat armor and is capped at 50% (`CONFIG.MITIGATION`). The pause screen shows armor with its reduction. A fully protected operative takes 17 from a 10:00 Stalker hit instead of 55.
+
 ## [0.7.0] - 2026-11-09
 
 Branch `feature/v0.7-portraits-pacing`.

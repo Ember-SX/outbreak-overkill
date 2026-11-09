@@ -44,7 +44,7 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
   g.hurtPlayer = (p, dmg, ignoreIframes) => {
     if (!god) return origHurt(p, dmg, ignoreIframes);
     if (g.state !== 'playing' || (p.iframes > 0 && !ignoreIframes)) return;
-    const d = Math.max(1, Math.round(dmg - p.stats.armor));
+    const d = g.mitigate(p, dmg);
     src[cur] = (src[cur] || 0) + d;
     const mi = Math.floor(g.time / 60);
     perMin[mi] = (perMin[mi] || 0) + d;

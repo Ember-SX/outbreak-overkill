@@ -40,6 +40,9 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 **Weapons** (8 levels each, 6 slots): Service Pistol, Combat Knife, Pump Shotgun, Incendiary Grenade, Sawblade Drones, Tesla Coil.
 
 **Gear** (passives, 6 slots): Hollow Points, Kevlar Vest, Adrenaline, Thermite Mix, Speed Loader, Scavenger Pack, Field Medkit, Extended Mag.
+- **Kevlar Vest:** +1 armor and 7% less damage from every hit, per rank (35% at rank 5).
+- **Field Medkit:** +35 max HP and +0.6 HP/s regeneration per rank, and heals 25 HP when you take it.
+- **How protection works:** damage is first cut by your percentage reduction, then by flat armor. Reduction from all sources is capped at 50%.
 
 **Evolutions:** a max-level weapon plus its partner gear evolves when you open a supply case.
 
@@ -56,16 +59,26 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 
 **Final boss: the HARE TRIGGER (13:00).** You have two minutes until evac to bring it down. Lab subject B-0, a small white rabbit called Biscuit, has stolen a combat mech and wants a word with you. It rocket-jumps in on a marked spot, then hunts the nearest operative:
 - **Stomp walk.** It turns its whole frame to follow you and can't strafe, so circling it works. It is slower than you.
-- **Rocket leap.** It crouches and a red reticle marks where you're heading, then it jumps (can't be hit in the air) and lands with a shockwave. Cover doesn't help, so get out of the ring. It staggers briefly after landing; that's your window. If you run far away, it leaps after you.
+- **Rocket leap.** It crouches and a red reticle locks onto where you're heading. The ring doesn't move after that, so step out of it. Then it jumps (it can't be hit in the air) and lands with a shockwave. Cover doesn't help, but the blast throws you clear of its feet. It staggers briefly after landing; that's your window. If you run far away, it leaps after you.
+- **No one-shots.** Every mech hit is capped at a share of your max HP before armor: slam 45%, stomping contact 50%, carrot missile 40%, laser tick 30%. Standing in its path still adds up fast.
 - **Carrot missiles.** Orange reticles go down on you, ahead of you and around you, and a volley arcs in one after another. Cover blocks the blasts, and they hurt the horde too.
 - **Overdrive (below half health).** Faster, shorter pauses, bigger volleys, and a **visor laser**: a dashed line tracks you, goes solid when it locks, then the beam sweeps toward you. Walls stop it; outrun the sweep up close or put an obstacle between you.
 - Destroy it and it drops a big supply case and herbs, and Biscuit ejects by parachute, unharmed and furious. Tuning lives in `OO.ENEMIES.mecha.mech`; the AI is in `js/boss.js`.
 
-**Stampedes:** a rumble, rising screen shake and distant shrieks give 3 seconds of warning. A red lane shows where the row of Bursters will run, with a STAMPEDE arrow on the screen edge they come from. The lane follows you until it locks 0.8s before launch. Bursters are invincible: auto-aim ignores them and bullets glance off their carapace, so you can't thin the row out. Get behind a car, barrier or pillar: obstacles stop Bursters and block every blast, including Bloater bile. The two-slot gap in the row is also safe.
+**Stampedes:** a rumble, rising screen shake and distant shrieks give 3 seconds of warning. A red lane shows where the row of Bursters will run, with a STAMPEDE arrow on the screen edge they come from. The lane follows you until it locks 0.8s before launch. Once the Bursters launch they run in a dead-straight line and never turn after you, so a wall between you and the lane always stops them. Bursters are invincible: auto-aim ignores them and bullets glance off their carapace, so you can't thin the row out. Get behind a car, barrier or pillar: obstacles stop Bursters and block every blast, including Bloater bile. The two-slot gap in the row is also safe.
 
 **Cover:** the map is littered with wrecked cars, a burnt-out bus, jersey barriers, dumpsters, pillars and hazmat barrels, generated in chunks from a seed so it stays consistent while you roam. You and the infected collide with them, and the infected steer around them. Your bullets and pellets stop on cover, and guns only aim at targets they can actually hit.
 
 **Armory:** every run banks the credits you picked up plus a payout for kills, time survived and evacuating. Spend them on the main menu on permanent upgrades (HP, damage, armor, speed, pickup range, XP gain, rerolls, payouts, and Second Wind: get back up once per run). Refund upgrades any time.
+- **Vitality Serum:** +25 max HP and +0.3 HP/s regeneration per rank (+125 HP and 1.5 HP/s at rank 5).
+- **Trauma Plates:** +2 armor and 6% less damage taken per rank (+6 armor and 18% at rank 3).
+
+| Fully protected operative, hit taken | Max HP | Stalker at 10:00 | Brute at 10:00 | Hare Trigger contact at 13:00 |
+|---|---|---|---|---|
+| No protection | 100 | 55 | 45 | 50 (capped) |
+| Kevlar Vest 5 + Field Medkit 5 | 275 | 31 | 24 | 79 |
+| Trauma Plates 3 + Vitality Serum 5 | 225 | 39 | 31 | 86 |
+| All of the above | 400 | 17 | 12 | 54 |
 
 **Wardrobe (Armory > Wardrobe):** five outfits per operative, all cosmetic.
 - Each operative has the same five sets: their default tactical kit (free), covert ops, undercover, hazmat, and swimwear.
