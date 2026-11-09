@@ -689,7 +689,22 @@
       const S = OO.CONFIG.SURGE;
       return Math.pow(1 + (d && d.boss ? S.hpPerMin * S.bossHpScale : S.hpPerMin), this.surgeHpMinutes());
     }
-    surgeDmg() { return Math.pow(1 + OO.CONFIG.SURGE.dmgPerMin, this.surgeMinutes()); }
+    /** Effective surge minutes for damage, following SURGE.dmgCurve. */
+    surgeDmgMinutes(time = this.time) {
+      const pts = OO.CONFIG.SURGE.dmgCurve, m = time / 60;
+      if (m <= pts[0][0]) return 0;
+      for (let i = 1; i < pts.length; i++) {
+        const [m0, e0] = pts[i - 1], [m1, e1] = pts[i];
+        if (m <= m1) return e0 + (e1 - e0) * (m - m0) / (m1 - m0);
+      }
+      const [mL, eL] = pts[pts.length - 1];
+      return eL + (m - mL);
+    }
+    surgeDmg(d, time) {
+      const S = OO.CONFIG.SURGE;
+      // Stalkers take half the exponent; the final boss is the late-game test and takes it all.
+      return Math.pow(1 + S.dmgPerMin, this.surgeDmgMinutes(time) * (d && d.boss && !d.final ? S.bossDmgScale : 1));
+    }
 
     /** Called for every regular kill: feeds the rolling one-hit-kill share. */
     recordKill(e) {
@@ -707,7 +722,7 @@
         id: ++this.nextId, type, def: d, x, y, level, hits: 0,
         hp: d.hp * hpMul, maxHp: d.hp * hpMul,
         speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)),
-        dmg: d.dmg * this.enemyDmgScale(), r: d.r, mass: d.mass,
+        dmg: d.dmg * this.enemyDmgScale(true, d), r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
       if (!d.crate && !d.burster && this.world) this.world.resolveCircle(e, e.r);
@@ -798,7 +813,7 @@
         e.kbx *= k; e.kby *= k;
         if (e.def.ranged) e.a = Math.atan2(dy, dx);   // always faces its target, even while backing off
 
-        for (const q of alive) if (U.dist2(e.x, e.y, q.x, q.y) < (e.r + q.r) ** 2) this.hurtPlayer(q, e.dmg);
+        for (const q of alive) if (U.dist2(e.x, e.y, q.x, q.y) < (e.r + q.r) ** 2) this.contactHit(q, e);
       }
     }
 
@@ -1081,8 +1096,15 @@
     }
 
     /** Damage multiplier for enemy attacks at the current time. */
-    enemyDmgScale(withSurge = true) {
-      return (1 + (this.time / 60) * 0.05) * this.difficulty.dmg * (withSurge ? this.surgeDmg() : 1);
+    enemyDmgScale(withSurge = true, d, time = this.time) {
+      return (1 + (time / 60) * 0.05) * this.difficulty.dmg * (withSurge ? this.surgeDmg(d, time) : 1);
+    }
+
+    /** Contact damage from an infected, with the pre-13:00 one-shot guard (SURGE.hitCap). */
+    contactHit(p, e) {
+      const C = OO.CONFIG.SURGE.hitCap;
+      const dmg = C && this.time < C.until ? Math.min(e.dmg, p.stats.maxHp * C.frac) : e.dmg;
+      this.hurtPlayer(p, dmg);
     }
 
     spit(e) {

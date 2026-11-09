@@ -51,7 +51,17 @@
     // HP x(1 + hpPerMin)^(minutes past start), damage x(1 + dmgPerMin)^(minutes past start).
     // The Stalker gets hpPerMin * bossHpScale. Burster blasts skip the damage surge (they're
     // already lethal and can't be fought).
-    SURGE: { start: 6, hpPerMin: 0.20, dmgPerMin: 0.12, bossHpScale: 0.5 },
+    SURGE: {
+      start: 6, hpPerMin: 0.20, dmgPerMin: 0.12, bossHpScale: 0.5,
+      // Damage surge pacing as [minute, effective surge minutes] points, interpolated linearly
+      // (past the last point it climbs one effective minute per minute). Full rate 6:00-8:00,
+      // a taper 8:00-12:00 so the Stalker phase isn't one-shot territory, then a catch-up to
+      // the old 12:00 level by the time the Hare Trigger lands at 13:00.
+      dmgCurve: [[6, 0], [8, 2], [12, 3], [13, 6]],
+      bossDmgScale: 0.5,          // Stalkers (and the mech) get half the damage surge exponent
+      // Safety rail: until 13:00 one contact hit can take at most this share of your max HP.
+      hitCap: { until: 780, frac: 0.55 },
+    },
     // Co-op (2 players over P2P). Enemy HP is multiplied while a partner is connected.
     // A player at 0 HP goes down; standing within reviveRadius of them for reviveTime seconds
     // brings them back at reviveHp of max HP. The run ends when both are down.

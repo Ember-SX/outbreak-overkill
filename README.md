@@ -87,7 +87,27 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 | Shambler HP, v0.3 Standard | 16 | 31 | 60 | 116 |
 | Shambler HP, v0.2 Standard | 12 | 21 | 30 | 39 |
 
-**Late-game surge:** from 6:00, enemy HP compounds +20% and enemy damage +12% every minute on top of the strain level (The Stalker gets half the HP rate; Burster blasts skip the damage surge). A banner announces it and the strain line on the HUD turns red with the live multipliers. A shambler's contact hit goes from 15 to 24 at 10:00 and from 18 to 49 at 15:00. Tuning lives in `OO.CONFIG.SURGE`.
+**Late-game surge:** from 6:00, enemy HP compounds +20% every minute on top of the strain level. Enemy damage follows a paced curve (`SURGE.dmgCurve`):
+- 6:00–8:00: +12% a minute.
+- 8:00–12:00: tapers to about +3% a minute, so the Stalker phase isn't one-shot territory.
+- 12:00–13:00: catches up to the old 12:00 level as the Hare Trigger arrives.
+- After 13:00: +12% a minute again.
+
+Special cases:
+- Stalkers take half the HP surge and half the damage surge. The Hare Trigger takes the full damage surge.
+- Burster blasts skip the damage surge.
+- Until 13:00, no single contact hit can take more than 55% of your max HP (`SURGE.hitCap`).
+
+A banner announces the surge, and the strain line on the HUD turns red with the live multipliers.
+
+| Contact hit (Standard) | 8:00 | 10:00 | 12:00 | 13:00 | 15:00 |
+|---|---|---|---|---|---|
+| Shambler | 18 | 20 | 22 | 33 | 43 |
+| Brute | 40 | 45 | 51 | 73 | 97 |
+| Stalker (100 HP operative) | 55 | 55 | 55 | (none spawn) | (none spawn) |
+| Hare Trigger | (not yet) | (not yet) | (not yet) | 130 | 173 |
+
+Tuning lives in `OO.CONFIG.SURGE`.
 
 **HP cap at 13:00:** enemy HP stops growing at 13:00 (`OO.CONFIG.LEVELING.hpCapTime`). The clock part of the strain level, the surge HP multiplier and the adaptive bonus all freeze there, so infected spawning in the last two minutes have the same HP as at 13:00. A Standard shambler tops out at x26.6 its base HP instead of reaching about x50 by 15:00. The HUD marks the HP multiplier with (MAX). Enemy damage keeps rising.
 

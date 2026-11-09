@@ -31,6 +31,20 @@ Branch `feature/v0.7-portraits-pacing`.
   - The Hare Trigger at 13:00 (was 14:00), so you have two minutes to take it down.
   - The brutes that shared those moments moved to 7:30 and 12:45.
 - The boss bar tracks only the Hare Trigger while it's up, even if Stalkers are still alive.
+- **Mid-game damage taper** (`SURGE.dmgCurve`, `bossDmgScale`, `hitCap`):
+  - The damage surge keeps its +12%/min rate from 6:00 to 8:00, slows to about +3%/min from 8:00 to 12:00, catches up to the old 12:00 level by 13:00, then climbs at +12%/min again.
+  - Stalkers take half the damage surge. The Hare Trigger takes all of it.
+  - Until 13:00, a single contact hit is capped at 55% of the operative's max HP.
+
+  Per-hit damage, old -> new:
+
+  | Enemy | 10:00 | 12:00 | 13:00 / 15:00 |
+  |---|---|---|---|
+  | Stalker | 89 -> 55 (65 uncapped) | 118 -> 55 | |
+  | Brute | 53 -> 45 | 71 -> 51 | |
+  | Shambler | 24 -> 20 | | 36 -> 33 / 49 -> 43 |
+  | Hare Trigger | | | 146 -> 130 contact at 13:00 |
+- The balance sim (god mode) prints average damage taken and the largest single hit for each minute.
 
 ### Fixed
 - Scripted events listed out of order (the 2:15 Spitter banner, the 4:45 stampede) fired late. The event list is now sorted by time at load.
