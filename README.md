@@ -60,7 +60,7 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 **Final boss: the HARE TRIGGER (13:00).** You have two minutes until evac to bring it down. Lab subject B-0, a small white rabbit called Biscuit, has stolen a combat mech and wants a word with you. It rocket-jumps in on a marked spot, then hunts the nearest operative:
 - **Stomp walk.** It turns its whole frame to follow you and can't strafe, so circling it works. It is slower than you.
 - **Rocket leap.** It crouches and a red reticle locks onto where you're heading. The ring doesn't move after that, so step out of it. Then it jumps (it can't be hit in the air) and lands with a shockwave. Cover doesn't help, but the blast throws you clear of its feet. It staggers briefly after landing; that's your window. If you run far away, it leaps after you.
-- **No one-shots.** Every mech hit is capped at a share of your max HP before armor: slam 45%, stomping contact 50%, carrot missile 40%, laser tick 30%. Standing in its path still adds up fast.
+- **No one-shots.** Like every attack in the game, the mech's slam and stomping contact are capped by the per-hit ceiling (62% of your max HP at 13:00, 68% at 15:00). Each carrot missile is capped at 50% and each laser tick at 35%. Standing in its path still adds up fast.
 - **Carrot missiles.** Orange reticles go down on you, ahead of you and around you, and a volley arcs in one after another. Cover blocks the blasts, and they hurt the horde too.
 - **Overdrive (below half health).** Faster, shorter pauses, bigger volleys, and a **visor laser**: a dashed line tracks you, goes solid when it locks, then the beam sweeps toward you. Walls stop it; outrun the sweep up close or put an obstacle between you.
 - Destroy it and it drops a big supply case and herbs, and Biscuit ejects by parachute, unharmed and furious. Tuning lives in `OO.ENEMIES.mecha.mech`; the AI is in `js/boss.js`.
@@ -75,10 +75,10 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 
 | Fully protected operative, hit taken | Max HP | Stalker at 10:00 | Brute at 10:00 | Hare Trigger contact at 13:00 |
 |---|---|---|---|---|
-| No protection | 100 | 55 | 45 | 50 (capped) |
-| Kevlar Vest 5 + Field Medkit 5 | 275 | 31 | 24 | 79 |
-| Trauma Plates 3 + Vitality Serum 5 | 225 | 39 | 31 | 86 |
-| All of the above | 400 | 17 | 12 | 54 |
+| No protection | 100 | 57 (ceiling) | 57 (ceiling) | 62 (ceiling) |
+| Kevlar Vest 5 + Field Medkit 5 | 275 | 63 | 40 | 107 |
+| Trauma Plates 3 + Vitality Serum 5 | 225 | 80 | 51 | 109 |
+| All of the above | 400 | 41 | 24 | 83 |
 
 **Wardrobe (Armory > Wardrobe):** five outfits per operative, all cosmetic.
 - Each operative has the same five sets: their default tactical kit (free), covert ops, undercover, hazmat, and swimwear.
@@ -100,27 +100,32 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 | Shambler HP, v0.3 Standard | 16 | 31 | 60 | 116 |
 | Shambler HP, v0.2 Standard | 12 | 21 | 30 | 39 |
 
-**Late-game surge:** from 6:00, enemy HP compounds +20% every minute on top of the strain level. Enemy damage follows a paced curve (`SURGE.dmgCurve`):
-- 6:00–8:00: +12% a minute.
-- 8:00–12:00: tapers to about +3% a minute, so the Stalker phase isn't one-shot territory.
-- 12:00–13:00: catches up to the old 12:00 level as the Hare Trigger arrives.
-- After 13:00: +12% a minute again.
-
-Special cases:
-- Stalkers take half the HP surge and half the damage surge. The Hare Trigger takes the full damage surge.
-- Burster blasts skip the damage surge.
-- Until 13:00, no single contact hit can take more than 55% of your max HP (`SURGE.hitCap`).
+**Enemy damage** climbs steadily through the whole run. Every attack scales the same way: contact, Spitter acid, Bloater and Burster blasts, and the Hare Trigger.
+- **Threat** (`CONFIG.THREAT`): base x1.3, plus 6% per minute, times the difficulty multiplier.
+- **Surge** (`SURGE.dmgCurve`): from 6:00 enemy HP compounds +20% a minute on top of the strain level, and damage gets a steady extra climb to 13:00, then +12% a minute for the last two minutes.
+- Stalkers take three quarters of the damage surge and half the HP surge. The Hare Trigger takes the full damage surge.
 
 A banner announces the surge, and the strain line on the HUD turns red with the live multipliers.
 
-| Contact hit (Standard) | 8:00 | 10:00 | 12:00 | 13:00 | 15:00 |
-|---|---|---|---|---|---|
-| Shambler | 18 | 20 | 22 | 33 | 43 |
-| Brute | 40 | 45 | 51 | 73 | 97 |
-| Stalker (100 HP operative) | 55 | 55 | 55 | (none spawn) | (none spawn) |
-| Hare Trigger | (not yet) | (not yet) | (not yet) | 130 | 173 |
+**The one hard rule: no single hit kills a healthy operative.** Every hit from every source is capped at a share of the target's max HP before armor (`CONFIG.HIT_CEILING`):
+- The cap is 45% at the start, 55% at 8:00, 62% at 13:00 and 68% at 15:00.
+- Every hit, explosions included, grants i-frames, so hits can't stack into one.
+- Deaths always take several hits in a row.
 
-Tuning lives in `OO.CONFIG.SURGE`.
+The pause screen shows your current ceiling as **Max hit**.
+
+| Damage taken per hit, fresh 100 HP operative (Standard) | 0:00 | 5:00 | 10:00 | 13:00 | 15:00 |
+|---|---|---|---|---|---|
+| Shambler | 13 | 17 | 31 | 46 | 61 |
+| Skinner | 20 | 25 | 46 | 62 | 68 |
+| Brute | 29 | 38 | 57 | 62 | 68 |
+| Spitter impact / acid tick | 16 / 8 | 21 / 11 | 38 / 19 | 57 / 29 | 68 / 38 |
+| Bloater blast | 26 | 34 | 57 | 62 | 68 |
+| Burster blast, Stalker, Hare Trigger contact | at the ceiling: 45 | 51 | 57 | 62 | 68 |
+
+With more HP and armor the raw numbers show through. A Dex with maxed Vitality Serum and Trauma Plates (255 HP) takes a 100-damage Burster blast at 10:00 and a 135-damage Hare Trigger hit at 15:00.
+
+Tuning lives in `OO.CONFIG.THREAT`, `OO.CONFIG.SURGE` and `OO.CONFIG.HIT_CEILING`.
 
 **HP cap at 13:00:** enemy HP stops growing at 13:00 (`OO.CONFIG.LEVELING.hpCapTime`). The clock part of the strain level, the surge HP multiplier and the adaptive bonus all freeze there, so infected spawning in the last two minutes have the same HP as at 13:00. A Standard shambler tops out at x26.6 its base HP instead of reaching about x50 by 15:00. The HUD marks the HP multiplier with (MAX). Enemy damage keeps rising.
 
@@ -130,7 +135,7 @@ Tuning lives in `OO.CONFIG.SURGE`.
 
 **Co-op (2 players, online):** press **Co-op** on the main menu. One player picks **Host a room** and reads out the 3-digit code; the other types it in and presses **Join**. Each of you plays the operative selected on your own main menu, with your own Armory upgrades.
 - XP is shared. On each team level-up both of you pick an upgrade; the game waits for both.
-- Infected chase whoever is closest and have **double health** while a partner is connected.
+- Infected chase whoever is closest and have **1.5x health** while a partner is connected (`COOP.enemyHp`).
 - At 0 HP you go down instead of dying. Stand next to a downed partner for 3 seconds to revive them at 35% HP. The run ends when both of you are down.
 - Supply cases show as a toast instead of a pause screen. Either player can pause for both.
 - Each player banks their own payout. After a run, **Back to lobby** keeps the room open for another go.
