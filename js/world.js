@@ -1,6 +1,11 @@
 /*
  * World: procedural obstacles (wrecked cars, barriers, dumpsters, pillars, barrels).
  *
+ * v0.9: some barrels are volatile fuel drums (o.volatile). A drum that explodes is destroyed for
+ * the rest of the run: its key goes into `gone`, it stops colliding at once, and if its chunk is
+ * unloaded and regenerated later it is left out. Keys are the obstacle's rounded position, so the
+ * co-op client (same seed, same world) can destroy the same drum from a host event.
+ *
  * The map is infinite, so it is cut into CHUNK-sized squares. Each chunk's obstacles come
  * from a seeded RNG keyed on the chunk coordinates: walk away and come back, and the same
  * wreck is still there. Only chunks near the player are kept in memory.
@@ -56,6 +61,7 @@
       this.cells = new Map();
       this.stamp = 0;
       this.sig = null;
+      this.gone = new Set();
     }
 
     generate(cx, cy) {
@@ -71,6 +77,8 @@
         o.seed = rnd();
         o.x = cx * CHUNK + 70 + rnd() * (CHUNK - 140);
         o.y = cy * CHUNK + 70 + rnd() * (CHUNK - 140);
+        o.key = Math.round(o.x) + ',' + Math.round(o.y);
+        if (type === 'barrels') o.volatile = o.seed < OO.CONFIG.HAZARDS.volatileShare;
         bounds(o);
         if (Math.abs(o.x) < SAFE_START + 90 && Math.abs(o.y) < SAFE_START + 90) continue;
         // keep at least a corridor (60 units) between obstacles so nothing gets sealed in
@@ -78,7 +86,7 @@
         for (const q of out) {
           if (o.minX - 60 < q.maxX && o.maxX + 60 > q.minX && o.minY - 60 < q.maxY && o.maxY + 60 > q.minY) { clash = true; break; }
         }
-        if (!clash) out.push(o);
+        if (!clash && !this.gone.has(o.key)) out.push(o);   // destroyed drums stay destroyed (the RNG sequence is unchanged)
       }
       return out;
     }
@@ -135,10 +143,24 @@
         for (let gy = Math.floor((y - r) / CELL); gy <= Math.floor((y + r) / CELL); gy++) {
           const b = this.cells.get(gx * 100003 + gy);
           if (!b) continue;
-          for (const o of b) if (o._s !== s) { o._s = s; out.push(o); }
+          for (const o of b) if (o._s !== s && !o.gone) { o._s = s; out.push(o); }
         }
       }
       return out;
+    }
+
+    /** Active obstacle by key, or null. */
+    find(key) {
+      for (const o of this.list) if (o.key === key) return o;
+      return null;
+    }
+
+    /** Remove an obstacle for good (an exploded drum). Safe to call for one that isn't loaded. */
+    destroy(key) {
+      this.gone.add(key);
+      const o = this.find(key);
+      if (o) o.gone = true;
+      return o;
     }
 
     /** Push a circle out of every obstacle it overlaps. Returns the last obstacle hit, or null. */

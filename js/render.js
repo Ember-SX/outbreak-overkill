@@ -240,7 +240,9 @@
       this.scenery.drawFixtures(ctx, g.time);
       this.drawObstacles(ctx);
       this.drawEnemies(ctx);
+      this.drawTurrets(ctx);
       for (const pl of g.players) this.drawPlayer(ctx, pl);
+      for (const pl of g.players) if (pl.md > 0) this.drawDrone(ctx, pl);
       for (const pl of g.players) if (!pl.downed) for (const w of pl.weapons) w.draw(ctx, g);
       this.drawLobs(ctx);
       this.drawEffects(ctx, false);
@@ -255,7 +257,10 @@
       world();
       this.scenery.drawGlows(ctx, g.time);
       this.drawObstacleEdges(ctx);
+      this.drawDrumGlows(ctx);
       this.drawEyes(ctx);
+      this.drawStuns(ctx);
+      this.drawTurretFx(ctx);
       this.drawPickups(ctx);
       this.drawStampedeLanes(ctx);
       this.drawHazards(ctx);
@@ -272,6 +277,7 @@
       this.scenery.drawPost(ctx, this.w, this.h, g.time, g.reducedMotion, fx === 'high');
       this.drawScreenFx();
       if (g.state !== 'results') this.drawHud();
+      this.g.ui.updateCalldown();
       if (g.settings.secrets && g.settings.secrets.vhs) this.drawVhs();
       this.drawStick();
       if (g.debug) this.drawDebug();
@@ -364,9 +370,27 @@
     // ---------------------------------------------------------------- obstacles
     drawObstacles(ctx) {
       for (const o of this.g.world.list) {
-        if (!this.inView(o.x, o.y, Math.max(o.maxX - o.minX, o.maxY - o.minY))) continue;
+        if (o.gone || !this.inView(o.x, o.y, Math.max(o.maxX - o.minX, o.maxY - o.minY))) continue;
         const spr = o.spr || (o.spr = this.obstacleSprite(o));
-        ctx.drawImage(spr, o.x - spr.hw, o.y - spr.hh, spr.hw * 2, spr.hh * 2);
+        if (o.lit) {
+          // lit fuse: the drum shudders and flashes faster and faster
+          const k = U.clamp((this.g.time - o.litT) / OO.CONFIG.HAZARDS.fuse, 0, 1);
+          const on = Math.sin((this.g.time - o.litT) * (14 + k * 40)) > 0;
+          const j = 1.2 + k * 1.5;
+          ctx.drawImage(spr, o.x - spr.hw + U.rand(-j, j), o.y - spr.hh + U.rand(-j, j), spr.hw * 2, spr.hh * 2);
+          if (on) { ctx.fillStyle = 'rgba(255,170,60,0.55)'; circle(ctx, o.x, o.y, o.r + 3); }
+        } else ctx.drawImage(spr, o.x - spr.hw, o.y - spr.hh, spr.hw * 2, spr.hh * 2);
+      }
+    }
+
+    /** Volatile drums get a faint warning glow through the dark, so you can plan around them. */
+    drawDrumGlows(ctx) {
+      const t = this.g.time;
+      for (const o of this.g.world.list) {
+        if (!o.volatile || o.gone || !this.inView(o.x, o.y, 40)) continue;
+        const a = o.lit ? 0.7 : 0.16 + Math.sin(t * 2 + o.seed * 9) * 0.05;
+        ctx.strokeStyle = `rgba(255,96,48,${a})`; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(o.x, o.y, o.r + 4, 0, TAU); ctx.stroke();
       }
     }
 
@@ -376,7 +400,7 @@
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       for (const o of this.g.world.list) {
-        if (!this.inView(o.x, o.y, 100)) continue;
+        if (o.gone || !this.inView(o.x, o.y, 100)) continue;
         if (o.kind === 'circle') { ctx.moveTo(o.x + o.r, o.y); ctx.arc(o.x, o.y, o.r, 0, TAU); }
         else ctx.rect(o.minX, o.minY, o.maxX - o.minX, o.maxY - o.minY);
       }
@@ -458,6 +482,21 @@
           break;
         }
         case 'barrels': {
+          if (o.volatile) {
+            // red fuel drum: rim, hazard band and a flame mark on the lid
+            x.fillStyle = '#8f2318'; x.beginPath(); x.arc(0, 0, o.r, 0, TAU); x.fill();
+            x.strokeStyle = '#5a140e'; x.lineWidth = 2; x.beginPath(); x.arc(0, 0, o.r * 0.8, 0, TAU); x.stroke();
+            x.save(); x.beginPath(); x.arc(0, 0, o.r, 0, TAU); x.clip();
+            x.fillStyle = '#e8b030';
+            for (let i = -3; i <= 3; i++) { x.beginPath(); x.moveTo(i * 8 - 4, -o.r); x.lineTo(i * 8, -o.r); x.lineTo(i * 8 + 10, o.r); x.lineTo(i * 8 + 6, o.r); x.closePath(); x.globalAlpha = 0.28; x.fill(); }
+            x.restore(); x.globalAlpha = 1;
+            x.fillStyle = '#f2b23a';
+            x.beginPath(); x.moveTo(0, -o.r * 0.55); x.quadraticCurveTo(o.r * 0.45, -o.r * 0.05, 0, o.r * 0.45); x.quadraticCurveTo(-o.r * 0.45, -o.r * 0.05, 0, -o.r * 0.55); x.fill();
+            x.fillStyle = '#8f2318';
+            x.beginPath(); x.moveTo(0, -o.r * 0.1); x.quadraticCurveTo(o.r * 0.2, o.r * 0.15, 0, o.r * 0.32); x.quadraticCurveTo(-o.r * 0.2, o.r * 0.15, 0, -o.r * 0.1); x.fill();
+            x.fillStyle = '#3a0d08'; x.beginPath(); x.arc(o.r * 0.5, -o.r * 0.42, o.r * 0.13, 0, TAU); x.fill();
+            break;
+          }
           x.fillStyle = '#9c8228'; x.beginPath(); x.arc(0, 0, o.r, 0, TAU); x.fill();
           x.strokeStyle = '#5c4c16'; x.lineWidth = 2; x.beginPath(); x.arc(0, 0, o.r * 0.78, 0, TAU); x.stroke();
           x.fillStyle = '#1b1a17';
@@ -471,6 +510,65 @@
       }
       c.hw = hw; c.hh = hh;
       return c;
+    }
+
+    // ---------------------------------------------------------------- tactical (v0.9)
+    drawTurrets(ctx) {
+      for (const t of this.g.turrets) {
+        if (!this.inView(t.x, t.y, 30)) continue;
+        const fade = Math.min(1, t.life / 1.5);
+        ctx.globalAlpha = 0.4 + fade * 0.6;
+        ctx.drawImage(this.shadow, t.x - 14, t.y + 2, 28, 12);
+        // tripod
+        ctx.strokeStyle = '#2b3433'; ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) { const a = (i / 3) * TAU + 0.5; ctx.moveTo(t.x, t.y); ctx.lineTo(t.x + Math.cos(a) * 13, t.y + Math.sin(a) * 13); }
+        ctx.stroke();
+        // head
+        ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.a);
+        ctx.fillStyle = '#3d4a48'; ctx.fillRect(-8, -7, 16, 14);
+        ctx.fillStyle = '#56d6c0'; ctx.fillRect(-6, -5, 3, 3);
+        ctx.fillStyle = '#20282a'; ctx.fillRect(6, -2.5, 13, 5);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    drawTurretFx(ctx) {
+      for (const t of this.g.turrets) {
+        if (!this.inView(t.x, t.y, 40)) continue;
+        if (t.flash > 0) {
+          const mx = t.x + Math.cos(t.a) * 21, my = t.y + Math.sin(t.a) * 21;
+          ctx.fillStyle = 'rgba(255,220,140,0.9)'; circle(ctx, mx, my, 4.5);
+        }
+        // remaining time as a thin arc
+        ctx.strokeStyle = 'rgba(82,230,198,0.55)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(t.x, t.y, 19, -Math.PI / 2, -Math.PI / 2 + TAU * U.clamp(t.life / t.max, 0, 1)); ctx.stroke();
+      }
+    }
+
+    /** Med drone: a little quadcopter circling the operative it's patching up. */
+    drawDrone(ctx, p) {
+      const t = this.g.time * 2.4 + p.slot, x = p.x + Math.cos(t) * 26, y = p.y - 18 + Math.sin(t) * 12;
+      ctx.strokeStyle = 'rgba(125,220,106,0.35)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(p.x, p.y); ctx.stroke();
+      ctx.fillStyle = '#2c3534'; ctx.fillRect(x - 5, y - 4, 10, 8);
+      ctx.fillStyle = 'rgba(200,220,215,0.5)';
+      for (const [dx, dy] of [[-7, -5], [7, -5], [-7, 5], [7, 5]]) { ctx.beginPath(); ctx.ellipse(x + dx, y + dy, 4.5, 1.4, (t * 9) % TAU, 0, TAU); ctx.fill(); }
+      ctx.fillStyle = Math.sin(t * 6) > 0 ? '#7ddc6a' : '#2f6a28'; ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+    }
+
+    /** Flashbanged infected: little white sparks circling their heads. */
+    drawStuns(ctx) {
+      const t = this.g.time;
+      ctx.fillStyle = 'rgba(255,250,225,0.85)';
+      for (const e of this.g.enemies) {
+        if (!(e.stun > 0) || e.dead || !this.inView(e.x, e.y, e.r * 2)) continue;
+        for (let i = 0; i < 3; i++) {
+          const a = t * 5 + i * (TAU / 3) + e.id;
+          ctx.fillRect(e.x + Math.cos(a) * e.r * 0.8 - 1.5, e.y - e.r * 0.7 + Math.sin(a) * e.r * 0.3 - 1.5, 3, 3);
+        }
+      }
     }
 
     drawEnemies(ctx) {
@@ -1200,6 +1298,11 @@
           const fire = f.tint === 'fire';
           ctx.fillStyle = fire ? `rgba(255,120,30,${0.5 * a})` : f.blood ? `rgba(200,40,30,${0.5 * a})` : `rgba(185,201,74,${0.45 * a})`; circle(ctx, f.x, f.y, r);
           ctx.strokeStyle = fire ? `rgba(255,220,140,${0.9 * a})` : f.blood ? `rgba(255,170,120,${0.85 * a})` : `rgba(230,255,140,${0.8 * a})`; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.stroke();
+        } else if (f.kind === 'flashbang' && overDark) {
+          const r = f.r * (1 - a * 0.85);
+          ctx.fillStyle = `rgba(255,252,236,${0.35 * a * a})`; circle(ctx, f.x, f.y, r);
+          ctx.strokeStyle = `rgba(255,255,255,${0.9 * a})`; ctx.lineWidth = 2 + a * 4;
           ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.stroke();
         } else if (f.kind === 'eject' && overDark) {
           this.drawEject(ctx, f, a);

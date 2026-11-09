@@ -4,7 +4,7 @@ A bio-horror horde survival game for the browser. You play one operative inside 
 
 The core loop follows the Vampire Survivors formula: move only, auto-firing weapons, XP gems (DNA samples here), a pick-one-of-three upgrade screen, weapon and passive slots, elites that drop supply cases, and a wave script that escalates until you're overrun or extracted.
 
-**Status:** v0.7.0. Playable start to finish, solo or 2-player online co-op, with cover, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions, and an Armory with upgrades and an outfit wardrobe between runs.
+**Status:** v0.9.0. Playable start to finish, solo or 2-player online co-op, with cover, volatile drums, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions, tactical call-downs, and between runs an Armory with upgrades and an outfit wardrobe plus a Dossier with 25 achievements, a bestiary and lifetime statistics.
 
 ## Play it
 
@@ -21,6 +21,7 @@ No install, no build step.
 | Move | WASD or arrow keys | Drag anywhere / left stick |
 | Pick upgrade | 1, 2, 3 | Tap a card |
 | Reroll / skip upgrade | R / X | Buttons under the cards |
+| Tactical call-down | Q | Call-down button (bottom of the screen) |
 | Pause | Esc or P | II button / Start |
 | Mute | M | Sound button |
 | Debug overlay | ` (backtick) | — |
@@ -68,6 +69,27 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 **Stampedes:** a rumble, rising screen shake and distant shrieks give 3 seconds of warning. A red lane shows where the row of Bursters will run, with a STAMPEDE arrow on the screen edge they come from. The lane follows you until it locks 0.8s before launch. Once the Bursters launch they run in a dead-straight line and never turn after you, so a wall between you and the lane always stops them. Bursters are invincible: auto-aim ignores them and bullets glance off their carapace, so you can't thin the row out. Get behind a car, barrier or pillar: obstacles stop Bursters and block every blast, including Bloater bile. The two-slot gap in the row is also safe.
 
 **Cover:** the map is littered with wrecked cars, a burnt-out bus, jersey barriers, dumpsters, pillars and hazmat barrels, generated in chunks from a seed so it stays consistent while you roam. You and the infected collide with them, and the infected steer around them. Your bullets and pellets stop on cover, and guns only aim at targets they can actually hit.
+
+**Volatile drums:** about 60% of the barrels on the map are red fuel drums with a faint orange ring around them. A bullet, a pellet, a fire pool or a nearby blast lights a short fuse (they shudder and flash), then they explode: regular infected in the blast die (the damage scales with the horde), elites lose a quarter of their health, bosses a sliver, and any other drum in range goes off next. You get the kills. You're not immune either: a drum blast is a hit like any other (capped by the per-hit ceiling, blocked by cover). A drum that explodes is gone for the rest of the run, cover included. Tuning: `OO.CONFIG.HAZARDS`.
+
+**Tactical call-downs:** one per run, on a cooldown. Press **Q** or tap the call-down button. Every run starts with it charging for 20 seconds. Choose it from the menu dossier (**Call-down > Change**) or **Dossier > Call-downs**.
+
+| Call-down | Cooldown | Effect | Unlocked by |
+|---|---|---|---|
+| Flashbang | 30 s | Stuns every infected around you for 2.6 s (elites 1.6 s, bosses 0.8 s). Stunned infected can't attack or hurt you on contact. Bursters are deaf to it. | Available from the start |
+| Sentry Turret | 50 s | An automated turret for 15 s that tracks the nearest infected. Its damage keeps pace with the strain level. | Body Count |
+| Med Drone | 70 s | Heals 35% of your max HP over 4 s. | Extraction |
+| Airstrike Beacon | 90 s | The flare pickup's strike: clears the screen around you, bosses take a heavy hit. | Stalker Down |
+
+In co-op each operative brings their own call-down; the host runs it and both screens see it. Tuning: `OO.CONFIG.CALLDOWN`, names and text in `OO.CALLDOWNS`.
+
+**Dossier (main menu):** the field archive, saved in your browser.
+- **Achievements:** 25 across five groups, each Bronze, Silver or Gold. Milestones (First Blood, Extraction, Full Roster, Body Count, Pest Control, Dressed to Kill), combat mastery (Stalker Down, Restraining Order, Scrap Metal, Mutation Protocol, Duck and Cover, Untouchable, Powder Keg, Flatline Averted), operative specializations (evacuate as each operative; 5,000 kills with each one's signature weapon), tactics and teamwork (Buddy System, Danger Close, Field Researcher) and two classified ones for the secret codes. Counters show a progress bar. A slide-down notice announces each one the moment you earn it, and the results screen lists what you unlocked that run.
+- **Bestiary:** a report on every specimen, filed the first time it comes into view: original lore, base stats, threat rating, traits and how many you've killed. Unseen ones stay silhouettes.
+- **Call-downs:** equip the one you'll take into the next run.
+- **Statistics:** lifetime totals: playtime, runs, evacuations, kills, shots fired, damage dealt and taken, boss takedowns, drums detonated, call-downs used, revives, distance on foot, credits banked, and a row per operative.
+
+Saves: achievements in `oo.achievements`, statistics in `oo.stats`, the bestiary in `oo.codex`, the equipped call-down in `oo.meta`. Saves from older versions keep working: the first time v0.9 loads, lifetime stats start from your service record, and achievements your save already proves (an evacuation, an outfit bought, a secret code found) are backdated with one notice. In co-op each player earns their own achievements and keeps their own stats. Achievement data is in `js/archive.js`; tracking in `js/progress.js`.
 
 **Armory:** every run banks the credits you picked up plus a payout for kills, time survived and evacuating. Spend them on the main menu on permanent upgrades (HP, damage, armor, speed, pickup range, XP gain, rerolls, payouts, and Second Wind: get back up once per run). Refund upgrades any time.
 - **Vitality Serum:** +25 max HP and +0.3 HP/s regeneration per rank (+125 HP and 1.5 HP/s at rank 5).
@@ -176,6 +198,10 @@ js/
   characters.js     operatives: outfit data, top-down sprite, procedural portraits
   portraits.js      loads portrait image assets, falls back to the procedural ones
   secrets.js        secret codes (cosmetic)
+  archive.js        data: the 25 achievements and the bestiary entries
+  progress.js       achievements, lifetime statistics and bestiary sightings (localStorage) + slide-down notices
+  tactical.js       call-downs, sentry turrets, med drones, volatile drums, per-run stats upkeep
+  dossier.js        the Dossier screen (achievements, bestiary, call-downs, statistics) and the call-down button
   world.js          procedural obstacles, collision, line of sight
   weapons.js        Weapon class + one behaviour per weapon
   spawner.js        the Director: wave table and scripted events
@@ -207,6 +233,9 @@ Most changes are data edits in `js/config.js`.
 - **New scripted moment:** add a line to `OO.EVENTS` (`pack`, `ring`, `elite`, `boss`, `stampede` or `banner`).
 - **New evolution:** add the evolved weapon to `EVOLVED` and the recipe to `OO.EVOLUTIONS` in config.js.
 - **New obstacle type:** add a shape to `KINDS` in world.js and a drawing case in `Renderer.obstacleSprite`.
+- **New achievement:** add an entry to `OO.ACHIEVEMENTS` (js/archive.js) and a check in `Progress.checkLive()` or `Progress.runEnd()`. Anything counted per run goes in `newRunStats()` (progress.js), which co-op already syncs.
+- **New bestiary entry:** add the enemy's lore to `OO.CODEX`; the stats and the picture come from `OO.ENEMIES` and the enemy sprite.
+- **New call-down:** add numbers to `CONFIG.CALLDOWN`, display data to `OO.CALLDOWNS`, an icon, and a case in `Game.useCalldown()` (tactical.js).
 - **New Armory upgrade:** add it to `OO.ARMORY` and apply its rank in `Game.recalcStats()`.
 - **New outfit:** add an entry to the operative's list in `SKINS` (js/characters.js). An outfit is data: colours plus a few style keys (`topKind`, `legKind`, `vest`, `head`, `hair`, `pack`...). The same data draws the in-game sprite and the portrait, so new outfits built from existing garment types need no drawing code.
 
@@ -241,6 +270,10 @@ Done in v0.6: interface and HUD redesign with the ECG vitals monitor, lighting a
 
 Done in v0.7: portrait image pipeline, illustrated faces, Rin's field-agent kit, new boss pacing, secret codes.
 
+Done in v0.8: harder enemies across the run with a firm per-hit ceiling.
+
+Done in v0.9: achievements, bestiary, lifetime statistics, tactical call-downs, volatile drums.
+
 Next up: give **Nightmare** its own tuning (faster strain growth, more stampedes) and unlock it.
 
 1. **Real art.** Swap procedural shapes for sprite sheets; `Renderer.enemySprite()` and `obstacleSprite()` are the places to change.
@@ -249,7 +282,7 @@ Next up: give **Nightmare** its own tuning (faster strain growth, more stampedes
 4. **Unlockable operatives** bought in the Armory, each with a unique starting weapon.
 5. **More infected.** Crawler swarm, a shielded infected that only takes damage from behind, a mid-boss per stage.
 6. **Banish** on the level-up screen, run modifiers (Arcana-style).
-7. **Destructible cover** (barrels that explode, cars that burn).
+7. **More destructible cover** (cars that burn; drums explode as of v0.9).
 8. **Tooling.** Vite + ES modules, ESLint, the balance sim in CI.
 
 ## Git workflow
@@ -299,7 +332,7 @@ The manifest is a small script, not JSON, so it still works from `file://`.
 
 ## Secrets
 
-Spoilers. These codes are cosmetic, so they never affect balance or records. Once you find one, the pause screen gets an on/off switch for it.
+Spoilers. These codes are cosmetic, so they never affect balance or records. Once you find one, the pause screen gets an on/off switch for it, and its Classified achievement unlocks in the Dossier.
 
 - Type **BISCUIT** (on a touch screen, tap the OVERKILL wordmark seven times) and every infected wears bunny ears in Biscuit's honour.
 - The classic **up up down down left right left right B A** loads a recovered VHS tape: scanlines, colour bleed, a rolling tracking band and a camcorder overlay.

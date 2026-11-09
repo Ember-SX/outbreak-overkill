@@ -6,7 +6,7 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.8.0';
+  OO.VERSION = '0.9.0';
 
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory)
@@ -83,6 +83,26 @@
     STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44 },
     // Spitters hang back and are easy to ignore, so cap how many can be alive: 1 + 0.5/min, max 7.
     spitterCap(minute) { return Math.min(7, 1 + Math.floor(minute * 0.5)); },
+    // Volatile drums: share of 'barrels' obstacles that are red fuel drums. A bullet, pellet, fire
+    // pool or nearby blast lights the fuse; then they explode, chain into other drums, and are gone
+    // for the rest of the run. Damage to infected scales with the horde (multiples of a Shambler's
+    // current HP; elites and bosses lose a share of their max HP). Players in the blast take a hit
+    // like any other (capped by HIT_CEILING, blocked by cover).
+    HAZARDS: {
+      volatileShare: 0.6, fuse: 0.55, chainFuse: 0.22, r: 105,
+      playerDmg: 14,               // before THREAT scaling (no surge)
+      shamblerHits: 5,             // regular infected take 5x a Shambler's current HP
+      eliteShare: 0.25, bossShare: 0.04,
+    },
+    // Tactical call-downs (key Q, or the button at the bottom of the screen). One is equipped per run
+    // (Dossier > Call-downs). All of them start the run charging (firstCharge seconds).
+    CALLDOWN: {
+      firstCharge: 20,
+      flashbang: { cd: 30, r: 300, stun: 2.6, eliteStun: 1.6, bossStun: 0.8 },
+      sentry:    { cd: 50, life: 15, range: 360, rate: 0.16, shamblerHits: 0.55, bossShare: 0.0015 },
+      meddrone:  { cd: 70, heal: 0.35, dur: 4 },
+      airstrike: { cd: 90 },
+    },
     PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.45 },
     // Damage reduction from Kevlar Vest (per rank) and Trauma Plates (per Armory rank), capped.
     MITIGATION: { vestDr: 0.07, platesDr: 0.06, platesArmor: 2, maxDr: 0.5 },
@@ -301,6 +321,19 @@
     { id: 'revive',   name: 'Second Wind',         icon: 'herb',     max: 1, cost: [500],                    text: 'Once per run, get back up at 50% HP.' },
   ];
 
+  // ---------------------------------------------------------------- CALL-DOWNS
+  // Display data; numbers live in CONFIG.CALLDOWN. `unlock` = the commendation that unlocks it.
+  OO.CALLDOWNS = {
+    flashbang: { name: 'Flashbang',      icon: 'flash',  unlock: null,
+                 text: 'Stuns every infected around you for 2.6 s. Elites shake it off faster, bosses barely flinch. Bursters are deaf to it.' },
+    sentry:    { name: 'Sentry Turret',  icon: 'turret', unlock: 'body_count',
+                 text: 'Drops an automated turret for 15 s. It tracks the nearest infected and keeps pace with the strain.' },
+    meddrone:  { name: 'Med Drone',      icon: 'drone',  unlock: 'extraction',
+                 text: 'A field drone patches you up for 35% of your max HP over 4 s.' },
+    airstrike: { name: 'Airstrike Beacon', icon: 'beacon', unlock: 'stalker_down',
+                 text: 'Calls in the same strike as a flare pickup: clears the screen around you. Bosses take a heavy hit.' },
+  };
+
   // ---------------------------------------------------------------- OPERATIVES
   OO.CHARACTERS = {
     mara: {
@@ -341,6 +374,7 @@
 
   // Scripted moments. kinds: pack (clustered rush), ring (encirclement), elite, boss, banner.
   OO.EVENTS = [
+    { t: 25,  kind: 'banner', text: 'Red drums are volatile. Shoot one when the infected crowd in' },
     { t: 60,  kind: 'banner', text: 'Rot Hounds are on your scent' },
     { t: 90,  kind: 'pack',  enemy: 'hound',    count: 20 },
     { t: 150, kind: 'elite', enemy: 'brute',    count: 1, text: 'Brute sighted' },
