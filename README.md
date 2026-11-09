@@ -4,7 +4,7 @@ A bio-horror horde survival game for the browser. You play one operative inside 
 
 The core loop follows the Vampire Survivors formula: move only, auto-firing weapons, XP gems (DNA samples here), a pick-one-of-three upgrade screen, weapon and passive slots, elites that drop supply cases, and a wave script that escalates until you're overrun or extracted.
 
-**Status:** v0.6.0. Playable start to finish, solo or 2-player online co-op, with cover, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions, and an Armory with upgrades and an outfit wardrobe between runs.
+**Status:** v0.7.0. Playable start to finish, solo or 2-player online co-op, with cover, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions, and an Armory with upgrades and an outfit wardrobe between runs.
 
 ## Play it
 
@@ -52,9 +52,9 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 | Sawblade Drones | Speed Loader | Buzzsaw Halo (never stops) |
 | Tesla Coil | Scavenger Pack | Arc Storm |
 
-**Infected:** Shambler, Rot Hound, Skinner, Bloater (explodes in bile, hurts you and other infected), Spitter (keeps its distance, swells up, then lobs acid at where you're heading; the pool lingers), Burster (only arrives in stampedes, can't be damaged by anything, explodes on impact), Brute (elite, drops a supply case), The Stalker (boss at 5:00 and 10:00, telegraphs and charges).
+**Infected:** Shambler, Rot Hound, Skinner, Bloater (explodes in bile, hurts you and other infected), Spitter (keeps its distance, swells up, then lobs acid at where you're heading; the pool lingers), Burster (only arrives in stampedes, can't be damaged by anything, explodes on impact), Brute (elite, drops a supply case), The Stalker (boss at 5:00 and 7:00, then a pair at 10:00; telegraphs and charges).
 
-**Final boss: the HARE TRIGGER (14:00).** Lab subject B-0, a small white rabbit called Biscuit, has stolen a combat mech and wants a word with you. It rocket-jumps in on a marked spot, then hunts the nearest operative:
+**Final boss: the HARE TRIGGER (13:00).** You have two minutes until evac to bring it down. Lab subject B-0, a small white rabbit called Biscuit, has stolen a combat mech and wants a word with you. It rocket-jumps in on a marked spot, then hunts the nearest operative:
 - **Stomp walk.** It turns its whole frame to follow you and can't strafe, so circling it works. It is slower than you.
 - **Rocket leap.** It crouches and a red reticle marks where you're heading, then it jumps (can't be hit in the air) and lands with a shockwave. Cover doesn't help, so get out of the ring. It staggers briefly after landing; that's your window. If you run far away, it leaps after you.
 - **Carrot missiles.** Orange reticles go down on you, ahead of you and around you, and a volley arcs in one after another. Cover blocks the blasts, and they hurt the horde too.
@@ -77,7 +77,7 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 |---|---|---|---|---|---|
 | Mara Voss, patrol officer | Patrol uniform | Night shift | Off the books | Decon shell | Shore leave |
 | Dex Okafor, contractor | Contractor rig | Black site | Street clothes | CBRN heavy | Lifeguard |
-| Rin Sato, lab technician | Containment suit | Ghost protocol | Lab coat | Level A | Pool day |
+| Rin Sato, lab technician | Field agent | Ghost protocol | Lab coat | Level A | Pool day |
 
 **Strain level (enemy leveling):** every infected spawns at the current strain level, and each level multiplies its HP by 1.14 (1.12 for elites, 1.10 for The Stalker). The level is minutes survived plus an adaptive bonus: once more than 40% of your kills are one-hit kills, the bonus climbs (up to +10 levels) until the infected start soaking hits again, then eases back. The HUD shows STRAIN LV under the evac timer, with ADAPTING while the bonus is rising. Tuning lives in `OO.CONFIG.LEVELING`.
 
@@ -135,7 +135,9 @@ js/
   audio.js          synthesized sound effects and ambience
   input.js          keyboard, gamepad, touch joystick
   icons.js          vector icons for weapons, gear and pickups
-  characters.js     operatives: outfit data, top-down sprite, menu/wardrobe portraits
+  characters.js     operatives: outfit data, top-down sprite, procedural portraits
+  portraits.js      loads portrait image assets, falls back to the procedural ones
+  secrets.js        secret codes (cosmetic)
   world.js          procedural obstacles, collision, line of sight
   weapons.js        Weapon class + one behaviour per weapon
   spawner.js        the Director: wave table and scripted events
@@ -150,6 +152,8 @@ js/
   main.js           boot
 tools/bundle.mjs    builds dist/outbreak-overkill.html (single file)
 tools/balance-sim.mjs  headless bot runs for balance checks (needs Playwright)
+tools/render-portraits.mjs  renders the baseline portrait images into assets/portraits
+assets/portraits/   portrait images per operative/outfit + manifest.js (see below)
 ```
 
 Scripts are plain `<script>` tags sharing one `OO` namespace, so the game runs from `file://` without a server. When the project outgrows that, the planned move is to Vite with ES modules (see roadmap).
@@ -197,6 +201,8 @@ Done in v0.5: co-op through strict firewalls (TURN relays, relay fallback, sturd
 
 Done in v0.6: interface and HUD redesign with the ECG vitals monitor, lighting and ground detail, new operative art, the outfit wardrobe.
 
+Done in v0.7: portrait image pipeline, illustrated faces, Rin's field-agent kit, new boss pacing, secret codes.
+
 Next up: give **Nightmare** its own tuning (faster strain growth, more stampedes) and unlock it.
 
 1. **Real art.** Swap procedural shapes for sprite sheets; `Renderer.enemySprite()` and `obstacleSprite()` are the places to change.
@@ -236,6 +242,29 @@ URL options for testing:
 - `?ice=relay` forces relay-only links.
 
 Both players must be on the same game version; the host turns away a mismatched version with a clear message.
+
+## Portrait art
+
+The menu dossier, operative tabs and wardrobe show **image files** from `assets/portraits/<operative>/<outfit>.webp`, listed in `assets/portraits/manifest.js`. An outfit with no entry, or a file that fails to load, falls back to the procedural portrait. The game never breaks over missing art.
+
+The manifest is a small script, not JSON, so it still works from `file://`.
+
+**Replacing the art:**
+1. Make a 3:4 image, at least 768 x 1024, with a transparent background. Centre the figure, put the top of the head about 8% from the top, and crop around mid-thigh. WebP or PNG.
+2. Save it over the existing file, or put it anywhere and point the manifest entry at it. If the face sits off-centre after cropping, set `focus['rin/tactical'] = 0.3`.
+3. Reload. Nothing else changes.
+
+**Tooling:**
+- `npm run portraits` regenerates the baseline set from the procedural renderer.
+- `npm run portraits -- --keep` only fills in outfits that have no file yet, so commissioned art is never overwritten.
+- The single-file bundle inlines every listed image (about 1.4 MB for the current set).
+
+## Secrets
+
+Spoilers. These codes are cosmetic, so they never affect balance or records. Once you find one, the pause screen gets an on/off switch for it.
+
+- Type **BISCUIT** (on a touch screen, tap the OVERKILL wordmark seven times) and every infected wears bunny ears in Biscuit's honour.
+- The classic **up up down down left right left right B A** loads a recovered VHS tape: scanlines, colour bleed, a rolling tracking band and a camcorder overlay.
 
 ## Credits and IP
 

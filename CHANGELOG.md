@@ -2,6 +2,39 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
+## [0.7.0] - 2026-11-09
+
+Branch `feature/v0.7-portraits-pacing`.
+
+### Added
+- **Portrait image pipeline** (`js/portraits.js`, `assets/portraits/`). The menu dossier, operative tabs and wardrobe load image files listed in `assets/portraits/manifest.js`.
+  - Missing files fall back to the procedural portrait.
+  - Images are preloaded at boot with a 2.5 s cap.
+  - `npm run portraits` renders the baseline set (15 WebP files at 768 x 1024). `--keep` preserves commissioned art.
+  - The bundle inlines the images. GitHub Pages deploys `assets/`.
+- **Secret codes** (`js/secrets.js`), cosmetic only:
+  - `BISCUIT` (or seven taps on the wordmark) gives the infected bunny ears.
+  - The Konami code turns on a found-footage VHS overlay.
+  - Found codes get switches on the pause screen.
+
+### Changed
+- **Rin's default outfit is now "Field agent"**: a fitted charcoal tech jacket with a stand collar, asymmetric zip and teal sensor piping, a comms earpiece, fingerless gloves, a utility belt and pouch, knee-padded trousers and the coil gauntlet. No helmet, air tank or glasses. The sealed containment suit is retired; Level A remains her hazmat option.
+- **Portrait illustration pass:**
+  - Almond eyes with gradient irises and catchlights.
+  - Lined lids with lashes and a wing on Mara and Rin.
+  - Shaped brows, a shaded nose, full lips with a highlight and a slight smirk, cheek colour.
+  - Hair sheen; Rin's bob now has a side-swept fringe.
+  - Slimmer waists and longer necks for Mara and Rin.
+- **Encounter pacing:**
+  - Second Stalker at 7:00 (was 10:00).
+  - New twin-Stalker wave at 10:00.
+  - The Hare Trigger at 13:00 (was 14:00), so you have two minutes to take it down.
+  - The brutes that shared those moments moved to 7:30 and 12:45.
+- The boss bar tracks only the Hare Trigger while it's up, even if Stalkers are still alive.
+
+### Fixed
+- Scripted events listed out of order (the 2:15 Spitter banner, the 4:45 stampede) fired late. The event list is now sorted by time at load.
+
 ## [0.6.0] - 2026-11-08
 
 Branch `feature/v0.6-presentation-skins`.

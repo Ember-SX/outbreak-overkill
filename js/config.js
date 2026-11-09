@@ -6,7 +6,7 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.6.0';
+  OO.VERSION = '0.7.0';
 
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory)
