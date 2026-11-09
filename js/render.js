@@ -272,6 +272,7 @@
       this.scenery.drawPost(ctx, this.w, this.h, g.time, g.reducedMotion, fx === 'high');
       this.drawScreenFx();
       if (g.state !== 'results') this.drawHud();
+      if (g.settings.secrets && g.settings.secrets.vhs) this.drawVhs();
       this.drawStick();
       if (g.debug) this.drawDebug();
     }
@@ -499,19 +500,72 @@
      * To switch to painted art later, make enemySprite() return frames from an image atlas.
      */
     enemySprite(type, frame, fl) {
-      const key = type + ':' + frame + (fl ? 'f' : '');
+      const d = OO.ENEMIES[type];
+      const ears = !!(this.g.settings.secrets && this.g.settings.secrets.ears) && !d.mech && !d.crate;
+      const key = type + ':' + frame + (fl ? 'f' : '') + (ears ? 'e' : '');
       let c = this.cache.get(key);
       if (c) return c;
-      const d = OO.ENEMIES[type], r = d.r, half = Math.ceil(r * 2.4);
+      const r = d.r, half = Math.ceil(r * 2.4);
       c = document.createElement('canvas');
       c.width = c.height = half * 2 * SPRITE_SCALE;
       const x = c.getContext('2d');
       x.scale(SPRITE_SCALE, SPRITE_SCALE);
       x.translate(half, half);
       this.drawEnemyShape(x, type, d, r, (frame / FRAMES) * (TAU / ANIM[type]), fl);
+      if (ears) this.drawBunnyEars(x, type, r, (frame / FRAMES) * TAU, fl);
       c.half = half;
       this.cache.set(key, c);
       return c;
+    }
+
+    /** Secret code BISCUIT: floppy bunny ears on the infected (cached into their sprites). */
+    drawBunnyEars(x, type, r, phase, fl) {
+      const hx = HEAD[type] * r, len = Math.max(7, r * 0.75), w = Math.max(2.2, len * 0.28);
+      for (const s of [-1, 1]) {
+        x.save();
+        x.translate(hx - r * 0.1, s * r * 0.2);
+        x.rotate(Math.PI + s * (0.42 + Math.sin(phase + s) * 0.12));
+        x.fillStyle = fl ? '#ffffff' : '#efe8e2';
+        x.beginPath(); x.ellipse(len * 0.5, 0, len * 0.55, w, 0, 0, TAU); x.fill();
+        x.fillStyle = fl ? '#ffffff' : '#f2a3bd';
+        x.beginPath(); x.ellipse(len * 0.55, 0, len * 0.38, w * 0.5, 0, 0, TAU); x.fill();
+        x.restore();
+      }
+    }
+
+    /** Secret code (Konami): found-footage VHS look over the whole frame, HUD included. */
+    drawVhs() {
+      const ctx = this.ctx, W = this.w, H = this.h, t = this.g.time;
+      if (!this.scanPat) {
+        const c = document.createElement('canvas'); c.width = 4; c.height = 3;
+        const x = c.getContext('2d'); x.fillStyle = 'rgba(0,0,0,0.28)'; x.fillRect(0, 0, 4, 1);
+        this.scanPat = ctx.createPattern(c, 'repeat');
+      }
+      // colour bleed: a faint red and cyan copy of the frame, nudged sideways
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.07;
+      ctx.drawImage(this.c, 0, 0, this.c.width, this.c.height, 2.5, 0, W, H);
+      ctx.restore();
+      ctx.fillStyle = 'rgba(255,190,150,0.05)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = this.scanPat; ctx.fillRect(0, 0, W, H);
+      // a tracking band rolls down the screen every few seconds
+      const cyc = (t % 7) / 7, by = cyc * (H + 80) - 40;
+      if (cyc < 0.6) {
+        ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(0, by, W, 18);
+        for (let i = 0; i < 40; i++) { ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.25})`; ctx.fillRect(Math.random() * W, by + Math.random() * 18, Math.random() * 30 + 4, 1); }
+      }
+      // camcorder overlay
+      ctx.font = `600 18px ${FONT_MONO}`; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      const play = 'PLAY \u25B6', clock = 'NOV 09 2026  02:' + String(10 + Math.floor(t / 60)).padStart(2, '0') + ' AM';
+      ctx.textAlign = 'left'; ctx.fillText(play, 20, H - 20);
+      ctx.textAlign = 'right'; ctx.fillText(clock, W - 18, H - 20);
+      ctx.fillStyle = '#f2f2ea';
+      ctx.textAlign = 'left'; ctx.fillText(play, 18, H - 22);
+      ctx.textAlign = 'right'; ctx.fillText(clock, W - 20, H - 22);
+      if (Math.floor(t * 1.5) % 2 === 0) { ctx.fillStyle = '#ff3b4e'; ctx.beginPath(); ctx.arc(22, H - 52, 5, 0, TAU); ctx.fill(); ctx.fillStyle = '#f2f2ea'; ctx.textAlign = 'left'; ctx.font = `600 13px ${FONT_MONO}`; ctx.fillText('REC', 32, H - 47); }
+      ctx.textAlign = 'left';
     }
 
     eyeSprite(type) {
@@ -1414,10 +1468,10 @@
       // Boss health: a name plate over a segmented bar
       const bosses = g.bosses;
       if (bosses.length) {
-        let hp = 0, max = 0;
-        for (const b of bosses) { hp += Math.max(0, b.hp); max += b.maxHp; }
-        const bw = Math.min(460, W - 40), bx = (W - bw) / 2, by = narrow ? 112 : 100;
         const mech = bosses.find((b) => b.def.mech);
+        let hp = 0, max = 0;
+        for (const b of mech ? [mech] : bosses) { hp += Math.max(0, b.hp); max += b.maxHp; }
+        const bw = Math.min(460, W - 40), bx = (W - bw) / 2, by = narrow ? 112 : 100;
         const label = mech ? 'HARE TRIGGER' + (mech.ai.over ? '  ·  OVERDRIVE' : '') : bosses.length > 1 ? 'THE STALKERS' : 'THE STALKER';
         ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
         ctx.font = `700 14px ${FONT_UI}`; ctx.fillStyle = '#ff3b4e';

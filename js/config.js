@@ -334,20 +334,23 @@
     { t: 360, kind: 'pack',  enemy: 'spitter',  count: 5, text: 'A nest of Spitters' },
     { t: 390, kind: 'pack',  enemy: 'hound',    count: 40 },
     { t: 405, kind: 'stampede', count: 11 },
-    { t: 420, kind: 'elite', enemy: 'brute',    count: 2 },
+    { t: 420, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'The Stalker is back, and angrier' },
+    { t: 450, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 480, kind: 'ring',  enemy: 'bloater',  count: 18, text: 'Bloaters closing in. Keep your distance' },
     { t: 510, kind: 'stampede', count: 11, ranks: 2, text: 'Double stampede' },
     { t: 540, kind: 'elite', enemy: 'brute',    count: 2 },
-    { t: 600, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'The Stalker is back, and angrier' },
+    { t: 600, kind: 'boss',  enemy: 'stalker',  count: 2, text: 'Two Stalkers. They hunt as a pair' },
     { t: 645, kind: 'stampede', count: 13, ranks: 2 },
     { t: 660, kind: 'pack',  enemy: 'hound',    count: 60 },
     { t: 690, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 720, kind: 'ring',  enemy: 'skinner',  count: 70, text: 'Skinners in the walls' },
     { t: 735, kind: 'stampede', count: 13, ranks: 2 },
-    { t: 780, kind: 'elite', enemy: 'brute',    count: 3 },
+    { t: 765, kind: 'elite', enemy: 'brute',    count: 3 },
     { t: 815, kind: 'stampede', count: 15, ranks: 2 },
-    { t: 840, kind: 'boss',  enemy: 'mecha',    count: 1, text: 'Lab subject B-0 has stolen the HARE TRIGGER. Evac is one minute out' },
+    { t: 780, kind: 'boss',  enemy: 'mecha',    count: 1, text: 'Lab subject B-0 has stolen the HARE TRIGGER. Evac is two minutes out' },
     { t: 870, kind: 'banner', text: 'Evac helicopter inbound. Hold on' },
     { t: 880, kind: 'stampede', count: 15, ranks: 2, text: 'One last stampede' },
   ];
+  // The Director walks this list in order, so keep it sorted by time.
+  OO.EVENTS.sort((a, b) => a.t - b.t);
 })(window.OO = window.OO || {});
