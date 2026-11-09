@@ -23,6 +23,47 @@ Branch `feature/v0.8-cover-armor`.
 
   Percentage reduction applies before flat armor and is capped at 50% (`CONFIG.MITIGATION`). The pause screen shows armor with its reduction. A fully protected operative takes 17 from a 10:00 Stalker hit instead of 55.
 
+## [0.8.0] - 2026-11-09
+
+Branch `feature/v0.8-threat-ceiling`.
+
+### Changed
+- **Enemies hit harder across the whole run, with a steady climb.**
+  - New `CONFIG.THREAT` (base x1.3, +6% per minute) replaces the old +5% per minute.
+  - The damage surge (`SURGE.dmgCurve`) climbs evenly from 6:00 to 13:00 instead of tapering and then jumping.
+  - Stalkers take 3/4 of the damage surge (was 1/2).
+  - Burster blasts are 50 base (was 42).
+  - The Hare Trigger's shockwave is 0.8x contact (was 0.6x).
+- Per-hit damage on a fresh 100 HP operative:
+
+  | Enemy | 0:00 | 10:00 | 15:00 |
+  |---|---|---|---|
+  | Shambler | 10 -> 13 | 20 -> 31 | 43 -> 61 |
+  | Brute | 23 -> 29 | 45 -> 57 | |
+  | Bloater blast | | 40 -> 57 | |
+  | Spitter impact | | 25 -> 38 | |
+
+  On a 255 HP Dex with maxed Vitality Serum and Trauma Plates:
+
+  | Enemy | Before | After |
+  |---|---|---|
+  | Stalker at 10:00 | 46 | 79 |
+  | Burster blast at 10:00 | 58 | 100 |
+  | Hare Trigger contact at 15:00 | 98 | 135 |
+- **Co-op enemy health is 1.5x** (was 2.0x in the repo), the value set by the owner.
+
+### Added
+- **Per-hit ceiling** (`CONFIG.HIT_CEILING`): no single hit from any source can kill a healthy operative.
+  - Every hit is capped at a share of the target's max HP before armor: 45% at the start, 55% at 8:00, 62% at 13:00, 68% at 15:00.
+  - It covers contact, Stalkers, Spitter impact and acid, Bloater and Burster blasts, and the Hare Trigger's slam, contact, missiles and laser.
+  - Bloater blasts now respect i-frames like everything else, so two hits can't land as one.
+  - The pause screen shows the current **Max hit**.
+  - It replaces the pre-13:00 contact cap (`SURGE.hitCap`). The mech's contact and slam caps now defer to the ceiling; missiles stay at 50% and laser ticks at 35%.
+  - Verified across 32,580 checks: every 5 s of a run, every operative, five builds, every attack. The worst single hit was 68% of max HP, with no deaths. Four of the biggest hits in the same frame cost one hit.
+
+### Unchanged
+- Straight-line stampedes, the locked leap ring, and the v0.7 health and armor upgrades.
+
 ## [0.7.0] - 2026-11-09
 
 Branch `feature/v0.7-portraits-pacing`.

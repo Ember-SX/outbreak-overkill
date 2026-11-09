@@ -6,7 +6,7 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.7.0';
+  OO.VERSION = '0.8.0';
 
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory)
@@ -54,19 +54,23 @@
     SURGE: {
       start: 6, hpPerMin: 0.20, dmgPerMin: 0.12, bossHpScale: 0.5,
       // Damage surge pacing as [minute, effective surge minutes] points, interpolated linearly
-      // (past the last point it climbs one effective minute per minute). Full rate 6:00-8:00,
-      // a taper 8:00-12:00 so the Stalker phase isn't one-shot territory, then a catch-up to
-      // the old 12:00 level by the time the Hare Trigger lands at 13:00.
-      dmgCurve: [[6, 0], [8, 2], [12, 3], [13, 6]],
-      bossDmgScale: 0.5,          // Stalkers (and the mech) get half the damage surge exponent
-      // Safety rail: until 13:00 one contact hit can take at most this share of your max HP.
-      hitCap: { until: 780, frac: 0.55 },
+      // (past the last point it climbs one effective minute per minute): a steady climb from
+      // 6:00 to 13:00, then the full rate for the last two minutes.
+      dmgCurve: [[6, 0], [13, 6]],
+      bossDmgScale: 0.75,         // Stalkers get 3/4 of the damage surge exponent (the mech gets all of it)
     },
+    // Enemy damage before difficulty and surge: base x (1 + perMin x minutes). Applies to every
+    // attack: contact, Spitter acid, Bloater and Burster blasts, and the Hare Trigger.
+    THREAT: { base: 1.3, perMin: 0.06 },
+    // The one hard rule: no single hit kills a healthy operative. Every hit from every source is
+    // capped at this share of the target's max HP (by minute, interpolated) before armor, and
+    // every hit grants i-frames, so deaths always take several hits in a row.
+    HIT_CEILING: [[0, 0.45], [8, 0.55], [13, 0.62], [15, 0.68]],
     // Co-op (2 players over P2P). Enemy HP is multiplied while a partner is connected.
     // A player at 0 HP goes down; standing within reviveRadius of them for reviveTime seconds
     // brings them back at reviveHp of max HP. The run ends when both are down.
     COOP: {
-      enemyHp: 2.0,          // 200% enemy health while a partner is connected
+      enemyHp: 1.5,          // 150% enemy health while a partner is connected
       reviveTime: 3,
       reviveRadius: 70,
       reviveHp: 0.35,
@@ -105,7 +109,7 @@
                 // Only arrive in stampedes (see OO.EVENTS kind 'stampede'). Explode on contact with you or cover.
                 // Invulnerable: nothing damages them, auto-aim ignores them, bullets glance off. Cover is the answer.
                 invulnerable: true,
-                burster: { r: 64, dmg: 42, enemyDmg: 90 } },
+                burster: { r: 64, dmg: 50, enemyDmg: 90 } },
     brute:    { name: 'Brute',       hp: 450,  speed: 42, dmg: 18, r: 26, xp: 25,  mass: 10,  body: '#3c3e46', skin: '#6c707c', eye: '#ff3a30', blood: 'red', elite: true },
     stalker:  { name: 'The Stalker', hp: 4800, speed: 58, dmg: 30, r: 32, xp: 120, mass: 40,  body: '#1b1620', skin: '#3b2d45', eye: '#ff2444', blood: 'red', boss: true },
     // Final boss. Lab subject B-0 "Biscuit", a very small and very angry rabbit, at the controls of
@@ -118,9 +122,10 @@
                   turn: 2.4,                         // body turn rate (rad/s)
                   attackGap: [2.2, 3.4],             // seconds of walking between attacks (x0.7 in overdrive)
                   // landing shockwave: dmg x contact damage; the target ring locks when the leap starts
-                  leap: { range: [200, 640], crouch: 0.75, air: 0.95, r: 125, dmg: 0.6, farLeap: 720 },
+                  leap: { range: [200, 640], crouch: 0.75, air: 0.95, r: 125, dmg: 0.8, farLeap: 720 },
                   // no single hit can take more than this share of the target's max HP (before armor)
-                  hitCaps: { slam: 0.45, contact: 0.5, missile: 0.4, laser: 0.3 },
+                  // contact and slam go up to the global HIT_CEILING; volleys and the beam stay lower
+                  hitCaps: { slam: 1, contact: 1, missile: 0.5, laser: 0.35 },
                   missiles: { count: 6, overdrive: 9, aim: 0.45, flight: 1.25, stagger: 0.09, r: 58, dmg: 0.6, spread: 150 },
                   laser: { charge: 1.0, sweep: 1.6, turn: 0.6, length: 560, width: 15, dmg: 0.4, tick: 0.12 },
                   overdrive: 0.5,                    // below this share of HP: faster, more missiles, adds the laser

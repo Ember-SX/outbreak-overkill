@@ -941,9 +941,13 @@
       this.addPickup(kind, e.x, e.y, kind === 'credit' ? { value: U.randInt(10, 25) } : {});
     }
 
-    /** Damage after the operative's protection: percentage reduction first, then flat armor. */
+    /**
+     * Damage actually taken from one hit: capped at the per-hit ceiling (so a healthy operative
+     * survives any single hit), then percentage reduction, then flat armor.
+     */
     mitigate(p, dmg) {
-      return Math.max(1, Math.round(dmg * (1 - (p.stats.dr || 0)) - p.stats.armor));
+      const capped = Math.min(dmg, this.hitCeiling(p));
+      return Math.max(1, Math.min(Math.floor(this.hitCeiling(p)), Math.round(capped * (1 - (p.stats.dr || 0)) - p.stats.armor)));
     }
 
     hurtPlayer(p, dmg, ignoreIframes) {
@@ -1014,7 +1018,7 @@
         this.emitNear(ex.x, ex.y, ['k', blood ? 7 : 5]);
         // Cover blocks blasts: no damage if an obstacle sits between a player and the explosion.
         if (ex.dmg > 0) for (const p of this.alivePlayers()) {
-          if (U.dist2(ex.x, ex.y, p.x, p.y) < (ex.r + p.r) ** 2 && !this.world.blocked(ex.x, ex.y, p.x, p.y)) this.hurtPlayer(p, ex.dmg, !blood);   // burster hits respect i-frames
+          if (U.dist2(ex.x, ex.y, p.x, p.y) < (ex.r + p.r) ** 2 && !this.world.blocked(ex.x, ex.y, p.x, p.y)) this.hurtPlayer(p, ex.dmg);   // every blast respects i-frames, so hits can't stack into one
         }
         this.grid.query(ex.x, ex.y, ex.r + 32, buf);
         for (const o of buf) {
@@ -1100,14 +1104,22 @@
 
     /** Damage multiplier for enemy attacks at the current time. */
     enemyDmgScale(withSurge = true, d, time = this.time) {
-      return (1 + (time / 60) * 0.05) * this.difficulty.dmg * (withSurge ? this.surgeDmg(d, time) : 1);
+      const T = OO.CONFIG.THREAT;
+      return T.base * (1 + (time / 60) * T.perMin) * this.difficulty.dmg * (withSurge ? this.surgeDmg(d, time) : 1);
     }
 
-    /** Contact damage from an infected, with the pre-13:00 one-shot guard (SURGE.hitCap). */
-    contactHit(p, e) {
-      const C = OO.CONFIG.SURGE.hitCap;
-      const dmg = C && this.time < C.until ? Math.min(e.dmg, p.stats.maxHp * C.frac) : e.dmg;
-      this.hurtPlayer(p, dmg);
+    /** Contact damage from an infected. */
+    contactHit(p, e) { this.hurtPlayer(p, e.dmg); }
+
+    /** Largest single hit this operative can take right now (CONFIG.HIT_CEILING x max HP). */
+    hitCeiling(p, time = this.time) {
+      const pts = OO.CONFIG.HIT_CEILING, m = time / 60;
+      let f = pts[pts.length - 1][1];
+      if (m <= pts[0][0]) f = pts[0][1];
+      else for (let i = 1; i < pts.length; i++) {
+        if (m <= pts[i][0]) { const [m0, f0] = pts[i - 1], [m1, f1] = pts[i]; f = f0 + (f1 - f0) * (m - m0) / (m1 - m0); break; }
+      }
+      return p.stats.maxHp * Math.min(f, 0.95);
     }
 
     spit(e) {

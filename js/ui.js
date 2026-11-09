@@ -424,7 +424,7 @@
       $('pause-stats').innerHTML = [
         ['Max HP', Math.round(s.maxHp)], ['Armor', s.armor + (s.dr ? '  \u2212' + Math.round(s.dr * 100) + '%' : '')], ['Damage', Math.round(s.might * 100) + '%'],
         ['Area', Math.round(s.area * 100) + '%'], ['Cooldown', Math.round(s.cooldown * 100) + '%'],
-        ['Speed', Math.round(s.speed)], ['Pickup range', Math.round(s.magnet)], ['Time', U.formatTime(this.g.time)],
+        ['Speed', Math.round(s.speed)], ['Pickup range', Math.round(s.magnet)], ['Max hit', Math.floor(this.g.hitCeiling(p))], ['Time', U.formatTime(this.g.time)],
       ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
       $('screen-pause').hidden = false;
     }
