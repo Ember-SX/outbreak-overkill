@@ -13,7 +13,7 @@
       this.lockUntil = 0;
       this.selectedChar = U.storage.get('oo.char', 'mara');
       if (!OO.CHARACTERS[this.selectedChar]) this.selectedChar = 'mara';
-      this.screens = ['screen-menu', 'screen-levelup', 'screen-chest', 'screen-pause', 'screen-results', 'screen-armory', 'screen-coop'];
+      this.screens = ['screen-menu', 'screen-levelup', 'screen-chest', 'screen-pause', 'screen-results', 'screen-armory', 'screen-coop', 'screen-dossier'];
 
       this.buildMenu();
       this.buildDifficulty();
@@ -40,6 +40,7 @@
       $('btn-pause').addEventListener('click', () => (this.g.state === 'paused' ? this.g.resume() : this.g.pause()));
       $('btn-mute').addEventListener('click', () => { OO.Audio.init(); this.g.toggleMute(); });
       this.bindCoop();
+      this.bindArchive();
       window.addEventListener('keydown', (e) => this.onKey(e));
       this.updateMute();
       this.showMenu();
@@ -162,6 +163,9 @@
       $('dossier-weapon').textContent = w.name;
       $('dossier-bonus').textContent = c.bonusText;
       $('dossier-outfit').textContent = skin.name;
+      $('dossier-calldown').textContent = OO.CALLDOWNS[this.g.calldownFor()].name;
+      const P = this.g.progress;
+      $('dossier-ach').textContent = P.unlockedCount + ' of ' + OO.ACHIEVEMENTS.length;
       for (const cid in OO.CHARACTERS) {
         const thumb = $('char-' + cid).querySelector('.char-thumb');
         thumb.innerHTML = '';
@@ -221,6 +225,7 @@
 
     showMenu() {
       this.hideAll();
+      $('banner').hidden = true;   // a run's last banner shouldn't hang over the menu
       const r = this.g.records;
       $('records').textContent = r.runs
         ? `Longest survival ${U.formatTime(r.bestTime)} · Most kills ${r.bestKills} · Evacuated ${r.wins} of ${r.runs} runs`
@@ -251,7 +256,11 @@
 
     hideAll() { for (const s of this.screens) $(s).hidden = true; }
 
-    setHud(on) { $('hud-buttons').hidden = !on; }
+    setHud(on) {
+      $('hud-buttons').hidden = !on;
+      $('btn-calldown').hidden = !on;
+      this._cdKey = null;
+    }
 
     updateMute() {
       const m = this.g.settings.muted;
@@ -340,7 +349,7 @@
           b.className = 'btn-small btn-buy'; b.textContent = 'Buy ' + skin.cost.toLocaleString() + ' cr';
           b.disabled = short > 0;
           if (short > 0) b.title = 'You need ' + short.toLocaleString() + ' more credits';
-          b.addEventListener('click', () => { if (g.buySkin(cid, skin.id)) { OO.Audio.init(); OO.Audio.play('chest'); this.showArmory('wardrobe'); } });
+          b.addEventListener('click', () => { if (g.buySkin(cid, skin.id)) { OO.Audio.init(); OO.Audio.play('chest'); g.progress.unlock('dressed'); this.showArmory('wardrobe'); } });
         }
         body.appendChild(b);
         card.appendChild(body);
@@ -439,6 +448,10 @@
       const locked = Object.keys(OO.SKINS).some((c) => OO.SKINS[c].some((k) => !this.g.ownsSkin(c, k.id)));
       const toGo = OO.SKIN_COST - r.bank;
       const outfit = !locked ? '' : toGo > 0 ? ` · ${toGo.toLocaleString()} more for a new outfit` : ' · Enough for a new outfit in the Wardrobe';
+      const earned = (r.commendations || []).map((id) => OO.ACHIEVEMENTS.find((a) => a.id === id)).filter(Boolean);
+      $('res-ach').hidden = !earned.length;
+      $('res-ach').innerHTML = earned.length ? '<p class="res-ach-title">Achievements unlocked this run</p>' + earned.map((a) =>
+        `<span class="ach-chip tier-${a.tier}"><img src="${OO.Icons.url(a.icon, 16, OO.TIERS[a.tier].color)}" alt="">${esc(a.name)}</span>`).join('') : '';
       $('res-payout').innerHTML = `Banked <strong>+${r.payout.toLocaleString()}</strong> credits for the Armory (${r.bank.toLocaleString()} total) · ${esc(r.difficulty)}${team}${outfit}`;
       $('btn-retry').textContent = r.coop && this.g.net ? 'Back to lobby' : 'Deploy again';
       $('res-stats').innerHTML = [

@@ -12,7 +12,7 @@
  * to the host, which applies them.
  *
  * Messages (all objects with a `t` field):
- *   client -> host: hello, in, pick, reroll, skip, pause, resume, view, bye
+ *   client -> host: hello, in, pick, reroll, skip, pause, resume, view, cd (use call-down), bye
  *   host -> client: welcome, reject, full, start, snap, lvl, lvldone, chest, paused, resumed, results, bye
  */
 (function (OO) {
@@ -54,7 +54,7 @@
     const L = this.lobby = { role: 'client', charId, code, linked: false, connected: false, hostName: null, netStatus: '' };
     this.renderLobby();
     const hello = () => this.netSend({
-      t: 'hello', v: OO.VERSION, charId, name: OO.CHARACTERS[charId].name, skin: this.skinFor(charId),
+      t: 'hello', v: OO.VERSION, charId, name: OO.CHARACTERS[charId].name, skin: this.skinFor(charId), calldown: this.calldownFor(),
       ranks: this.meta.ranks, view: { w: this.viewW, h: this.viewH },
     });
     this.net = new OO.Net({
@@ -164,6 +164,7 @@
         if (!L.partner) OO.Audio.play('select');
         L.partner = { charId: OO.CHARACTERS[m.charId] ? m.charId : 'mara', name: String(m.name || 'Partner').slice(0, 24), ranks: sanitizeRanks(m.ranks) };
         L.partner.skin = OO.Characters.skinOf(L.partner.charId, String(m.skin || '')).id;
+        L.partner.calldown = OO.CALLDOWNS[m.calldown] ? m.calldown : 'flashbang';
         L.joining = false; L.notice = null;
         this.remoteView = sanitizeView(m.view);
         this.updateSpawnRadius();
@@ -180,6 +181,7 @@
       case 'pick': if (remote) this.chooseUpgrade(remote, m.i | 0); break;
       case 'reroll': if (remote) this.reroll(remote); break;
       case 'skip': if (remote) this.skipLevel(remote); break;
+      case 'cd': if (remote) this.useCalldown(remote); break;
       case 'pause': this.pause(); break;
       case 'resume': this.resume(); break;
       case 'bye': this.onPartnerLeft(); break;
@@ -248,11 +250,12 @@
     this.mode = 'host';
     this.resetRun(Math.floor(Math.random() * 1e9));
     this.players = [
-      this.makePlayer(0, L.charId, this.meta.ranks, true, this.skinFor(L.charId)),
-      this.makePlayer(1, L.partner.charId, L.partner.ranks, false, L.partner.skin),
+      this.makePlayer(0, L.charId, this.meta.ranks, true, this.skinFor(L.charId), this.calldownFor()),
+      this.makePlayer(1, L.partner.charId, L.partner.ranks, false, L.partner.skin, L.partner.calldown),
     ];
     this.player = this.players[0];
     this.director = new OO.Director(this);
+    this.progress.runStart();
     this.snapT = 0;
     this.updateSpawnRadius();
     OO.Coop.hookAudio(this);
@@ -261,7 +264,7 @@
     this.ui.setHud(true);
     this.netSend({
       t: 'start', seed: this.seed, you: 1,
-      players: this.players.map((p) => ({ slot: p.slot, charId: p.charId, skin: p.skin, x: p.x, y: p.y })),
+      players: this.players.map((p) => ({ slot: p.slot, charId: p.charId, skin: p.skin, cd: p.cd.id, x: p.x, y: p.y })),
     });
     OO.Audio.play('select');
   };
@@ -289,7 +292,7 @@
     let i = 0;
     b[i++] = es.length; b[i++] = ps.length; b[i++] = ks.length;
     for (const e of es) {
-      const flags = (e.flash > 0 ? 1 : 0) | (e.ai.wind > 0 ? 2 : 0) | (e.ai.mode === 'wind' ? 4 : 0) | (Math.min(e.level, 2000) << 4);
+      const flags = (e.flash > 0 ? 1 : 0) | (e.ai.wind > 0 ? 2 : 0) | (e.ai.mode === 'wind' ? 4 : 0) | (e.stun > 0 ? 8 : 0) | (Math.min(e.level, 2000) << 4);
       b[i++] = e.id & 0x7fff; b[i++] = TYPE_INDEX[e.type];
       b[i++] = I16(e.x - ax); b[i++] = I16(e.y - ay);
       b[i++] = I16(e.a * 1000); b[i++] = flags;
@@ -313,7 +316,7 @@
       t: 'snap', b: b.buffer,
       m: {
         ax, ay, time: this.time, kills: this.kills, credits: this.credits, spawnRadius: this.spawnRadius,
-        team: this.team, strain: this.strain,
+        team: this.team, strain: this.strain, ta: this.tally,
       },
       p: this.players.map((p) => playerState(p)),
       z: this.zones.filter((z) => near(z.x, z.y)).map((z) => [Math.round(z.x), Math.round(z.y), r1(z.r), r1(z.life), r1(z.max), r1(z.seed)]),
@@ -323,6 +326,7 @@
       st: this.stampedes.map((o) => [o.a, Math.round(o.ax), Math.round(o.ay), r1(o.t), o.warn, o.locked ? 1 : 0, o.count, o.ranks, o.gap]),
       bo: this.enemies.filter((e) => !e.dead && e.def.mech).map((e) => this.mechaState(e)),
       mi: this.missiles.map((o) => [Math.round(o.x0), Math.round(o.y0), Math.round(o.x1), Math.round(o.y1), Math.round(o.t * 100) / 100, o.dur, o.r]),
+      tu: this.turrets.map((o) => [o.id, Math.round(o.x), Math.round(o.y), Math.round(o.a * 100) / 100, r1(o.life), o.max, o.flash > 0 ? 1 : 0]),
       ev,
     });
   };
@@ -335,6 +339,7 @@
       st: { maxHp: s.maxHp, might: s.might, cooldown: s.cooldown, amount: s.amount, area: s.area, speed: s.speed, magnet: s.magnet, armor: s.armor, regen: s.regen, growth: s.growth },
       w: p.weapons.map((w) => [w.id, w.level, Math.round(w.damageDealt), w.kills, w.state.active || 0, w.state.angle || 0]),
       ps: p.passiveOrder.map((id) => [id, p.passives[id]]),
+      cd: [p.cd.id, Math.round(p.cd.t * 10) / 10, p.cd.max], md: Math.round(p.md * 10) / 10, rs: p.rs,
     };
   }
 
@@ -357,13 +362,14 @@
     this.resetRun(m.seed);
     this.players = m.players.map((pp) => {
       const local = pp.slot === m.you;
-      const p = this.makePlayer(pp.slot, pp.charId, local ? this.meta.ranks : {}, local, local ? this.skinFor(pp.charId) : String(pp.skin || ''));
+      const p = this.makePlayer(pp.slot, pp.charId, local ? this.meta.ranks : {}, local, local ? this.skinFor(pp.charId) : String(pp.skin || ''), OO.CALLDOWNS[pp.cd] ? pp.cd : 'flashbang');
       p.x = pp.x; p.y = pp.y; p.tx = pp.x; p.ty = pp.y; p.px = pp.x; p.py = pp.y; p.lt = 1;
       return p;
     });
     this.player = this.players.find((p) => p.local);
     this.mirror = { enemies: new Map(), proj: new Map(), picks: new Map() };
     this.inputT = 0;
+    this.progress.runStart();
     this.state = 'playing';
     this.ui.hideAll();
     this.ui.setHud(true);
@@ -376,6 +382,12 @@
 
     // Own movement is simulated here, against the same seeded obstacles as the host.
     p.iframes -= dt; p.hurt -= dt;
+    for (const q of this.players) {
+      if (this.state === 'playing' && q.cd && q.cd.t > 0 && !q.downed) q.cd.t = Math.max(0, q.cd.t - dt);   // smoothed; the host's value lands with each snapshot
+      if (q.md > 0) q.md -= dt;
+    }
+    for (const t of this.turrets) { t.life -= dt; t.flash -= dt; }
+    for (const e of this.enemies) if (e.stun > 0) e.stun -= dt;
     if (this.state === 'playing' && !p.downed) {
       const ax = OO.Input.axis.x, ay = OO.Input.axis.y;
       p.moving = ax !== 0 || ay !== 0;
@@ -434,6 +446,7 @@
     if (!mir) return;
     this.time = M.time; this.kills = M.kills; this.credits = M.credits;
     this.team = M.team; this.strain = M.strain; this.spawnRadius = M.spawnRadius;
+    if (M.ta) this.tally = M.ta;
     const ax = M.ax, ay = M.ay;
 
     for (const s of m.p) {
@@ -441,6 +454,9 @@
       if (!q) continue;
       if (!q.local) { q.px = q.x; q.py = q.y; q.tx = s.x; q.ty = s.y; q.lt = 0; q.faceAngle = s.fa; q.moving = !!s.mv; if (q.moving) q.walk += 0.6; }
       q.aimAngle = s.aa; q.hp = s.hp; q.downed = !!s.dn; q.reviveT = s.rv; q.rerolls = s.rr; q.revives = s.sw;
+      if (s.cd && OO.CALLDOWNS[s.cd[0]]) q.cd = { id: s.cd[0], t: s.cd[1], max: s.cd[2] };
+      q.md = s.md || 0;
+      if (s.rs && typeof s.rs === 'object') q.rs = Object.assign(OO.Progress.newRunStats(), s.rs);
       if (!q.local || q.iframes <= 0) q.iframes = s.it;
       q.stats = Object.assign({}, q.stats, s.st); q.statsVersion++;
       syncWeapons(q, s.w);
@@ -465,6 +481,7 @@
       e.ai.wind = flags & 2 ? (e.def.ranged ? e.def.ranged.windup * 0.5 : 0.3) : 0;
       e.ai.mode = flags & 4 ? 'wind' : 'walk';
       e.level = flags >> 4;
+      if (flags & 8) e.stun = Math.max(e.stun || 0, 0.2); else e.stun = 0;
       e.hp = hp; e.maxHp = 1000;
       seenE.add(id);
     }
@@ -499,6 +516,7 @@
     this.enemyShots = m.s.map(([x0, y0, x1, y1, t, dur, r]) => ({ x0, y0, x1, y1, t, dur, r }));
     this.hazards = m.h.map(([x, y, r, life, max, seed]) => ({ x, y, r, life, max, seed }));
     if (m.bo) for (const st of m.bo) { const e = mir.enemies.get(st[0]); if (e) this.applyMechaState(e, st); }
+    this.turrets = (m.tu || []).map(([id, x, y, a, life, max, fl]) => ({ id, x, y, a, life, max, flash: fl ? 0.06 : 0 }));
     this.missiles = (m.mi || []).map(([x0, y0, x1, y1, t, dur, r]) => ({ x0, y0, x1, y1, t, dur, r }));
     this.stampedes = m.st.map(([a, sx, sy, t, warn, locked, count, ranks, gap]) => ({ a, ax: sx, ay: sy, t, warn, locked: !!locked, count, ranks, gap }));
 
@@ -548,6 +566,7 @@
       case 's': OO.Coop.playRaw(ev[1], ev[2]); break;
       case 'k': this.shake(ev[1]); break;
       case 'w': this.flashWhite = Math.max(this.flashWhite, ev[1]); break;
+      case 'bx': case 'bf': this.applyBarrelEvent(ev[0], ev[1]); break;
       case 'hurt':
         p.hurt = 0.3; p.iframes = OO.CONFIG.PLAYER.iframes;
         this.shake(5); OO.Coop.playRaw('hurt');

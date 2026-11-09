@@ -2,9 +2,33 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
-## [Unreleased]
+## [0.9.0] - 2026-11-09
 
-Branch `feature/v0.8-cover-armor`.
+Branch `feature/v0.9-dossier`.
+
+### Added
+- **Dossier screen** (main menu > Dossier) in the terminal style, with four tabs.
+  - **Achievements:** 25 in five groups (milestones, combat mastery, operative specializations, tactics and teamwork, classified), tiered Bronze, Silver and Gold, with progress bars on counters and unlock dates. A trophy summary shows the count and tiers.
+  - **Bestiary:** nine specimen reports with original lore, base stats, a threat rating, traits and your lifetime kills. An entry is filed the first time that infected comes into view; unseen ones are silhouettes. Pictures come from the game's own sprites.
+  - **Call-downs:** pick the one you take into a run.
+  - **Statistics:** lifetime playtime, runs, evacuations, deaths, kills, shots fired, damage dealt and taken, boss takedowns, drums detonated, call-downs, revives, distance, credits, and a per-operative table.
+- **Slide-down notices** at the top of the screen for achievements (tier colour and a chime), new bestiary entries and call-down unlocks, queued one at a time. The results screen lists the achievements earned that run.
+- **Tactical call-downs** (key Q or the on-screen button; one per run, 20 s first charge): Flashbang (stun, 30 s), Sentry Turret (50 s), Med Drone (heal 35% over 4 s, 70 s), Airstrike Beacon (90 s). The last three unlock through achievements. The menu dossier shows the equipped one.
+- **Volatile drums:** most barrels are now red fuel drums. Shooting one, a fire pool or a blast lights the fuse; the explosion kills regular infected (scaled to the horde), hurts elites and bosses, chains into other drums and destroys the drum for the rest of the run. Players in the blast take a capped hit like any other. A banner at 0:25 introduces them.
+- **Saves:** `oo.achievements`, `oo.stats`, `oo.codex`, and `meta.calldown`. Older saves load unchanged; on first load the lifetime stats start from the service record and already-earned achievements are backdated with a single notice. Corrupted entries fall back to defaults.
+- **Co-op:** each operative brings their own call-down (sent with `hello` and `start`); the client asks with `{t:'cd'}` and the host runs it. Snapshots now carry per-player run stats, cooldowns and drone time, team tallies, sentry turrets and a stun flag; drum fuses and destruction travel as events. Each machine checks its own achievements and banks its own stats.
+- New icons (call-downs, drum, helicopter, Stalker, mech, bunny, tape, trophy) and synthesized sounds (achievement chime, bestiary blip, radio, flashbang, turret, drone, fuse).
+
+### Changed
+- The co-op screen now says infected have 50% more health with a partner (the multiplier has been 1.5 since 0.8.0; the text still said double).
+- The last in-run banner no longer lingers over the main menu.
+
+### Unchanged on purpose
+- Co-op enemy health stays at x1.5. Straight-line stampedes, the locked leap ring, the health and armor upgrades and the per-hit ceiling are untouched; drum blasts go through the same ceiling (32,580-hit fuzz check: no one-shots, worst hit 68% of max HP).
+
+## 0.7 follow-ups (merged with PR #6, before 0.8.0)
+
+Branch `feature/v0.8-cover-armor`. Some numbers here were changed again in 0.8.0.
 
 ### Changed
 - **Stampedes run dead straight.** Once launched, Bursters never turn toward you and can't be knocked off their line, so cover between you and the lane always holds. (Removed `STAMPEDE.homing`.)

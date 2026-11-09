@@ -1,5 +1,6 @@
 /*
- * Secret codes. Purely cosmetic, so they never touch balance or records.
+ * Secret codes. Purely cosmetic, so they never touch balance or records (finding one does unlock
+ * its Classified achievement in the Dossier).
  *
  *   BISCUIT                      type it anywhere (menu, pause, mid-run): every infected grows
  *                                bunny ears in Biscuit's honour. On touch screens, tap the
@@ -59,6 +60,7 @@
     toggle(id, announce) {
       const c = CODES.find((x) => x.id === id), S = this.state;
       if (!S.found.includes(id)) S.found.push(id);
+      if (this.g.progress) this.g.progress.unlock(id === 'ears' ? 'bunny' : 'footage');   // Dossier > Achievements > Classified
       S[id] = !S[id];
       OO.U.storage.set('oo.settings', this.g.settings);
       if (id === 'ears' && this.g.renderer) this.g.renderer.cache.clear();     // sprites are cached with or without ears

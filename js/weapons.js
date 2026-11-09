@@ -115,6 +115,7 @@
       const len = 115 * s.area, wid = 46 * s.area;
       const c = Math.cos(ang), sn = Math.sin(ang);
       g.addEffect({ kind: 'slash', x: p.x, y: p.y, ang, len, wid, life: 0.18, max: 0.18 });
+      g.countShot(w);
       OO.Audio.play('knife');
       g.grid.query(p.x + c * len / 2, p.y + sn * len / 2, len / 2 + wid + 32, buf);
       for (const e of buf) {
@@ -265,6 +266,7 @@
           cur = g.nearestEnemy(cur.x, cur.y, 150 * s.area, struck);
         }
         g.addEffect({ kind: 'bolt', points: pts, life: 0.22, max: 0.22, seed: Math.random() * 1000 });
+        g.countShot(w);
       }
       OO.Audio.play('tesla');
     },

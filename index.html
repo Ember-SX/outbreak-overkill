@@ -17,6 +17,14 @@
 
   <div id="banner" class="banner" role="status" hidden></div>
   <div id="toast" class="toast" role="status" hidden></div>
+  <div id="ach-toast" class="ach-toast" role="status" aria-live="polite" hidden></div>
+
+  <button id="btn-calldown" class="calldown-btn" type="button" hidden aria-label="Use call-down">
+    <span class="cd-fill" aria-hidden="true"></span>
+    <img id="cd-icon" class="cd-icon" alt="">
+    <span class="cd-text"><span id="cd-name" class="cd-name"></span><span id="cd-state" class="cd-state"></span></span>
+    <kbd class="cd-key">Q</kbd>
+  </button>
 
   <!-- Main menu -->
   <section id="screen-menu" class="screen screen-menu" hidden>
@@ -39,8 +47,9 @@
           <button id="btn-start" class="btn btn-primary" type="button">Deploy</button>
           <button id="btn-armory" class="btn btn-ghost" type="button">Armory</button>
           <button id="btn-coop" class="btn btn-ghost" type="button">Co-op</button>
+          <button id="btn-archive" class="btn btn-ghost" type="button">Dossier</button>
         </div>
-        <p class="controls"><kbd>WASD</kbd> or arrows or drag to move, <kbd>Esc</kbd> pause, <kbd>M</kbd> mute, <kbd>`</kbd> debug</p>
+        <p class="controls"><kbd>WASD</kbd> or arrows or drag to move, <kbd>Q</kbd> call-down, <kbd>Esc</kbd> pause, <kbd>M</kbd> mute, <kbd>`</kbd> debug</p>
         <p id="records" class="records"></p>
       </div>
 
@@ -56,6 +65,8 @@
           <div><dt>Starting weapon</dt><dd id="dossier-weapon"></dd></div>
           <div><dt>Field bonus</dt><dd id="dossier-bonus"></dd></div>
           <div><dt>Outfit</dt><dd><span id="dossier-outfit"></span> <button id="btn-outfit" class="link-btn" type="button">Change</button></dd></div>
+          <div><dt>Call-down</dt><dd><span id="dossier-calldown"></span> <button id="btn-calldown-pick" class="link-btn" type="button">Change</button></dd></div>
+          <div><dt>Achievements</dt><dd><span id="dossier-ach"></span> <button id="btn-ach-view" class="link-btn" type="button">View</button></dd></div>
         </dl>
         <div id="char-list" class="char-tabs" role="radiogroup" aria-label="Choose operative"></div>
       </aside>
@@ -67,7 +78,7 @@
     <div class="panel panel-coop">
       <p class="eyebrow">Two operatives, one radio channel</p>
       <h2 class="panel-title">Co-op</h2>
-      <p class="coop-note">Play with one partner over the internet. One of you hosts and reads out the 3-digit room code; the other joins with it. Infected have <strong>double health</strong> while a partner is connected. You deploy as <strong id="coop-selected">Mara Voss</strong>; change operative on the main menu.</p>
+      <p class="coop-note">Play with one partner over the internet. One of you hosts and reads out the 3-digit room code; the other joins with it. Infected have <strong>50% more health</strong> while a partner is connected. You deploy as <strong id="coop-selected">Mara Voss</strong>; change operative on the main menu.</p>
 
       <div id="coop-choose" class="coop-choose">
         <button id="coop-host" class="btn btn-primary" type="button">Host a room</button>
@@ -143,6 +154,32 @@
     </div>
   </section>
 
+  <!-- Dossier: achievements, bestiary, call-downs, lifetime statistics -->
+  <section id="screen-dossier" class="screen screen-dim" hidden>
+    <div class="panel panel-archive">
+      <div class="armory-head">
+        <div class="archive-title">
+          <p class="eyebrow">Cold Harbor field archive</p>
+          <h2 class="panel-title">Dossier</h2>
+        </div>
+        <div id="archive-summary" class="archive-summary"></div>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Dossier sections">
+        <button id="tab-ach" class="tab" role="tab" type="button" aria-selected="true" aria-controls="archive-ach">Achievements</button>
+        <button id="tab-codex" class="tab" role="tab" type="button" aria-selected="false" aria-controls="archive-codex">Bestiary</button>
+        <button id="tab-calls" class="tab" role="tab" type="button" aria-selected="false" aria-controls="archive-calls">Call-downs</button>
+        <button id="tab-stats" class="tab" role="tab" type="button" aria-selected="false" aria-controls="archive-stats">Statistics</button>
+      </div>
+      <div id="archive-ach" role="tabpanel" aria-labelledby="tab-ach"></div>
+      <div id="archive-codex" role="tabpanel" aria-labelledby="tab-codex" hidden></div>
+      <div id="archive-calls" role="tabpanel" aria-labelledby="tab-calls" hidden></div>
+      <div id="archive-stats" role="tabpanel" aria-labelledby="tab-stats" hidden></div>
+      <div class="panel-actions">
+        <button id="archive-back" class="btn btn-primary" type="button">Back</button>
+      </div>
+    </div>
+  </section>
+
   <!-- Level up -->
   <section id="screen-levelup" class="screen screen-dim" hidden>
     <div class="panel panel-wide">
@@ -200,6 +237,7 @@
       <h2 id="res-title" class="panel-title"></h2>
       <dl id="res-stats" class="stat-grid stat-grid-big"></dl>
       <p id="res-payout" class="res-payout"></p>
+      <div id="res-ach" class="res-ach" hidden></div>
       <div class="table-wrap"><table id="res-weapons" class="res-table"></table></div>
       <div class="panel-actions">
         <button id="btn-retry" class="btn btn-primary" type="button">Deploy again</button>
@@ -215,6 +253,8 @@
   <script src="js/audio.js"></script>
   <script src="js/input.js"></script>
   <script src="js/icons.js"></script>
+  <script src="js/archive.js"></script>
+  <script src="js/progress.js"></script>
   <script src="js/characters.js"></script>
   <script src="assets/portraits/manifest.js"></script>
   <script src="js/portraits.js"></script>
@@ -224,8 +264,10 @@
   <script src="js/scenery.js"></script>
   <script src="js/render.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/dossier.js"></script>
   <script src="js/game.js"></script>
   <script src="js/boss.js"></script>
+  <script src="js/tactical.js"></script>
   <script src="js/net.js"></script>
   <script src="js/coop.js"></script>
   <script src="js/secrets.js"></script>

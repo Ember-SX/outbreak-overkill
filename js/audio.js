@@ -245,6 +245,36 @@
       case 'squeak':      // the pilot is not pleased
         [1400, 1900, 1600].forEach((f, i) => tone({ type: 'sine', f, f2: f * 1.25, dur: 0.07, vol: 0.07, delay: i * 0.07 }));
         break;
+      // ---- v0.9: commendations, bestiary, call-downs, volatile drums
+      case 'achieve': {   // opt = tier points (10 / 25 / 50): gold rings out a little longer
+        const big = (opt || 10) >= 50, notes = big ? [523, 659, 784, 1046] : (opt || 10) >= 25 ? [523, 659, 988] : [587, 880];
+        notes.forEach((f, i) => tone({ type: 'triangle', f, dur: big ? 0.5 : 0.32, vol: 0.09, delay: i * 0.08 }));
+        noise({ dur: 0.5, vol: 0.05, freq: 7000, type: 'highpass', delay: 0.05 });
+        break;
+      }
+      case 'codex':
+        [1180, 1580].forEach((f, i) => tone({ type: 'sine', f, dur: 0.09, vol: 0.06, delay: i * 0.09 }));
+        break;
+      case 'radio':       // call-down acknowledged: a squelch and two pips
+        noise({ dur: 0.18, vol: 0.12, freq: 2200, type: 'bandpass', q: 3 });
+        [1250, 1250].forEach((f, i) => tone({ type: 'square', f, dur: 0.05, vol: 0.035, delay: 0.16 + i * 0.1 }));
+        break;
+      case 'flashbang':
+        noise({ dur: 0.5, vol: 0.55, freq: 5200, f2: 900 });
+        tone({ type: 'sine', f: 3400, f2: 3300, dur: 1.4, vol: 0.035, delay: 0.05 });   // the ringing in your ears
+        break;
+      case 'turret':
+        if (!throttle(name, 90)) return;
+        noise({ dur: 0.05, vol: 0.14, freq: 3200, f2: 900 });
+        break;
+      case 'drone':
+        tone({ type: 'sawtooth', f: 210, f2: 240, dur: 0.8, vol: 0.03 });
+        tone({ type: 'sawtooth', f: 214, f2: 246, dur: 0.8, vol: 0.03 });
+        break;
+      case 'fuse':
+        if (!throttle(name, 120)) return;
+        noise({ dur: 0.45, vol: 0.12, freq: 6000, type: 'highpass' });
+        break;
       case 'gameover':
         [392, 330, 262, 196].forEach((f, i) => tone({ type: 'triangle', f, dur: 0.4, vol: 0.12, delay: i * 0.22 }));
         break;
