@@ -1299,6 +1299,11 @@
           ctx.fillStyle = fire ? `rgba(255,120,30,${0.5 * a})` : f.blood ? `rgba(200,40,30,${0.5 * a})` : `rgba(185,201,74,${0.45 * a})`; circle(ctx, f.x, f.y, r);
           ctx.strokeStyle = fire ? `rgba(255,220,140,${0.9 * a})` : f.blood ? `rgba(255,170,120,${0.85 * a})` : `rgba(230,255,140,${0.8 * a})`; ctx.lineWidth = 3;
           ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.stroke();
+        } else if (f.kind === 'pulse' && overDark) {
+          const r = f.r * (1 - a * 0.7);
+          ctx.strokeStyle = `rgba(255,122,217,${0.8 * a})`; ctx.lineWidth = 2 + a * 5;
+          ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.stroke();
+          ctx.fillStyle = `rgba(160,40,140,${0.12 * a})`; circle(ctx, f.x, f.y, r);
         } else if (f.kind === 'flashbang' && overDark) {
           const r = f.r * (1 - a * 0.85);
           ctx.fillStyle = `rgba(255,252,236,${0.35 * a * a})`; circle(ctx, f.x, f.y, r);
@@ -1511,21 +1516,31 @@
           ctx.fillRect(x + 3 + i * pip, y + slot - 4, Math.max(1, pip - 1), 2);
         }
       };
-      p.weapons.forEach((w, i) => drawSlot(vx + i * (slot + gap), sy0, w.def.icon, w.level, w.maxLevel, w.def.evolved ? '#ff7a52' : '#f2b23a'));
+      p.weapons.forEach((w, i) => {
+        const x = vx + i * (slot + gap);
+        drawSlot(x, sy0, w.def.icon, w.level, w.maxLevel, w.over ? '#ff7ad9' : w.def.evolved ? '#ff7a52' : '#f2b23a');
+        if (w.over) {   // Apex overclocks: +n badge
+          ctx.font = `700 9px ${FONT_MONO}`; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+          ctx.fillStyle = '#ff7ad9'; ctx.fillText('+' + w.over, x + slot - 2, sy0 + 1);
+        }
+      });
       p.passiveOrder.forEach((id, i) => drawSlot(vx + i * (slot + gap), sy0 + slot + gap, OO.PASSIVES[id].icon, p.passives[id], OO.PASSIVES[id].max, '#52e6c6'));
       if (g.players.length > 1) this.drawPartnerPanel(sy0 + (slot + gap) * 2 + 6, vw);
 
       // Mission clock, centre top
       const remaining = OO.CONFIG.RUN_LENGTH - g.time;
+      const over = g.infinite && remaining <= 0;
       const cw = narrow ? 120 : 150, cx = W / 2 - cw / 2, cy = 14;
-      this.plate(cx, cy, cw, 44, remaining < 60 ? '#f2b23a' : '#52e6c6');
+      this.plate(cx, cy, cw, 44, over ? '#ff3b4e' : remaining < 60 ? '#f2b23a' : '#52e6c6');
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.font = `600 ${narrow ? 22 : 26}px ${FONT_MONO}`;
-      ctx.fillStyle = remaining < 60 ? '#f2b23a' : '#dce7e3';
+      ctx.fillStyle = over ? '#ff6b78' : remaining < 60 ? '#f2b23a' : '#dce7e3';
       ctx.fillText(U.formatTime(g.time), W / 2, cy + 4);
       ctx.font = `600 10px ${FONT_UI}`;
-      ctx.fillStyle = '#82a09b';
-      ctx.fillText('Evac in ' + U.formatTime(remaining) + (g.difficulty !== OO.DIFFICULTY.standard ? '  ' + g.difficulty.name : ''), W / 2, cy + (narrow ? 29 : 32) - 1);
+      ctx.fillStyle = over ? '#ff8a94' : '#82a09b';
+      const sub = over ? 'Overtime +' + U.formatTime(-remaining)
+        : (g.infinite ? 'Extraction mark in ' : 'Evac in ') + U.formatTime(remaining);
+      ctx.fillText(sub + (g.difficulty !== OO.DIFFICULTY.standard ? '  ' + g.difficulty.name : ''), W / 2, cy + (narrow ? 29 : 32) - 1);
 
       // Strain line under the clock
       const S = g.strain, sl = S.level;
@@ -1533,7 +1548,15 @@
       ctx.fillStyle = sl >= 12 ? '#ff3b4e' : sl >= 6 ? '#f2b23a' : '#82a09b';
       const surge = g.surgeMinutes() > 0 ? '   SURGE HP x' + g.surgeHp().toFixed(1) + (S.capped ? ' (MAX)' : '') + '  DMG x' + g.surgeDmg().toFixed(1) : '';
       if (surge) ctx.fillStyle = '#ff3b4e';
-      ctx.fillText('STRAIN ' + sl + (S.rising > 0 ? '  ▲ ADAPTING' : '') + surge, W / 2, cy + 50);
+      if (over) {
+        ctx.fillStyle = '#ff3b4e';
+        ctx.fillText('OVERTIME  HP x' + g.overtimeHp().toFixed(1) + '  DMG x' + g.overtimeDmg().toFixed(1) + '  SPD x' + g.overtimeSpeed().toFixed(2) + '  HEAL ' + Math.round(g.healMul() * 100) + '%', W / 2, cy + 50);
+      } else ctx.fillText('STRAIN ' + sl + (S.rising > 0 ? '  ▲ ADAPTING' : '') + surge, W / 2, cy + 50);
+      if (p.apexTotal) {
+        ctx.font = `700 11px ${FONT_UI}`;
+        ctx.fillStyle = '#ff7ad9';
+        ctx.fillText('APEX ' + p.apexTotal, W / 2, cy + 64);
+      }
 
       this.drawOffscreenMarkers();
 

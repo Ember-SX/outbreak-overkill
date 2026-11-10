@@ -263,7 +263,7 @@
     this.ui.hideAll();
     this.ui.setHud(true);
     this.netSend({
-      t: 'start', seed: this.seed, you: 1,
+      t: 'start', seed: this.seed, you: 1, inf: this.infinite ? 1 : 0,
       players: this.players.map((p) => ({ slot: p.slot, charId: p.charId, skin: p.skin, cd: p.cd.id, x: p.x, y: p.y })),
     });
     OO.Audio.play('select');
@@ -336,8 +336,9 @@
     return {
       slot: p.slot, x: Math.round(p.x), y: Math.round(p.y), fa: p.faceAngle, aa: p.aimAngle, mv: p.moving ? 1 : 0,
       hp: p.hp, it: p.iframes, dn: p.downed ? 1 : 0, rv: p.reviveT, rr: p.rerolls, sw: p.revives,
-      st: { maxHp: s.maxHp, might: s.might, cooldown: s.cooldown, amount: s.amount, area: s.area, speed: s.speed, magnet: s.magnet, armor: s.armor, regen: s.regen, growth: s.growth },
-      w: p.weapons.map((w) => [w.id, w.level, Math.round(w.damageDealt), w.kills, w.state.active || 0, w.state.angle || 0]),
+      st: { maxHp: s.maxHp, might: s.might, cooldown: s.cooldown, amount: s.amount, area: s.area, speed: s.speed, magnet: s.magnet, armor: s.armor, regen: s.regen, growth: s.growth, cdRate: s.cdRate || 1, phase: s.phase || 0 },
+      w: p.weapons.map((w) => [w.id, w.level, Math.round(w.damageDealt), w.kills, w.state.active || 0, w.state.angle || 0, w.over || 0]),
+      ap: p.apex,
       ps: p.passiveOrder.map((id) => [id, p.passives[id]]),
       cd: [p.cd.id, Math.round(p.cd.t * 10) / 10, p.cd.max], md: Math.round(p.md * 10) / 10, rs: p.rs,
     };
@@ -360,6 +361,8 @@
     OO.Audio.init();
     this.mode = 'client';
     this.resetRun(m.seed);
+    this.infinite = !!m.inf;   // the host's mode decides
+    if (this.infinite) setTimeout(() => this.banner('Infinite Mode: your host is staying past the extraction mark', 'warn'), 600);
     this.players = m.players.map((pp) => {
       const local = pp.slot === m.you;
       const p = this.makePlayer(pp.slot, pp.charId, local ? this.meta.ranks : {}, local, local ? this.skinFor(pp.charId) : String(pp.skin || ''), OO.CALLDOWNS[pp.cd] ? pp.cd : 'flashbang');
@@ -383,7 +386,7 @@
     // Own movement is simulated here, against the same seeded obstacles as the host.
     p.iframes -= dt; p.hurt -= dt;
     for (const q of this.players) {
-      if (this.state === 'playing' && q.cd && q.cd.t > 0 && !q.downed) q.cd.t = Math.max(0, q.cd.t - dt);   // smoothed; the host's value lands with each snapshot
+      if (this.state === 'playing' && q.cd && q.cd.t > 0 && !q.downed) q.cd.t = Math.max(0, q.cd.t - dt * (q.stats.cdRate || 1));   // smoothed; the host's value lands with each snapshot
       if (q.md > 0) q.md -= dt;
     }
     for (const t of this.turrets) { t.life -= dt; t.flash -= dt; }
@@ -447,6 +450,9 @@
     this.time = M.time; this.kills = M.kills; this.credits = M.credits;
     this.team = M.team; this.strain = M.strain; this.spawnRadius = M.spawnRadius;
     if (M.ta) this.tally = M.ta;
+    const wasOvertime = this.overtime;
+    this.overtime = this.infinite && this.time >= OO.CONFIG.RUN_LENGTH;
+    if (this.overtime && !wasOvertime) this.progress.unlock('no_return');   // each side earns its own
     const ax = M.ax, ay = M.ay;
 
     for (const s of m.p) {
@@ -460,6 +466,7 @@
       if (!q.local || q.iframes <= 0) q.iframes = s.it;
       q.stats = Object.assign({}, q.stats, s.st); q.statsVersion++;
       syncWeapons(q, s.w);
+      if (s.ap && typeof s.ap === 'object') { q.apex = s.ap; q.apexTotal = Object.values(s.ap).reduce((a, b) => a + (+b || 0), 0); }
       q.passives = {}; q.passiveOrder = [];
       for (const [id, lv] of s.ps) { q.passives[id] = lv; q.passiveOrder.push(id); }
     }
@@ -537,9 +544,9 @@
   function syncWeapons(q, list) {
     const same = q.weapons.length === list.length && q.weapons.every((w, i) => w.id === list[i][0]);
     if (!same) q.weapons = list.map(([id]) => new OO.Weapon(id, q));
-    list.forEach(([, level, dmg, kills, active, angle], i) => {
+    list.forEach(([, level, dmg, kills, active, angle, over], i) => {
       const w = q.weapons[i];
-      if (w.level !== level) { w.level = level; w._stats = null; }
+      if (w.level !== level || (w.over || 0) !== (over || 0)) { w.level = level; w.over = over || 0; w._stats = null; }
       w.damageDealt = dmg; w.kills = kills;
       w.state.active = active;
       if (active > 0 && !(w.state.angle && Math.abs(w.state.angle - angle) < 0.6)) w.state.angle = angle;

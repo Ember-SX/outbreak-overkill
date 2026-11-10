@@ -35,6 +35,23 @@
     return a;
   };
 
+  /**
+   * Frame limiter for requestAnimationFrame loops: returns a function(ts) that says whether to
+   * draw this frame, keeping the average at or under `fps` on faster displays. It advances on an
+   * ideal 1/fps schedule (so a 144 Hz screen draws ~6 of every 7 frames, not every other one)
+   * and resyncs when the display is slower than the cap. 0.5 ms of slack absorbs timer jitter.
+   */
+  U.frameLimiter = (fps) => {
+    const gap = 1000 / fps;
+    let last = -Infinity;
+    return (ts) => {
+      if (ts - last < gap - 0.5) return false;
+      last += gap;
+      if (ts - last > gap || !Number.isFinite(last)) last = ts;
+      return true;
+    };
+  };
+
   U.formatTime = (s) => {
     s = Math.max(0, Math.floor(s));
     return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');

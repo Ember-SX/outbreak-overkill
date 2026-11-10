@@ -235,6 +235,29 @@
         ctx.fillRect(14.5, 17, 3, 6);
         ctx.fillRect(10, 23, 12, 3); ctx.fillRect(8, 26, 16, 3);
         break;
+      // ---- v0.10: Infinite Mode
+      case 'apex':       // a fanged crown over a strand
+        poly(ctx, [4, 14, 9, 5, 13, 12, 16, 3, 19, 12, 23, 5, 28, 14, 25, 20, 7, 20]); ctx.fill();
+        ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.moveTo(10, 23); ctx.quadraticCurveTo(16, 31, 22, 23); ctx.stroke();
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath(); ctx.arc(16, 15, 2.2, 0, Math.PI * 2); ctx.fill();
+        break;
+      case 'pulse':      // concentric shock rings
+        ctx.beginPath(); ctx.arc(16, 16, 3.5, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.arc(16, 16, 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = 1.6; ctx.globalAlpha = 0.75;
+        ctx.beginPath(); ctx.arc(16, 16, 13, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 1;
+        break;
+      case 'infinity':
+        ctx.lineWidth = 3.2;
+        ctx.beginPath();
+        ctx.moveTo(16, 16); ctx.bezierCurveTo(21, 8, 29, 10, 29, 16); ctx.bezierCurveTo(29, 22, 21, 24, 16, 16);
+        ctx.bezierCurveTo(11, 8, 3, 10, 3, 16); ctx.bezierCurveTo(3, 22, 11, 24, 16, 16);
+        ctx.stroke();
+        break;
       default:
         ctx.fillRect(8, 8, 16, 16);
     }

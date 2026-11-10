@@ -859,6 +859,39 @@ kbd {
 }
 .ach-chip img { width: 16px; height: 16px; }
 
+/* ------------------------------------------------------------------ v0.10: ranks, Infinite Mode */
+.tier-platinum { --tier: #dff3f0; }
+.tier-diamond { --tier: #7fd8ff; }
+.tier-biohazard { --tier: #ff3b4e; }
+.ach.tier-biohazard.on .medal { box-shadow: inset 0 0 0 3px rgba(5, 13, 15, 0.9), 0 0 14px rgba(255, 59, 78, 0.55); }
+.ach.tier-diamond.on .medal { box-shadow: inset 0 0 0 3px rgba(5, 13, 15, 0.9), 0 0 12px rgba(127, 216, 255, 0.45); }
+.medal { position: relative; }
+.medal-rank {
+  position: absolute; right: -6px; bottom: -4px;
+  min-width: 18px; padding: 0 3px;
+  font: 700 10px/14px var(--font-mono); text-align: center;
+  color: #061012; background: var(--tier); border-radius: 2px;
+}
+.rank-pips { display: flex; gap: 4px; margin: 2px 0 1px; }
+.rank-pip {
+  width: 14px; height: 6px;
+  border: 1px solid var(--tier);
+  opacity: 0.45;
+  transform: skewX(-20deg);
+}
+.rank-pip.on { background: var(--tier); opacity: 1; box-shadow: 0 0 5px var(--tier); }
+.ach.maxed .ach-date { color: var(--tier); }
+
+.mode-infinite[aria-pressed="true"] { border-left-color: var(--infect); background: rgba(255, 59, 78, 0.07); }
+.mode-infinite .threat-name::after { content: ' \221E'; color: var(--infect); }
+
+.card-apex { border-color: rgba(255, 122, 217, 0.55); background: linear-gradient(180deg, rgba(255, 122, 217, 0.1), rgba(8, 20, 23, 0.85) 60%); }
+.card-apex .card-type, .card-apex .card-badge { color: #ff9be3; }
+.card-apex:hover, .card-apex:focus-visible { border-color: #ff7ad9; box-shadow: 0 0 20px rgba(255, 122, 217, 0.25); }
+.apex-row span, .apex-row b { color: #ff9be3; }
+.lv-over { color: #ff7ad9; margin-left: 2px; }
+.btn-extract { border-color: var(--infect); color: #ffb3ba; }
+
 /* ------------------------------------------------------------------ small screens */
 @media (max-width: 860px) {
   /* One column: wordmark, then the operative, then the briefing and the buttons. */

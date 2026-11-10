@@ -6,10 +6,13 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.9.0';
+  OO.VERSION = '0.10.0';
 
   OO.CONFIG = {
-    RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory)
+    RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory); the extraction mark in Infinite Mode
+    // Rendering is capped at MAX_FPS frames per second on high-refresh displays. The simulation
+    // always runs in fixed 1/60 s steps regardless of the frame rate.
+    MAX_FPS: 120,
     MAX_ENEMIES: 500,
     // Ground items. Every pickup has a lifetime (seconds; 0 = never despawns) and blinks for the
     // last `blink` seconds. Past maxGems, the oldest DNA sample on the ground is recycled and its
@@ -102,6 +105,31 @@
       sentry:    { cd: 50, life: 15, range: 360, rate: 0.16, shamblerHits: 0.55, bossShare: 0.0015 },
       meddrone:  { cd: 70, heal: 0.35, dur: 4 },
       airstrike: { cd: 90 },
+    },
+    // Infinite Mode: the run doesn't end at the extraction mark (RUN_LENGTH). From there on
+    // ("overtime", m = minutes past the mark) everything compounds every minute, forever:
+    //   enemy HP x(1 + hpPerMin)^m (bosses x(1 + hpPerMin * bossHpScale)^m), damage x(1 + dmgPerMin)^m,
+    //   speed +speedPerMin per minute up to +maxSpeed, the director refills faster and mixes in
+    //   Brutes, and scripted pressure repeats (stampedes, Stalker hunts, skinner rings, the Hare Trigger).
+    //   Necrosis: all healing is multiplied by max(minHeal, 1 - necrosisPerMin * m).
+    // The per-hit ceiling (HIT_CEILING) still holds: deaths come from many hits, never one.
+    // Past max rank (every weapon and gear slot maxed) and on every overtime level-up, Apex
+    // mutations (OO.APEX) are offered: stackable, uncapped, game-breaking.
+    INFINITE: {
+      hpPerMin: 0.16, bossHpScale: 0.6, dmgPerMin: 0.09,
+      speedPerMin: 0.02, maxSpeed: 0.5,
+      necrosisPerMin: 0.03, minHeal: 0.3,
+      refillPerMin: 0.08,          // spawn interval / (1 + refillPerMin * m), down to half
+      brutePerMin: 0.15, bruteMax: 2.5,   // Brute weight added to the spawn pool per overtime minute (capped: ~15% of spawns)
+      eliteCaseChance: 0.2,        // overtime Brutes drop a supply case only this often (it'd be a case every few seconds)
+      every: { stampede: 55, ring: 90, stalker: 120, mecha: 300 },
+      // Payout: the run up to the mark pays as in Standard; overtime adds overtimeCredits per full
+      // minute, 1 credit per overtimeKillsPerCredit kills and overtimePickupShare of credits picked up.
+      overtimeCredits: 15, overtimeKillsPerCredit: 200, overtimePickupShare: 0.1,
+      apexInOvertime: 1,           // Apex options guaranteed on each level-up during overtime
+      // Past xpFrom, each level costs xpGrowth times more than the last (Infinite Mode only), so a
+      // runaway build still levels steadily instead of opening a card screen every few seconds.
+      xpFrom: 60, xpGrowth: 1.02,
     },
     PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.45 },
     // Damage reduction from Kevlar Vest (per rank) and Trauma Plates (per Armory rank), capped.
@@ -320,6 +348,31 @@
     { id: 'greed',    name: 'Black Market Contact', icon: 'credits', max: 3, cost: [60, 120, 200],           text: '+10% credits banked per rank.' },
     { id: 'revive',   name: 'Second Wind',         icon: 'herb',     max: 1, cost: [500],                    text: 'Once per run, get back up at 50% HP.' },
   ];
+
+  // ---------------------------------------------------------------- APEX MUTATIONS (Infinite Mode)
+  // Offered past max rank and during overtime. Stackable; `max` only where more would break the
+  // frame rate (projectile counts) or the game in a dull way (permanent invulnerability).
+  // Numbers per stack; recalcStats() and Weapon.getStats() apply them.
+  OO.APEX = {
+    overclock: { name: 'Overclock',          icon: null,     weight: 1.6, text: 'One weapon past its max level: +20% damage, 6% faster, +1 projectile every second overclock.' },
+    berserk:   { name: 'Berserker Gene',     icon: 'might',  weight: 1,   text: '+25% damage for every weapon.' },
+    adrenal:   { name: 'Adrenal Overdrive',  icon: 'cooldown', weight: 1, text: 'Every weapon fires 10% faster.' },
+    swarm:     { name: 'Hive Swarm',         icon: 'amount', weight: 0.7, max: 4, text: '+1 projectile, blade or bolt for every weapon.' },
+    blast:     { name: 'Blast Radius',       icon: 'area',   weight: 0.9, text: '+25% weapon area.' },
+    titan:     { name: 'Titan Frame',        icon: 'maxhp',  weight: 1,   text: '+40 max HP and a full heal (necrosis can\'t stop this one).' },
+    regen:     { name: 'Regenerator Cells',  icon: 'herb',   weight: 0.9, text: '+2 HP per second.' },
+    hemophage: { name: 'Hemophage',          icon: 'dna',    weight: 0.8, text: 'Every kill restores 0.25 HP.' },
+    sprint:    { name: 'Hyperstride',        icon: 'speed',  weight: 0.7, max: 5, text: '+10% move speed and +50% pickup range.' },
+    phase:     { name: 'Phase Skin',         icon: 'armor',  weight: 0.6, max: 4, text: '+0.15 s of invulnerability after every hit.' },
+    pulse:     { name: 'Necrotic Pulse',     icon: 'pulse',  weight: 0.8, text: 'Every 4 s a shockwave hits the infected around you. More stacks: harder hits, wider ring.' },
+    chain:     { name: 'Volatile Blood',     icon: 'barrel', weight: 0.6, max: 5, text: '+6% chance for an infected you kill to burst like a fuel drum.' },
+    hotmic:    { name: 'Hot Mic',            icon: 'beacon', weight: 0.6, max: 5, text: 'Your call-down recharges 30% faster.' },
+  };
+  OO.APEX_FX = {
+    overclockDmg: 0.2, overclockCd: 0.94,
+    pulse: { every: 4, r: 190, rPerStack: 0.15, shamblerHits: 3, perStack: 0.5, bossShare: 0.25 },
+    chain: { chance: 0.06, r: 80 },
+  };
 
   // ---------------------------------------------------------------- CALL-DOWNS
   // Display data; numbers live in CONFIG.CALLDOWN. `unlock` = the commendation that unlocks it.

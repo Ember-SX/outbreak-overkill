@@ -17,6 +17,7 @@
       this.owner = owner || null;
       this.def = OO.WEAPONS[id];
       this.level = 1;
+      this.over = 0;           // Apex overclocks past max level (Infinite Mode)
       this.timer = 0.4;
       this.damageDealt = 0;
       this.kills = 0;
@@ -33,6 +34,13 @@
       for (let i = 0; i < this.level - 1; i++) {
         const d = this.def.levels[i];
         for (const k in d) if (k !== 'text') s[k] = (s[k] || 0) + d[k];
+      }
+      if (this.over) {
+        // Apex Overclock (Infinite Mode): levels past max
+        const F = OO.APEX_FX;
+        s.dmg *= 1 + F.overclockDmg * this.over;
+        s.cd *= Math.pow(F.overclockCd, this.over);
+        s.amount = (s.amount || 1) + Math.floor(this.over / 2);
       }
       const ps = player.stats;
       s.dmg *= ps.might;
