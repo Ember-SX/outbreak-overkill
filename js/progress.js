@@ -26,6 +26,7 @@
     stalkers: 0, mechs: 0, barrels: 0, barrelKills: 0, calls: 0, revives: 0, downs: 0,
     cases: 0, evolutions: 0, levels: 0, dist: 0, credits: 0,
     bestTime: 0, bestKills: 0, bestLevel: 0, bestStalkers: 0, bestBarrelKills: 0,
+    infiniteRuns: 0, bestInfinite: 0, apexTaken: 0, bestApex: 0,
     sig: {}, ops: OPS(),
   });
   // Run-stat keys that add straight into a lifetime total of a different name.
@@ -37,10 +38,21 @@
   /** Per-run, per-operative counters. Kept small: they ride in every co-op snapshot. */
   function newRunStats() {
     return { kills: 0, shots: 0, dmg: 0, taken: 0, hits: 0, burst: 0, minHp: 1, barrels: 0, bk: 0,
-      calls: 0, revives: 0, downs: 0, evo: 0, cases: 0, dist: 0, sig: 0, by: {} };
+      calls: 0, revives: 0, downs: 0, evo: 0, cases: 0, dist: 0, sig: 0, apex: 0, by: {} };
   }
 
   function num(v) { return Number.isFinite(v) ? v : 0; }
+
+  const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+  /** A rank's goal as the achievement text shows it. */
+  function fmtGoal(a, goal) {
+    if (a.fmt === 'time') return U.formatTime(goal);
+    if (a.fmt === 'hours') return goal / 3600 + (goal === 3600 ? ' hour' : ' hours');
+    return goal.toLocaleString('en-US');
+  }
+  /** Display name and text of one unlock (a one-off, or one rank of a ranked achievement). */
+  function unitName(u) { return u.rank ? u.a.name + ' ' + ROMAN[u.rank] : u.a.name; }
+  function unitText(u) { return u.rank ? u.a.text.replace('{n}', fmtGoal(u.a, u.goal)) : u.a.text; }
 
   class Progress {
     constructor(game) {
@@ -60,6 +72,19 @@
       this.live = false;
       this.scanT = 0;
       if (firstLoad) this.backdate();
+      this.migrateRanks();
+    }
+
+    /**
+     * v0.10: Pest Control and the three signature-weapon masteries became ranked. Drop their old
+     * one-off keys and grant every rank the lifetime stats already prove, quietly, with one notice.
+     */
+    migrateRanks() {
+      let dirty = false;
+      for (const a of OO.ACHIEVEMENTS) if (a.ranks && this.ach[a.id]) { delete this.ach[a.id]; dirty = true; }
+      const got = this.checkRanks(true);
+      if (dirty || got) this.saveAch();
+      if (got) this.push({ kind: 'note', icon: 'trophy', title: 'Service record reviewed', text: got + (got === 1 ? ' achievement rank' : ' achievement ranks') + ' backdated from your lifetime stats. See the Dossier.' });
     }
 
     // ------------------------------------------------------------ storage
@@ -108,39 +133,71 @@
     saveCodex() { U.storage.set('oo.codex', this.codex); }
 
     // ------------------------------------------------------------ commendations
-    has(id) { return !!this.ach[id]; }
-    get unlockedCount() { return OO.ACHIEVEMENTS.filter((a) => this.ach[a.id]).length; }
-    get points() { return OO.ACHIEVEMENTS.reduce((n, a) => n + (this.ach[a.id] ? OO.TIERS[a.tier].points : 0), 0); }
-    get maxPoints() { return OO.ACHIEVEMENTS.reduce((n, a) => n + OO.TIERS[a.tier].points, 0); }
+    /** key: a one-off achievement id, or "<id>.<rank>" for one rank of a ranked achievement. */
+    has(key) { return !!this.ach[key]; }
+    /** Highest rank unlocked for a ranked achievement (0 = none). */
+    rank(id) {
+      const a = OO.ACHIEVEMENTS.find((x) => x.id === id);
+      if (!a || !a.ranks) return this.ach[id] ? 1 : 0;
+      let r = 0;
+      for (let i = 1; i <= a.ranks.length; i++) if (this.ach[id + '.' + i]) r = i;
+      return r;
+    }
+    get unlockedCount() { return OO.ACH_UNITS.filter((u) => this.ach[u.key]).length; }
+    get totalCount() { return OO.ACH_UNITS.length; }
+    get points() { return OO.ACH_UNITS.reduce((n, u) => n + (this.ach[u.key] ? OO.TIERS[u.tier].points : 0), 0); }
+    get maxPoints() { return OO.ACH_UNITS.reduce((n, u) => n + OO.TIERS[u.tier].points, 0); }
     tierCounts() {
-      const out = { bronze: 0, silver: 0, gold: 0 };
-      for (const a of OO.ACHIEVEMENTS) if (this.ach[a.id]) out[a.tier]++;
+      const out = {};
+      for (const t of OO.TIER_ORDER) out[t] = 0;
+      for (const u of OO.ACH_UNITS) if (this.ach[u.key]) out[u.tier]++;
       return out;
     }
 
-    unlock(id) {
-      const a = OO.ACHIEVEMENTS.find((x) => x.id === id);
-      if (!a || this.ach[id]) return false;
-      this.ach[id] = Date.now();
+    unlock(key, silent) {
+      const u = OO.achUnit(key);
+      if (!u || this.ach[key]) return false;
+      this.ach[key] = Date.now();
+      if (silent) return true;          // caller saves and announces
       this.saveAch();
-      if (this.live) this.runNew.push(id);
-      this.push({ kind: 'ach', a });
+      if (this.live) this.runNew.push(key);
+      this.push({ kind: 'ach', u });
       for (const cid in OO.CALLDOWNS) {
         const c = OO.CALLDOWNS[cid];
-        if (c.unlock === id) this.push({ kind: 'note', icon: c.icon, title: 'Call-down unlocked', text: c.name + ': equip it from the Dossier.' });
+        if (c.unlock === key) this.push({ kind: 'note', icon: c.icon, title: 'Call-down unlocked', text: c.name + ': equip it from the Dossier.' });
       }
-      if (this.unlockedCount === OO.ACHIEVEMENTS.length) {
-        this.push({ kind: 'note', icon: 'trophy', title: 'Platinum clearance', text: 'Every commendation on file. Helix would like a word.' });
+      if (this.unlockedCount === this.totalCount) {
+        this.push({ kind: 'note', icon: 'trophy', title: 'Full clearance', text: 'Every achievement and every rank on file. Helix would like a word.' });
       }
       if (this.g.ui && this.g.ui.onProgress) this.g.ui.onProgress();
       return true;
     }
 
+    /** Grant every rank whose goal the counter has reached. Returns how many were new. */
+    checkRanks(silent) {
+      let n = 0;
+      for (const u of OO.ACH_UNITS) {
+        if (!u.rank || this.ach[u.key]) continue;
+        if (this.progressOf(u.a) >= u.goal && this.unlock(u.key, silent)) n++;
+      }
+      return n;
+    }
+
     /** Value for a commendation's progress bar (lifetime + the run in progress, where it applies). */
     progressOf(a) {
-      const s = this.stats, p = this.live ? this.g.player : null, rs = p && p.rs;
+      const liveRun = this.live && !this.banked;   // after runEnd banks the run, don't count it twice
+      const s = this.stats, p = liveRun ? this.g.player : null, rs = p && p.rs;
       const t = a.track || '';
+      const g = this.g, T = liveRun ? g.tally : null;
       if (t === 'kills') return s.kills + (rs ? rs.kills : 0);
+      if (t === 'bosses') return s.stalkers + s.mechs + (T ? T.stalkers + T.mechs : 0);
+      if (t === 'shots') return s.shots + (rs ? rs.shots : 0);
+      if (t === 'barrelKills') return s.barrelKills + (rs ? rs.bk : 0);
+      if (t === 'evacs') return s.evacs;
+      if (t === 'playtime') return s.playtime + (liveRun ? num(g.time) : 0);
+      if (t === 'bestInfinite') return Math.max(s.bestInfinite, liveRun && g.infinite ? num(g.time) : 0);
+      if (t === 'bestApex') return Math.max(s.bestApex, rs ? rs.apex || 0 : 0);
+      if (t === 'bestLevel') return Math.max(s.bestLevel, liveRun && g.team ? g.team.level : 0);
       if (t === 'bestKills') return Math.max(s.bestKills, this.live ? this.g.kills : 0);
       if (t === 'bestStalkers') return Math.max(s.bestStalkers, this.live && this.g.tally ? this.g.tally.stalkers : 0);
       if (t === 'bestBarrelKills') return Math.max(s.bestBarrelKills, rs ? rs.bk : 0);
@@ -200,7 +257,6 @@
       const s = this.stats, u = (id, ok) => { if (ok && !this.ach[id]) this.unlock(id); };
       u('first_blood', rs.kills >= 1);
       u('body_count', g.kills >= 3000);
-      u('pest_control', s.kills + rs.kills >= 50000);
       u('stalker_down', T.stalkers >= 1);
       u('restraining', T.stalkers >= 4);
       u('scrap_metal', T.mechs >= 1);
@@ -210,8 +266,7 @@
       u('powder_keg', rs.bk >= 30);
       u('buddy', rs.revives >= 1);
       u('danger_close', rs.calls >= 3);
-      const sig = 'master_' + p.charId;
-      u(sig, OO.ACHIEVEMENTS.some((a) => a.id === sig) && num(s.sig[p.charId]) + rs.sig >= 5000);
+      this.checkRanks(false);
     }
 
     /**
@@ -239,6 +294,9 @@
       s.bestLevel = Math.max(s.bestLevel, num(summary.level));
       s.bestStalkers = Math.max(s.bestStalkers, num(T.stalkers));
       s.bestBarrelKills = Math.max(s.bestBarrelKills, num(rs.bk));
+      s.apexTaken += num(rs.apex);
+      s.bestApex = Math.max(s.bestApex, num(rs.apex));
+      if (summary.infinite) { s.infiniteRuns++; s.bestInfinite = Math.max(s.bestInfinite, Math.floor(num(summary.time))); }
       s.sig[char] = num(s.sig[char]) + num(rs.sig);
       const op = s.ops[char] || (s.ops[char] = { runs: 0, evacs: 0, kills: 0, time: 0 });
       op.runs++; op.kills += num(rs.kills); op.time += num(summary.time);
@@ -251,9 +309,11 @@
         if (rs.minHp < 0.1) this.unlock('flatline');
         if (Object.keys(OO.CHARACTERS).every((c) => s.ops[c] && s.ops[c].evacs > 0)) this.unlock('full_roster');
       }
-      // lifetime totals now include this run
-      if (s.kills >= 50000) this.unlock('pest_control');
-      if (num(s.sig[char]) >= 5000) this.unlock('master_' + char);
+      // lifetime totals now include this run (the live part of each counter is the same run, so
+      // stop counting it twice before the final rank check)
+      this.banked = true;
+      this.checkRanks(false);
+      this.banked = false;
       this.live = false;
       return this.runNew.slice();
     }
@@ -262,7 +322,7 @@
     /** Slide-down notices, one at a time: commendations, bestiary entries and one-off notes. */
     push(item) {
       this.queue.push(item);
-      if (item.kind === 'ach') OO.Audio.play('achieve', OO.TIERS[item.a.tier].points);
+      if (item.kind === 'ach') OO.Audio.play('achieve', OO.TIERS[item.u.tier].points);
       else if (item.kind === 'codex') OO.Audio.play('codex');
       if (!this.showing) this.next();
     }
@@ -275,8 +335,8 @@
       const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       let tier = 'note', icon = item.icon || 'dna', eyebrow = item.title, name = '', text = item.text || '';
       if (item.kind === 'ach') {
-        const a = item.a, T = OO.TIERS[a.tier];
-        tier = a.tier; icon = a.icon; eyebrow = 'Commendation unlocked · ' + T.name; name = a.name; text = a.text;
+        const u = item.u, T = OO.TIERS[u.tier];
+        tier = u.tier; icon = u.a.icon; eyebrow = (u.rank ? 'Rank up' : 'Achievement unlocked') + ' · ' + T.name; name = unitName(u); text = unitText(u);
       } else if (item.kind === 'codex') {
         tier = 'codex'; icon = 'dna'; name = ''; eyebrow = item.title;
       }
@@ -296,5 +356,9 @@
   }
 
   Progress.newRunStats = newRunStats;
+  Progress.unitName = unitName;
+  Progress.unitText = unitText;
+  Progress.fmtGoal = fmtGoal;
+  Progress.ROMAN = ROMAN;
   OO.Progress = Progress;
 })(window.OO = window.OO || {});

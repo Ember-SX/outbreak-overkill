@@ -34,7 +34,7 @@
       this.grid = new U.SpatialHash(64);
       this._sepBuf = []; this._prBuf = []; this._exBuf = []; this._zoneBuf = [];
       this.records = U.storage.get('oo.records', { bestTime: 0, bestKills: 0, runs: 0, wins: 0 });
-      this.settings = Object.assign({ muted: false, damageNumbers: true, shake: true, difficulty: 'standard', fx: 'auto' }, U.storage.get('oo.settings', {}));
+      this.settings = Object.assign({ muted: false, damageNumbers: true, shake: true, difficulty: 'standard', fx: 'auto', mode: 'standard' }, U.storage.get('oo.settings', {}));
       this.meta = Object.assign({ bank: 0, ranks: {}, skins: {}, outfit: {} }, U.storage.get('oo.meta', {}));
       if (!this.meta.skins || typeof this.meta.skins !== 'object') this.meta.skins = {};
       if (!this.meta.outfit || typeof this.meta.outfit !== 'object') this.meta.outfit = {};
@@ -54,6 +54,7 @@
       document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'playing' && !this.coop) this.pause(); });
 
       this.fps = 60; this.last = performance.now(); this.acc = 0; this.menuTime = 0;
+      this.frameGate = U.frameLimiter(OO.CONFIG.MAX_FPS);   // render cap (CONFIG.MAX_FPS)
       requestAnimationFrame((t) => this.frame(t));
     }
 
@@ -90,6 +91,8 @@
       this.enemyShots = []; this.hazards = []; this.stampedes = []; this.missiles = [];
       this.netEvents = [];
       this.turrets = []; this.fuses = []; this._killer = null;
+      this.infinite = this.settings.mode === 'infinite';   // Infinite Mode (co-op clients take the host's)
+      this.overtime = false; this.maxRankShown = false; this._extracted = false; this.mark = null;
       this.tally = { stalkers: 0, mechs: 0, stampedes: 0, lastStampede: -99 };   // team counters for commendations
       this.gemCount = 0; this.otherCount = 0; this.nextPickupId = 0; this.nextProjId = 0; this._immuneT = -9;
       this.team = { level: 1, xp: 0, xpNext: OO.CONFIG.xpToNext(1), pending: 0 };
@@ -114,6 +117,7 @@
         rerolls: 1 + (ranks.reroll || 0), revives: ranks.revive || 0,
         downed: false, reviveT: 0, input: null, luOptions: null, luDone: true,
         rs: OO.Progress.newRunStats(), cd: this.newCalldown(calldown || 'flashbang'), md: 0, mdRate: 0,
+        apex: {}, apexTotal: 0, pulseT: 0,
       };
       this.recalcStats(p);
       p.hp = p.stats.maxHp;
@@ -137,9 +141,14 @@
 
     endRun(victory) {
       if (this.state === 'results') return;
+      // Infinite Mode: reaching the extraction mark counts as an evacuation, however the run ends.
+      if (this.infinite && this.time >= OO.CONFIG.RUN_LENGTH) victory = true;
       this.state = 'results';
       const summary = {
         victory, time: this.time, level: this.team.level, kills: this.kills, credits: this.credits,
+        infinite: this.infinite, overtime: this.infinite ? Math.max(0, this.time - OO.CONFIG.RUN_LENGTH) : 0, extracted: !!this._extracted,
+        mark: this.overtime && this.mark ? this.mark : null,   // credits and kills at the extraction mark (payout)
+        apex: this.player && this.player.rs ? this.player.rs.apex : 0,
         strain: this.strain.peak, difficulty: this.difficulty.name, coop: this.coop,
         team: this.players.map((p) => ({ tag: p.tag, name: p.name, downed: p.downed })),
       };
@@ -153,7 +162,14 @@
     finishRun(summary, weapons) {
       this.state = 'results';
       // Run payout goes into the local Armory bank (each co-op player banks their own).
-      const payout = Math.round((summary.credits + Math.floor(summary.kills / 20) + Math.floor(summary.time / 60) * 5 + (summary.victory ? 100 : 0))
+      // Infinite Mode: the run up to the extraction mark pays as normal; overtime pays a flat rate
+      // per minute plus a trickle from kills and pickups, so one endless run can't empty the Armory.
+      const I = OO.CONFIG.INFINITE, ot = summary.mark ? summary.overtime || 0 : 0;
+      const credits = summary.mark ? summary.mark.credits + Math.floor((summary.credits - summary.mark.credits) * I.overtimePickupShare) : summary.credits;
+      const kills = summary.mark ? summary.mark.kills : summary.kills;
+      const time = summary.mark ? Math.min(summary.time, OO.CONFIG.RUN_LENGTH) : summary.time;
+      const payout = Math.round((credits + Math.floor(kills / 20) + Math.floor(time / 60) * 5 + (summary.victory ? 100 : 0)
+        + Math.floor(ot / 60) * I.overtimeCredits + (summary.mark ? Math.floor((summary.kills - summary.mark.kills) / I.overtimeKillsPerCredit) : 0))
         * (1 + this.rank('greed') * 0.1) * this.difficulty.credits);
       this.meta.bank += payout;
       this.saveMeta();
@@ -163,13 +179,13 @@
       r.bestKills = Math.max(r.bestKills, summary.kills);
       U.storage.set('oo.records', r);
       const commendations = this.progress.runEnd(summary, payout);
-      OO.Audio.play(summary.victory ? 'victory' : 'gameover');
+      OO.Audio.play(summary.victory && !(summary.infinite && !summary.extracted) ? 'victory' : 'gameover');
       this.ui.setHud(false);
       this.ui.showResults(Object.assign({}, summary, { payout, bank: this.meta.bank, weapons, commendations }));
     }
 
     weaponTable(p) {
-      return p.weapons.map((w) => ({ id: w.id, name: w.def.name, level: w.level, dmg: Math.round(w.damageDealt), kills: w.kills }));
+      return p.weapons.map((w) => ({ id: w.id, name: w.def.name, level: w.level, over: w.over || 0, dmg: Math.round(w.damageDealt), kills: w.kills }));
     }
 
     quitToMenu() {
@@ -211,6 +227,11 @@
         const order = ['auto', 'high', 'low'];
         this.settings.fx = order[(order.indexOf(this.settings.fx) + 1) % order.length];
       } else this.settings[key] = !this.settings[key];
+      U.storage.set('oo.settings', this.settings);
+    }
+
+    setMode(id) {
+      this.settings.mode = id === 'infinite' ? 'infinite' : 'standard';
       U.storage.set('oo.settings', this.settings);
     }
 
@@ -272,7 +293,7 @@
       return true;
     }
 
-    /** Refunds Armory upgrades only. Skins are cosmetic purchases and stay owned. */
+    /** Refunds Armory upgrades only. Outfits are separate purchases and stay owned. */
     refundArmory() {
       for (const item of OO.ARMORY) {
         for (let i = 0; i < this.rank(item.id); i++) this.meta.bank += item.cost[i];
@@ -327,6 +348,7 @@
         amount: lv('amount'),
         growth: 1 + m('growth') * 0.08,
       };
+      this.applyApexStats(p);
       if (prevMax && p.stats.maxHp > prevMax && !p.downed) p.hp += p.stats.maxHp - prevMax;
       p.statsVersion++;
     }
@@ -351,6 +373,7 @@
       const E = OO.EVOLUTIONS[w.id];
       const nw = new OO.Weapon(E.into, p);
       nw.damageDealt = w.damageDealt; nw.kills = w.kills;
+      nw.over = w.over || 0;   // Apex overclocks carry over to the evolved weapon
       p.weapons[p.weapons.indexOf(w)] = nw;
       p.rs.evo++;
       this.banner((this.coop ? p.name + ': ' : '') + w.def.name + ' evolved into ' + nw.def.name, 'good');
@@ -375,6 +398,7 @@
         picked.push(opt);
         pool.splice(pool.indexOf(opt), 1);
       }
+      if (this.infinite) return this.mixApex(p, picked, n);   // Infinite Mode: past max rank, and in overtime (infinite.js)
       if (!picked.length) picked.push({ kind: 'herb' }, { kind: 'credits' });
       return picked;
     }
@@ -393,6 +417,7 @@
         const def = OO.PASSIVES[opt.id], lv = p.passives[opt.id] || 0;
         return { icon: def.icon, name: def.name, badge: lv ? 'Lv ' + (lv + 1) : 'New', isNew: !lv, text: def.text, type: 'Gear' };
       }
+      if (opt.kind === 'apex') return this.describeApex(p, opt);
       if (opt.kind === 'herb') return { icon: 'herb', name: 'Green Herb', badge: 'Heal', text: 'Restore 40 HP.', type: 'Supply' };
       return { icon: 'credits', name: 'Credit Stash', badge: '+25', text: 'Pocket 25 credits.', type: 'Supply' };
     }
@@ -406,6 +431,8 @@
         else p.passives[opt.id]++;
         this.recalcStats(p);
         if (opt.id === 'maxhp') this.heal(p, 25);      // a medkit patches you up as well
+      } else if (opt.kind === 'apex') {
+        this.applyApex(p, opt);
       } else if (opt.kind === 'herb') {
         this.heal(p, 40);
       } else {
@@ -416,12 +443,18 @@
     // ------------------------------------------------------------ level-ups (shared team XP)
     // XP is pooled. When the team levels up, every player picks their own upgrade; the game
     // waits until everyone has chosen.
+    /** XP for the next level: the standard curve, steepening past INFINITE.xpFrom in Infinite Mode. */
+    xpToNext(level) {
+      const I = OO.CONFIG.INFINITE, base = OO.CONFIG.xpToNext(level);
+      return this.infinite && level > I.xpFrom ? Math.round(base * Math.pow(I.xpGrowth, level - I.xpFrom)) : base;
+    }
+
     checkLevel() {
       const T = this.team;
       while (T.xp >= T.xpNext) {
         T.xp -= T.xpNext;
         T.level++;
-        T.xpNext = OO.CONFIG.xpToNext(T.level);
+        T.xpNext = this.xpToNext(T.level);
         T.pending++;
       }
       if (T.pending > 0 && this.state === 'playing') this.openLevelUp();
@@ -539,15 +572,23 @@
       this.checkLevel();
     }
 
-    heal(p, n) {
+    heal(p, n, raw) {
       const before = p.hp;
-      p.hp = Math.min(p.stats.maxHp, p.hp + n);
+      p.hp = Math.min(p.stats.maxHp, p.hp + (raw ? n : n * this.healMul()));
       this.addText(p.x, p.y - 24, '+' + Math.round(p.hp - before), 'heal');
       this.sfxFor(p, 'herb');
     }
 
     // ------------------------------------------------------------ main loop
+    /**
+     * One display frame. Frames that arrive faster than CONFIG.MAX_FPS are skipped outright (no
+     * simulation, no drawing), so a 144/240 Hz screen draws at most 120 frames a second. The
+     * simulation itself always advances in fixed 1/60 s steps from the time actually elapsed, so
+     * physics is identical at any frame rate.
+     */
     frame(ts) {
+      requestAnimationFrame((t) => this.frame(t));
+      if (!this.frameGate(ts)) return;
       const dt = Math.min(0.1, (ts - this.last) / 1000);
       this.last = ts;
       if (dt > 0) this.fps = U.lerp(this.fps, 1 / dt, 0.05);
@@ -555,8 +596,8 @@
       let steps = 0;
       while (this.acc >= STEP && steps < 6) { this.tick(STEP); this.acc -= STEP; steps++; }
       if (steps >= 6) this.acc = 0;
+      this.frames = (this.frames || 0) + 1;
       this.renderer.render(dt);
-      requestAnimationFrame((t) => this.frame(t));
     }
 
     tick(dt) {
@@ -594,7 +635,10 @@
 
     update(dt) {
       this.time += dt;
-      if (this.time >= OO.CONFIG.RUN_LENGTH) { this.endRun(true); return; }
+      if (this.time >= OO.CONFIG.RUN_LENGTH) {
+        if (!this.infinite) { this.endRun(true); return; }
+        if (!this.overtime) this.enterOvertime();
+      }
 
       this.updatePlayers(dt);
       this.updateTactical(dt);
@@ -663,7 +707,7 @@
           if (p.moving) p.walk += dt * 10;
         }
         if (p.aimT <= 0) p.aimAngle = p.faceAngle;
-        if (p.stats.regen) p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.regen * dt);
+        if (p.stats.regen) p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.regen * this.healMul() * dt);
       }
     }
 
@@ -700,7 +744,7 @@
       if (d.crate) return 1;
       const g = OO.CONFIG.LEVELING.hpGrowth;
       const growth = d.boss ? g.boss : d.elite ? g.elite : g.normal;
-      return Math.pow(1 + growth, level) * this.difficulty.hp * this.surgeHp(d) * (this.coopActive ? OO.CONFIG.COOP.enemyHp : 1);
+      return Math.pow(1 + growth, level) * this.difficulty.hp * this.surgeHp(d) * this.overtimeHp(d) * (this.coopActive ? OO.CONFIG.COOP.enemyHp : 1);
     }
 
     // ------------------------------------------------------------ late-game surge (after 6:00)
@@ -743,7 +787,7 @@
       const e = {
         id: ++this.nextId, type, def: d, x, y, level, hits: 0,
         hp: d.hp * hpMul, maxHp: d.hp * hpMul,
-        speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)),
+        speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)) * (d.crate ? 1 : this.overtimeSpeed()),
         dmg: d.dmg * this.enemyDmgScale(true, d), r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
@@ -939,7 +983,7 @@
       if (weapon) {
         weapon.kills++;
         const ls = weapon.def.base.lifesteal, o = weapon.owner;
-        if (ls && o && !o.downed) o.hp = Math.min(o.stats.maxHp, o.hp + ls);
+        if (ls && o && !o.downed) o.hp = Math.min(o.stats.maxHp, o.hp + ls * this.healMul());
       }
       if (e.def.crate) {
         this.crateLoot(e);
@@ -955,7 +999,7 @@
       this.addDecal(e.x, e.y, e.r * U.rand(1.4, 2.1), bile ? 'bile' : oil ? 'scorch' : 'red');
       this.burst(e.x, e.y, bile ? '#a8b83a' : oil ? '#2b2620' : '#8f1712', e.def.boss ? 50 : 7, e.def.boss ? 280 : 140);
       if (e.def.explode) this.pendingExplosions.push({ x: e.x, y: e.y, r: e.def.explode.r, dmg: e.def.explode.dmg * this.enemyDmgScale(), enemyDmg: e.def.explode.enemyDmg, kind: 'bile' });
-      if (e.def.elite) this.addPickup('case', e.x, e.y, { big: false });
+      if (e.def.elite && (!this.overtime || U.chance(OO.CONFIG.INFINITE.eliteCaseChance))) this.addPickup('case', e.x, e.y, { big: false });
       if (e.def.mech) this.mechaDown(e);
       else if (e.def.boss) {
         this.addPickup('case', e.x, e.y, { big: true });
@@ -981,6 +1025,7 @@
         const sigW = OO.CHARACTERS[by.charId].weapon;
         if (weapon.id === sigW || (OO.EVOLUTIONS[sigW] && OO.EVOLUTIONS[sigW].into === weapon.id)) rs.sig++;
       }
+      if (by.apexTotal) this.apexOnKill(by, e);   // Hemophage, Volatile Blood (infinite.js)
     }
 
     crateLoot(e) {
@@ -1006,7 +1051,7 @@
       p.rs.taken += d; p.rs.hits++;
       if (src === 'burst') p.rs.burst++;
       p.rs.minHp = Math.min(p.rs.minHp, Math.max(0, p.hp / p.stats.maxHp));
-      p.iframes = OO.CONFIG.PLAYER.iframes;
+      p.iframes = OO.CONFIG.PLAYER.iframes + (p.stats.phase || 0);
       p.hurt = 0.3;
       if (p.local) { this.shake(5); OO.Audio.play('hurt'); }
       else this.emit(['hurt', d]);
@@ -1076,7 +1121,7 @@
           if (U.dist2(ex.x, ex.y, p.x, p.y) < (ex.r + p.r) ** 2 && !this.world.blocked(ex.x, ex.y, p.x, p.y)) this.hurtPlayer(p, ex.dmg, blood ? 'burst' : ex.kind);   // every blast respects i-frames, so hits can't stack into one
         }
         this.grid.query(ex.x, ex.y, ex.r + 32, buf);
-        if (ex.barrel) { this._killer = ex.owner || null; this._killSrc = 'barrel'; }
+        if (ex.barrel) { this._killer = ex.owner || null; this._killSrc = ex.chain ? 'chain' : 'barrel'; }
         for (const o of buf) {
           if (o.dead) continue;
           if (ex.kind === 'blood' && o.def.burster) continue;   // one burster can't set off the whole row
@@ -1165,7 +1210,7 @@
     /** Damage multiplier for enemy attacks at the current time. */
     enemyDmgScale(withSurge = true, d, time = this.time) {
       const T = OO.CONFIG.THREAT;
-      return T.base * (1 + (time / 60) * T.perMin) * this.difficulty.dmg * (withSurge ? this.surgeDmg(d, time) : 1);
+      return T.base * (1 + (time / 60) * T.perMin) * this.difficulty.dmg * (withSurge ? this.surgeDmg(d, time) : 1) * this.overtimeDmg(time);
     }
 
     /** Contact damage from an infected. */

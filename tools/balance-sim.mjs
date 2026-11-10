@@ -4,6 +4,12 @@
 //   npm run sim -- standard 3        threat level, runs per combination (locked levels fall back to Standard)
 //   npm run sim -- standard 1 god    bots can't die: damage is only counted. Use it to see the late game
 //                                    (HP scaling, the final boss) that the bots never reach on their own
+//   npm run sim -- standard 1 god infinite:30
+//                                    Infinite Mode, stopping at 30:00 (or when the bot dies). Bots take
+//                                    Apex mutations like any other card (smart bots prefer them).
+//   npm run sim -- standard 1 god infinite:60 mortal-from:15
+//                                    unkillable until 15:00, then real damage: how long a grown build
+//                                    lasts in overtime (the survival limit).
 //
 // Bots: "random" picks upgrades at random; "smart" prefers owned weapons and evolution
 // partners, and runs behind the nearest obstacle when a stampede is coming.
@@ -20,6 +26,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const difficulty = process.argv[2] || 'standard';
 const runs = Number(process.argv[3] || 2);
 const god = process.argv[4] === 'god';
+const infArg = process.argv.find((a) => a.startsWith('infinite'));
+const infinite = !!infArg;
+const capMin = infinite ? Number(infArg.split(':')[1] || 30) : 15;
+const mortalArg = process.argv.find((a) => a.startsWith('mortal-from'));
+const mortalFrom = mortalArg ? Number(mortalArg.split(':')[1] || 15) : Infinity;
 
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
@@ -27,10 +38,16 @@ page.on('pageerror', (e) => console.error('page error:', e.message));
 await page.goto(pathToFileURL(join(root, 'index.html')).href);
 await page.waitForFunction(() => window.OO && OO.game);
 
-const results = await page.evaluate(({ difficulty, runs, god }) => {
+const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, mortalFrom }) => {
   const g = OO.game;
   g.ui.banner = () => {};
   g.setDifficulty(difficulty);
+  const savedMode = g.settings.mode;
+  g.setMode(infinite ? 'infinite' : 'standard');
+  const MIN = capMin;
+  const progressLive = g.progress.runEnd.bind(g.progress);
+  g.progress.runEnd = () => [];        // keep simulated runs out of the lifetime stats
+  g.progress.tick = () => {};
   // Don't let simulated runs touch the real Armory bank or records.
   const savedMeta = JSON.stringify(g.meta), savedRecords = JSON.stringify(g.records);
   g.meta = { bank: 0, ranks: {}, skins: {}, outfit: {} };
@@ -42,7 +59,7 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
   let cur = 'other';
   const origHurt = g.hurtPlayer.bind(g);
   g.hurtPlayer = (p, dmg, ignoreIframes) => {
-    if (!god) return origHurt(p, dmg, ignoreIframes);
+    if (!god || g.time >= mortalFrom * 60) return origHurt(p, dmg, ignoreIframes);
     if (g.state !== 'playing' || (p.iframes > 0 && !ignoreIframes)) return;
     const d = g.mitigate(p, dmg);
     src[cur] = (src[cur] || 0) + d;
@@ -67,6 +84,7 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
     let best = null, bs = -1;
     for (const o of opts) {
       let s = Math.random() * 0.5;
+      if (o.kind === 'apex') s += 5;
       if (o.kind === 'weapon') s += g.getWeapon(g.player, o.id) ? 4 : (g.player.weapons.length < 4 ? 3 : 1);
       if (o.kind === 'passive') {
         s += 2 + (8 - PREF.indexOf(o.id)) * 0.2;
@@ -135,7 +153,9 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
         g.start(ch);
         let steps = 0, boss = null, minute = 0;
         const hpCurve = [];
-        while (g.state !== 'results' && steps++ < 60 * 60 * 16) {
+        let guard = 0;
+        while (g.state !== 'results' && steps < 60 * 60 * (MIN + 1) && guard++ < 60 * 60 * (MIN + 1) * 3 && g.time < MIN * 60) {
+          if (g.state === 'playing') steps++;
           steer(bot);
           if (g.state === 'playing') {
             g.update(1 / 60);
@@ -146,33 +166,38 @@ const results = await page.evaluate(({ difficulty, runs, god }) => {
           else if (g.state === 'chest') g.closeChest();
         }
         out.push({
-          ch, bot, won: g.time >= OO.CONFIG.RUN_LENGTH, payout: g.meta.bank - bank0, time: Math.round(g.time), level: g.team.level, kills: g.kills,
+          ch, bot, won: g.time >= OO.CONFIG.RUN_LENGTH, payout: g.meta.bank - bank0, time: Math.round(g.time), level: g.team.level, kills: g.kills, apex: g.player.apexTotal || 0,
           weapons: g.player.weapons.map((w) => w.id + (w.def.evolved ? '*' : w.level)).join(' '),
           boss: boss ? (boss.dead ? 'scrapped at ' + Math.floor(g.time / 60) + ':' + String(Math.floor(g.time % 60)).padStart(2, '0') : Math.round(100 * boss.hp / boss.maxHp) + '% HP left') : '-',
           hpCurve: hpCurve.join(' '),
-          perMin: Array.from({ length: 15 }, (_, i) => perMin[i] || 0),
-          biggest: Array.from({ length: 15 }, (_, i) => biggest[i] || 0),
+          perMin: Array.from({ length: MIN }, (_, i) => perMin[i] || 0),
+          biggest: Array.from({ length: MIN }, (_, i) => biggest[i] || 0),
           damage: Object.entries(src).map(([k, v]) => k.replace(/^(update|process)/, '') + ' ' + Math.round(v)).join(', '),
         });
       }
     }
   }
+  if (g.state !== 'results' && g.state !== 'menu') { g.state = 'menu'; }
+  g.setMode(savedMode || 'standard');
+  g.progress.runEnd = progressLive;
   g.meta = JSON.parse(savedMeta); g.saveMeta();
   g.records = JSON.parse(savedRecords); OO.U.storage.set('oo.records', g.records);
   return out;
-}, { difficulty, runs, god });
+}, { difficulty, runs, god, infinite, capMin, mortalFrom });
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-console.log(`\n${difficulty}, ${runs} run(s) per operative per bot${god ? ' (god mode: damage counted, not applied)' : ''}\n`);
+console.log(`\n${difficulty}${infinite ? ', Infinite Mode to ' + capMin + ':00' : ''}, ${runs} run(s) per operative per bot${god ? ' (god mode: damage counted, not applied' + (Number.isFinite(mortalFrom) ? ' until ' + mortalFrom + ':00, real after' : '') + ')' : ''}\n`);
+const MINS = infinite ? capMin : 15;
 for (const r of results) {
-  console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.won ? 'EVAC ' : 'died '} ${fmt(r.time).padStart(5)}  L${String(r.level).padEnd(3)} ${String(r.kills).padStart(6)} kills ${String(r.payout).padStart(4)} cr  [${r.weapons}]  mech: ${r.boss}  dmg: ${r.damage}`);
+  const tag = infinite ? (r.time >= capMin * 60 ? 'CAP  ' : r.won ? 'OT   ' : 'died ') : r.won ? 'EVAC ' : 'died ';
+  console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${tag} ${fmt(r.time).padStart(5)}  L${String(r.level).padEnd(3)} ${String(r.kills).padStart(6)} kills ${String(r.payout).padStart(4)} cr${infinite ? '  apex ' + r.apex : ''}  [${r.weapons}]  mech: ${r.boss}  dmg: ${r.damage}`);
 }
 if (god) {
   console.log('\nShambler HP multiplier at each minute mark (0:00, 1:00, ...):');
   for (const r of results) console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.hpCurve}`);
-  const avg = (key) => Array.from({ length: 15 }, (_, i) => Math.round(results.reduce((a, r) => a + r[key][i], 0) / results.length));
-  const max = (key) => Array.from({ length: 15 }, (_, i) => Math.max(...results.map((r) => r[key][i])));
-  console.log('\nMinute:                   ' + Array.from({ length: 15 }, (_, i) => String(i + 1).padStart(5)).join(''));
+  const avg = (key) => Array.from({ length: MINS }, (_, i) => Math.round(results.reduce((a, r) => a + r[key][i], 0) / results.length));
+  const max = (key) => Array.from({ length: MINS }, (_, i) => Math.max(...results.map((r) => r[key][i])));
+  console.log('\nMinute:                   ' + Array.from({ length: MINS }, (_, i) => String(i + 1).padStart(5)).join(''));
   console.log('Avg damage taken per min: ' + avg('perMin').map((v) => String(v).padStart(5)).join(''));
   console.log('Largest single hit:       ' + max('biggest').map((v) => String(v).padStart(5)).join(''));
 }

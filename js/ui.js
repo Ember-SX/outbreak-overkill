@@ -17,6 +17,7 @@
 
       this.buildMenu();
       this.buildDifficulty();
+      this.buildModes();
       this.updateSettings();
       $('btn-start').addEventListener('click', () => this.startRun());
       $('btn-armory').addEventListener('click', () => this.showArmory('upgrades'));
@@ -34,6 +35,7 @@
       $('btn-skip').addEventListener('click', () => { if (performance.now() >= this.lockUntil) this.g.requestSkip(); });
       $('btn-resume').addEventListener('click', () => this.g.resume());
       $('btn-quit').addEventListener('click', () => this.g.quitToMenu());
+      $('btn-extract').addEventListener('click', () => this.g.extractNow());
       $('btn-retry').addEventListener('click', () => this.retry());
       $('btn-menu').addEventListener('click', () => this.g.quitToMenu());
       $('chest-ok').addEventListener('click', () => this.g.closeChest());
@@ -165,7 +167,7 @@
       $('dossier-outfit').textContent = skin.name;
       $('dossier-calldown').textContent = OO.CALLDOWNS[this.g.calldownFor()].name;
       const P = this.g.progress;
-      $('dossier-ach').textContent = P.unlockedCount + ' of ' + OO.ACHIEVEMENTS.length;
+      $('dossier-ach').textContent = P.unlockedCount + ' of ' + P.totalCount;
       for (const cid in OO.CHARACTERS) {
         const thumb = $('char-' + cid).querySelector('.char-thumb');
         thumb.innerHTML = '';
@@ -189,6 +191,30 @@
           if (d.locked) return;
           this.g.setDifficulty(id);
           for (const k in OO.DIFFICULTY) $('diff-' + k).setAttribute('aria-pressed', String(k === id));
+          OO.Audio.init(); OO.Audio.play('select');
+        });
+        list.appendChild(b);
+      }
+    }
+
+    /** Mode: Standard (evac at 15:00) or Infinite (overtime past the extraction mark). */
+    buildModes() {
+      const list = $('mode-list');
+      list.innerHTML = '';
+      const modes = {
+        standard: ['Standard', 'Hold out for 15:00 and make the evac helicopter.'],
+        infinite: ['Infinite', 'Stay past the extraction mark. The horde scales forever; level past max rank with Apex mutations.'],
+      };
+      for (const id in modes) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'threat-btn mode-btn mode-' + id;
+        b.id = 'mode-' + id;
+        b.setAttribute('aria-pressed', String((this.g.settings.mode || 'standard') === id));
+        b.innerHTML = `<span class="threat-name">${modes[id][0]}</span><span class="threat-text">${modes[id][1]}</span>`;
+        b.addEventListener('click', () => {
+          this.g.setMode(id);
+          for (const k in modes) $('mode-' + k).setAttribute('aria-pressed', String(k === id));
           OO.Audio.init(); OO.Audio.play('select');
         });
         list.appendChild(b);
@@ -240,8 +266,10 @@
       if (this._ecgRun) return;
       const c = $('menu-ecg');
       this._ecgRun = true;
+      const gate = U.frameLimiter(OO.CONFIG.MAX_FPS);   // same 120 FPS cap as the game loop
       const loop = (now) => {
         if ($('screen-menu').hidden) { this._ecgRun = false; return; }
+        if (!gate(now)) { requestAnimationFrame(loop); return; }
         const dpr = Math.min(2, window.devicePixelRatio || 1);
         const w = c.clientWidth, h = c.clientHeight;
         if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
@@ -373,14 +401,14 @@
       wrap.innerHTML = '';
       descs.forEach((d, i) => {
         const b = document.createElement('button');
-        b.className = 'card' + (d.isNew ? ' card-new' : '');
+        b.className = 'card' + (d.isNew ? ' card-new' : '') + (d.apex ? ' card-apex' : '');
         b.innerHTML = `
           <span class="card-top">
             <span class="card-key">${i + 1}</span>
             <span class="card-type">${esc(d.type)}</span>
             <span class="card-badge">${esc(d.badge)}</span>
           </span>
-          <img class="card-icon" src="${OO.Icons.url(d.icon, 40, d.isNew ? '#f2b23a' : '#52e6c6')}" alt="">
+          <img class="card-icon" src="${OO.Icons.url(d.icon, 40, d.apex ? '#ff7ad9' : d.isNew ? '#f2b23a' : '#52e6c6')}" alt="">
           <span class="card-name">${esc(d.name)}</span>
           <span class="card-text">${esc(d.text)}</span>`;
         b.addEventListener('click', () => this.pick(i));
@@ -418,9 +446,13 @@
     // ------------------------------------------------------------ pause
     showPause() {
       const p = this.g.player;
-      const rows = p.weapons.map((w) => `<li><img src="${OO.Icons.url(w.def.icon, 24, w.def.evolved ? '#ff6f4a' : '#e3a33b')}" alt=""><span>${esc(w.def.name)}</span><b>${w.def.evolved ? 'Evolved' : 'Lv ' + w.level}</b></li>`)
+      const rows = p.weapons.map((w) => `<li><img src="${OO.Icons.url(w.def.icon, 24, w.def.evolved ? '#ff6f4a' : '#e3a33b')}" alt=""><span>${esc(w.def.name)}</span><b>${w.def.evolved ? 'Evolved' : 'Lv ' + w.level}${w.over ? ' +' + w.over : ''}</b></li>`)
         .concat(p.passiveOrder.map((id) => `<li><img src="${OO.Icons.url(OO.PASSIVES[id].icon, 24, '#56d6c0')}" alt=""><span>${esc(OO.PASSIVES[id].name)}</span><b>Lv ${p.passives[id]}</b></li>`));
-      $('pause-build').innerHTML = rows.join('');
+      const apex = Object.keys(p.apex || {}).filter((id) => p.apex[id] && id !== 'overclock')
+        .map((id) => `<li class="apex-row"><img src="${OO.Icons.url(OO.APEX[id].icon, 24, '#ff7ad9')}" alt=""><span>${esc(OO.APEX[id].name)}</span><b>x${p.apex[id]}</b></li>`);
+      $('pause-build').innerHTML = rows.concat(apex).join('');
+      // Infinite Mode: past the mark, the host (or a solo player) can end the run as an evacuation
+      $('btn-extract').hidden = !(this.g.infinite && this.g.overtime && this.g.mode !== 'client');
       // Field manual: evolution recipes for the weapons you carry
       const recipes = p.weapons.filter((w) => OO.EVOLUTIONS[w.id]).map((w) => {
         const E = OO.EVOLUTIONS[w.id], gear = OO.PASSIVES[E.needs];
@@ -434,32 +466,35 @@
         ['Max HP', Math.round(s.maxHp)], ['Armor', s.armor + (s.dr ? '  \u2212' + Math.round(s.dr * 100) + '%' : '')], ['Damage', Math.round(s.might * 100) + '%'],
         ['Area', Math.round(s.area * 100) + '%'], ['Cooldown', Math.round(s.cooldown * 100) + '%'],
         ['Speed', Math.round(s.speed)], ['Pickup range', Math.round(s.magnet)], ['Max hit', Math.floor(this.g.hitCeiling(p))], ['Time', U.formatTime(this.g.time)],
-      ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+      ].concat(this.g.infinite ? [['Mode', 'Infinite'], ['Healing', Math.round(this.g.healMul() * 100) + '%']] : []).map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
       $('screen-pause').hidden = false;
     }
 
     // ------------------------------------------------------------ results
     showResults(r) {
       this.hideAll();
-      $('res-eyebrow').textContent = r.victory ? 'Extraction confirmed' : 'Signal lost';
-      $('res-title').textContent = r.victory ? 'You made the chopper' : 'You were overrun';
+      const ot = r.infinite && r.overtime > 0;
+      $('res-eyebrow').textContent = r.infinite ? (ot ? 'Infinite Mode · ' + U.formatTime(r.overtime) + ' past the extraction mark' : 'Infinite Mode · Signal lost') : r.victory ? 'Extraction confirmed' : 'Signal lost';
+      $('res-title').textContent = r.infinite
+        ? (r.extracted ? 'Called the evac at ' + U.formatTime(r.time) : ot ? 'Lost in the dark at ' + U.formatTime(r.time) : 'You were overrun')
+        : r.victory ? 'You made the chopper' : 'You were overrun';
       $('screen-results').classList.toggle('won', r.victory);
       const team = r.coop && r.team ? ' · Co-op: ' + r.team.map((t) => esc(t.tag + ' ' + t.name)).join(', ') : '';
       const locked = Object.keys(OO.SKINS).some((c) => OO.SKINS[c].some((k) => !this.g.ownsSkin(c, k.id)));
       const toGo = OO.SKIN_COST - r.bank;
       const outfit = !locked ? '' : toGo > 0 ? ` · ${toGo.toLocaleString()} more for a new outfit` : ' · Enough for a new outfit in the Wardrobe';
-      const earned = (r.commendations || []).map((id) => OO.ACHIEVEMENTS.find((a) => a.id === id)).filter(Boolean);
+      const earned = (r.commendations || []).map((k) => OO.achUnit(k)).filter(Boolean);
       $('res-ach').hidden = !earned.length;
-      $('res-ach').innerHTML = earned.length ? '<p class="res-ach-title">Achievements unlocked this run</p>' + earned.map((a) =>
-        `<span class="ach-chip tier-${a.tier}"><img src="${OO.Icons.url(a.icon, 16, OO.TIERS[a.tier].color)}" alt="">${esc(a.name)}</span>`).join('') : '';
+      $('res-ach').innerHTML = earned.length ? '<p class="res-ach-title">Achievements and ranks unlocked this run</p>' + earned.map((u) =>
+        `<span class="ach-chip tier-${u.tier}"><img src="${OO.Icons.url(u.a.icon, 16, OO.TIERS[u.tier].color)}" alt="">${esc(OO.Progress.unitName(u))}</span>`).join('') : '';
       $('res-payout').innerHTML = `Banked <strong>+${r.payout.toLocaleString()}</strong> credits for the Armory (${r.bank.toLocaleString()} total) · ${esc(r.difficulty)}${team}${outfit}`;
       $('btn-retry').textContent = r.coop && this.g.net ? 'Back to lobby' : 'Deploy again';
       $('res-stats').innerHTML = [
         ['Survived', U.formatTime(r.time)], ['Level', r.level], ['Kills', r.kills], ['Credits', r.credits], ['Strain', 'LV ' + r.strain],
-      ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+      ].concat(r.infinite ? [['Overtime', '+' + U.formatTime(r.overtime || 0)], ['Apex', r.apex || 0]] : []).map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
       const rows = r.weapons.slice().sort((a, b) => b.dmg - a.dmg).map((w) => `
         <tr><td><img src="${OO.Icons.url(OO.WEAPONS[w.id].icon, 20, OO.WEAPONS[w.id].evolved ? '#ff6f4a' : '#e3a33b')}" alt=""> ${esc(w.name)}</td>
-        <td>${w.level}</td><td>${w.dmg.toLocaleString()}</td><td>${w.kills}</td></tr>`).join('');
+        <td>${w.level}${w.over ? '<span class="lv-over">+' + w.over + '</span>' : ''}</td><td>${w.dmg.toLocaleString()}</td><td>${w.kills}</td></tr>`).join('');
       $('res-weapons').innerHTML = `<thead><tr><th>Weapon</th><th>Lv</th><th>Damage</th><th>Kills</th></tr></thead><tbody>${rows}</tbody>`;
       this.lockUntil = performance.now() + 600;
       $('screen-results').hidden = false;

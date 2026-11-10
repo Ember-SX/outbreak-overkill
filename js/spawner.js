@@ -10,11 +10,27 @@
       this.timer = 0.5;
       this.eventIdx = 0;
       this.crateTimer = 12;
+      const E = OO.CONFIG.INFINITE.every;
+      this.ot = { stampede: E.stampede * 0.5, ring: E.ring * 0.75, stalker: E.stalker * 0.5, mecha: E.mecha, waves: 0 };   // Infinite Mode overtime timers
     }
 
     wave() {
       const i = Math.min(OO.WAVES.length - 1, Math.floor(this.g.time / 60));
-      return OO.WAVES[i];
+      const w = OO.WAVES[i];
+      const m = this.g.overtimeMinutes();
+      if (!m) return w;
+      // Overtime: the last wave, refilling faster and with Brutes in the mix.
+      const I = OO.CONFIG.INFINITE;
+      const key = Math.floor(m * 4);   // rebuild four times a minute
+      if (this._otKey !== key) {
+        this._otKey = key;
+        this._otWave = Object.assign({}, w, {
+          interval: w.interval / Math.min(2, 1 + I.refillPerMin * m),
+          batch: w.batch + Math.floor(m / 3),
+          pool: w.pool.concat([['brute', Math.min(I.bruteMax, I.brutePerMin * m)]]),
+        });
+      }
+      return this._otWave;
     }
 
     ringPos(radius) {
@@ -29,6 +45,8 @@
       while (this.eventIdx < OO.EVENTS.length && g.time >= OO.EVENTS[this.eventIdx].t) {
         this.runEvent(OO.EVENTS[this.eventIdx++]);
       }
+
+      if (g.overtime) this.overtimeEvents(dt);
 
       const w = this.wave();
       this.timer -= dt;
@@ -111,6 +129,34 @@
     });
     if (!ev.text) g.banner("Stampede! Bursters can't be stopped. Get behind cover", 'boss');
     OO.Audio.play('rumble');
+  };
+
+  /**
+   * Infinite Mode overtime pressure, on repeat and growing with every minute past the mark:
+   * stampedes, skinner rings, Stalker hunts and the Hare Trigger.
+   */
+  Director.prototype.overtimeEvents = function (dt) {
+    const g = this.g, T = this.ot, E = OO.CONFIG.INFINITE.every, m = g.overtimeMinutes();
+    for (const k in E) T[k] -= dt;
+    if (T.stampede <= 0) {
+      T.stampede = E.stampede;
+      this.runEvent({ kind: 'stampede', count: Math.min(21, 15 + Math.floor(m / 2)), ranks: Math.min(4, 2 + Math.floor(m / 6)) });
+    }
+    if (T.ring <= 0) {
+      T.ring = E.ring;
+      const type = m >= 10 && U.chance(0.4) ? 'bloater' : 'skinner';
+      const room = Math.max(24, OO.CONFIG.MAX_ENEMIES - g.enemies.length);   // rings respect the enemy cap
+      this.runEvent({ kind: 'ring', enemy: type, count: Math.min(room, 140, 70 + Math.floor(m * 4)), text: type === 'bloater' ? 'Bloaters closing in from every side' : 'Skinners in the walls' });
+    }
+    if (T.stalker <= 0) {
+      T.stalker = E.stalker;
+      const n = Math.min(5, 1 + Math.floor(m / 4));
+      this.runEvent({ kind: 'boss', enemy: 'stalker', count: n, text: n > 1 ? n + ' Stalkers are hunting you' : 'Another Stalker found your trail' });
+    }
+    if (T.mecha <= 0) {
+      T.mecha = E.mecha;
+      this.runEvent({ kind: 'boss', enemy: 'mecha', count: Math.min(3, 1 + Math.floor(m / 15)), text: 'Biscuit is back in the HARE TRIGGER, and angrier' });
+    }
   };
 
   OO.Director = Director;

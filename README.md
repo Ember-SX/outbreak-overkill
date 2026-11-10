@@ -4,7 +4,7 @@ A bio-horror horde survival game for the browser. You play one operative inside 
 
 The core loop follows the Vampire Survivors formula: move only, auto-firing weapons, XP gems (DNA samples here), a pick-one-of-three upgrade screen, weapon and passive slots, elites that drop supply cases, and a wave script that escalates until you're overrun or extracted.
 
-**Status:** v0.9.0. Playable start to finish, solo or 2-player online co-op, with cover, volatile drums, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions, tactical call-downs, and between runs an Armory with upgrades and an outfit wardrobe plus a Dossier with 25 achievements, a bestiary and lifetime statistics.
+**Status:** v0.10.0. Playable start to finish, solo or 2-player online co-op, with cover, volatile drums, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions, tactical call-downs, an endless **Infinite Mode** with Apex mutations past max rank, and between runs an Armory with upgrades and an outfit wardrobe plus a Dossier with ranked achievements, a bestiary and lifetime statistics.
 
 ## Play it
 
@@ -29,6 +29,8 @@ No install, no build step.
 With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heals, **B** spawns The Stalker, **N** spawns the Hare Trigger, **J** adds a strain level. The overlay also shows the strain breakdown, the current one-hit-kill share and a shambler's HP at the current level, which is the quickest way to judge the enemy scaling while you play.
 
 ## What's in the game
+
+**Modes (main menu):** *Standard* ends at 15:00 when the evac helicopter lands. *Infinite* keeps going past that extraction mark (see Infinite Mode below).
 
 **Operatives**
 
@@ -84,12 +86,68 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 In co-op each operative brings their own call-down; the host runs it and both screens see it. Tuning: `OO.CONFIG.CALLDOWN`, names and text in `OO.CALLDOWNS`.
 
 **Dossier (main menu):** the field archive, saved in your browser.
-- **Achievements:** 25 across five groups, each Bronze, Silver or Gold. Milestones (First Blood, Extraction, Full Roster, Body Count, Pest Control, Dressed to Kill), combat mastery (Stalker Down, Restraining Order, Scrap Metal, Mutation Protocol, Duck and Cover, Untouchable, Powder Keg, Flatline Averted), operative specializations (evacuate as each operative; 5,000 kills with each one's signature weapon), tactics and teamwork (Buddy System, Danger Close, Field Researcher) and two classified ones for the secret codes. Counters show a progress bar. A slide-down notice announces each one the moment you earn it, and the results screen lists what you unlocked that run.
+- **Achievements:** 34 achievements, 83 unlocks in all, in seven groups: milestones, combat mastery, operative specializations, tactics and teamwork, career ranks, Infinite Mode, and two classified ones for the secret codes.
+  - One-off achievements are Bronze, Silver or Gold (First Blood, Extraction, Body Count, Stalker Down, Untouchable, Point of No Return, and so on).
+  - **Ranked achievements** climb one counter through up to six ranks: **Bronze, Silver, Gold, Platinum, Diamond, Biohazard**. Each rank is its own unlock, notice and points.
+
+    | Ranked achievement | Counter | Ranks |
+    |---|---|---|
+    | Pest Control | lifetime kills | 1,000 · 5,000 · 15,000 · 30,000 · 60,000 · 100,000 |
+    | Marksman / Breach and Clear / Live Wire | kills with each operative's signature weapon | 500 · 2,500 · 5,000 · 15,000 · 30,000 |
+    | Boss Hunter | Stalkers and Hare Triggers | 5 · 15 · 40 · 100 · 250 |
+    | Trigger Discipline | shots fired | 10k · 50k · 150k · 500k · 1M |
+    | Demolitions | drum kills | 100 · 500 · 1,500 · 5,000 |
+    | Veteran | evacuations | 3 · 10 · 25 · 50 · 100 |
+    | Time in the Zone | playtime | 1 h · 5 h · 12 h · 24 h · 48 h |
+    | Into the Dark | longest Infinite run | 20:00 · 25:00 · 30:00 · 40:00 · 50:00 · 60:00 |
+    | Apex Predator | Apex mutations in one run | 1 · 10 · 25 · 50 · 100 |
+    | Ascension | highest level in one run | 50 · 75 · 100 · 150 · 200 |
+
+  - Each card shows the current rank's metal, a pip per rank and the progress to the next one. A slide-down notice announces every unlock and rank-up the moment it happens, and the results screen lists what you earned that run.
 - **Bestiary:** a report on every specimen, filed the first time it comes into view: original lore, base stats, threat rating, traits and how many you've killed. Unseen ones stay silhouettes.
 - **Call-downs:** equip the one you'll take into the next run.
 - **Statistics:** lifetime totals: playtime, runs, evacuations, kills, shots fired, damage dealt and taken, boss takedowns, drums detonated, call-downs used, revives, distance on foot, credits banked, and a row per operative.
 
+Ranks are saved as `<id>.<rank>` keys. When v0.10 first loads a v0.9 save, the old one-off Pest Control and mastery entries are replaced by every rank your lifetime stats already prove (one notice).
+
 Saves: achievements in `oo.achievements`, statistics in `oo.stats`, the bestiary in `oo.codex`, the equipped call-down in `oo.meta`. Saves from older versions keep working: the first time v0.9 loads, lifetime stats start from your service record, and achievements your save already proves (an evacuation, an outfit bought, a secret code found) are backdated with one notice. In co-op each player earns their own achievements and keeps their own stats. Achievement data is in `js/archive.js`; tracking in `js/progress.js`.
+
+**Infinite Mode:** pick *Infinite* under Mode on the menu (in co-op the host's choice counts).
+- The run plays like Standard until 15:00. Then the helicopter circles once and leaves, and the run goes into **overtime** until you're overrun.
+- In overtime, every minute compounds:
+  - enemy HP ×1.16 (bosses ×1.10)
+  - enemy damage ×1.09
+  - enemy speed +2%, up to +50%
+- The director also refills faster, mixes Brutes into the horde, and repeats the set pieces:
+  - a stampede every 55 s, growing to 21 Bursters four rows deep
+  - a skinner (later bloater) ring every 90 s
+  - a Stalker hunt every 2 minutes, growing to five at once
+  - a Hare Trigger every 5 minutes
+- **Necrosis:** all healing loses 3% per overtime minute, down to 30%.
+- **Horde-scaled damage falls behind.** Drum blasts, Sentry rounds, Necrotic Pulse and Volatile Blood track the strain level but not the overtime HP multiplier. However broken your build, the horde eventually outgrows it.
+- **The per-hit ceiling still holds.** No single hit kills a healthy operative; deaths come from many hits in a row.
+- The HUD clock turns red and counts overtime. The line under it shows the current HP, damage, speed and healing multipliers.
+- **Ending a run:** from the pause screen in overtime, **Call extraction** ends the run as an evacuation (host only in co-op). Reaching 15:00 counts as an evacuation either way.
+- **Payout:** the run up to 15:00 pays as normal. Overtime adds 15 credits a minute, 1 per 200 kills and 10% of the credits you pick up, so one endless run can't buy out the Armory and the wardrobe.
+- **Leveling past max rank.** XP never stops. Once every weapon and gear slot is maxed (max rank), every level-up card is an **Apex mutation**, and during overtime every level-up includes at least one. Apex mutations stack without limit unless noted, and are meant to break the game:
+
+  | Apex mutation | Per stack |
+  |---|---|
+  | Overclock | One weapon past its max level: +20% damage, 6% faster, +1 projectile every second overclock |
+  | Berserker Gene | +25% damage |
+  | Adrenal Overdrive | weapons fire 10% faster |
+  | Hive Swarm | +1 projectile for every weapon (max 4) |
+  | Blast Radius | +25% area |
+  | Titan Frame | +40 max HP and a full heal |
+  | Regenerator Cells | +2 HP/s |
+  | Hemophage | +0.25 HP per kill |
+  | Hyperstride | +10% speed, +50% pickup range (max 5) |
+  | Phase Skin | +0.15 s invulnerability after each hit (max 4) |
+  | Necrotic Pulse | a shockwave every 4 s around you; stacks hit harder and wider |
+  | Volatile Blood | +6% chance a kill bursts like a fuel drum (max 5) |
+  | Hot Mic | call-down recharges 30% faster (max 5) |
+
+  Tuning: `OO.CONFIG.INFINITE`, `OO.APEX` and `OO.APEX_FX` in js/config.js; logic in js/infinite.js.
 
 **Armory:** every run banks the credits you picked up plus a payout for kills, time survived and evacuating. Spend them on the main menu on permanent upgrades (HP, damage, armor, speed, pickup range, XP gain, rerolls, payouts, and Second Wind: get back up once per run). Refund upgrades any time.
 - **Vitality Serum:** +25 max HP and +0.3 HP/s regeneration per rank (+125 HP and 1.5 HP/s at rank 5).
@@ -102,7 +160,7 @@ Saves: achievements in `oo.achievements`, statistics in `oo.stats`, the bestiary
 | Trauma Plates 3 + Vitality Serum 5 | 225 | 80 | 51 | 109 |
 | All of the above | 400 | 41 | 24 | 83 |
 
-**Wardrobe (Armory > Wardrobe):** five outfits per operative, all cosmetic.
+**Wardrobe (Armory > Wardrobe):** five outfits per operative.
 - Each operative has the same five sets: their default tactical kit (free), covert ops, undercover, hazmat, and swimwear.
 - Every other outfit costs **1,800 credits**. A clean 15:00 evacuation banks about 550–650 credits (simulated runs ranged 240–1,080 depending on kills), so one outfit is roughly three full successful runs. The price lives in `OO.SKIN_COST` (js/characters.js).
 - Buying an outfit equips it. Your partner sees it in co-op. Refunding Armory upgrades doesn't touch outfits.
@@ -181,6 +239,11 @@ Co-op needs an internet connection and a page served over http(s) (GitHub Pages,
 - **Operatives:** distinct top-down silhouettes. Mara wears a fitted patrol uniform and duty vest with her hair up. Dex is broad, with a plate carrier and a slung shotgun. Rin wears a helmeted containment suit with an air unit. Large front-facing portraits appear on the menu and in the wardrobe.
 - **Also:** glowing eyes in the dark, screen shake, damage numbers, synthesized sound (Web Audio, no files), a low-HP heartbeat, edge markers for off-screen bosses, elites and supply cases.
 
+**Frame rate:** drawing is capped at **120 FPS** (`OO.CONFIG.MAX_FPS`).
+- On 144, 165, 240 Hz or faster screens, extra frames are skipped, so no second (or 100 ms window) ever gets more than 120 frames.
+- The simulation always advances in fixed 1/60 s steps from real elapsed time, so physics is identical at any frame rate.
+- The menu's ECG animation uses the same cap.
+
 **Pause screen settings:** screen shake, damage numbers and **Atmosphere**. Atmosphere covers the full-screen haze, dust and grain passes. *Auto* (the default) turns them off if the frame rate stays under about 42 fps and back on above 56. *High* and *low* force it either way.
 
 ## Project layout
@@ -198,9 +261,10 @@ js/
   characters.js     operatives: outfit data, top-down sprite, procedural portraits
   portraits.js      loads portrait image assets, falls back to the procedural ones
   secrets.js        secret codes (cosmetic)
-  archive.js        data: the 25 achievements and the bestiary entries
+  archive.js        data: achievements (one-off and ranked), tiers and the bestiary entries
   progress.js       achievements, lifetime statistics and bestiary sightings (localStorage) + slide-down notices
   tactical.js       call-downs, sentry turrets, med drones, volatile drums, per-run stats upkeep
+  infinite.js       Infinite Mode: overtime scaling, necrosis, Apex mutations, Call extraction
   dossier.js        the Dossier screen (achievements, bestiary, call-downs, statistics) and the call-down button
   world.js          procedural obstacles, collision, line of sight
   weapons.js        Weapon class + one behaviour per weapon
@@ -250,6 +314,8 @@ npm run sim                       # 2 runs per operative per bot
 npm run sim -- standard 3         # threat level, runs per combination
 ```
 
+`npm run sim -- standard 1 god infinite:30` runs Infinite Mode to 30:00 (bots take Apex mutations).
+
 `npm run sim -- standard 1 god` makes the bots unkillable (damage is counted but not applied), so they reach the last minutes. It prints a shambler's HP multiplier at every minute mark (it should go flat from 13:00) and how much of the Hare Trigger's health each bot took off.
 
 The bots play nothing like a person, so treat this as a smoke test (does a run still play through without errors, did a change move things wildly) and do the real balance judgement by playing. v0.3's enemy leveling was tuned by hand play, not by the bots.
@@ -273,6 +339,8 @@ Done in v0.7: portrait image pipeline, illustrated faces, Rin's field-agent kit,
 Done in v0.8: harder enemies across the run with a firm per-hit ceiling.
 
 Done in v0.9: achievements, bestiary, lifetime statistics, tactical call-downs, volatile drums.
+
+Done in v0.10: ranked achievements, a 120 FPS render cap, Infinite Mode with Apex mutations.
 
 Next up: give **Nightmare** its own tuning (faster strain growth, more stampedes) and unlock it.
 

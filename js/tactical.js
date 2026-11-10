@@ -118,8 +118,7 @@
         if (t.fireT <= 0 && Math.abs(da) < 0.25) {
           t.fireT = S.rate;
           t.flash = 0.06;
-          const sh = OO.ENEMIES.shambler;
-          const dmg = sh.hp * this.enemyHpMul(sh, this.strain.level) * S.shamblerHits * (t.owner ? t.owner.stats.might : 1);
+          const dmg = this.hordeHp() * S.shamblerHits * (t.owner ? t.owner.stats.might : 1);
           const sp = 760, a = t.a + U.rand(-0.04, 0.04);
           this.spawnProjectile({ x: t.x + Math.cos(t.a) * 16, y: t.y + Math.sin(t.a) * 16, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
             dmg, pierce: 1, life: 0.7, r: 3, kind: 'bullet', kb: 40, weapon: t.w });
@@ -147,10 +146,11 @@
   // ================================================================ per-tick upkeep (host / solo)
   G.updateTactical = function (dt) {
     for (const p of this.players) {
-      if (p.cd && p.cd.t > 0 && !p.downed) p.cd.t = Math.max(0, p.cd.t - dt);
+      if (p.cd && p.cd.t > 0 && !p.downed) p.cd.t = Math.max(0, p.cd.t - dt * (p.stats.cdRate || 1));   // Hot Mic (Apex)
+      this.updateApex(p, dt);   // Necrotic Pulse (infinite.js)
       if (p.md > 0) {
         p.md -= dt;
-        if (!p.downed) p.hp = Math.min(p.stats.maxHp, p.hp + p.mdRate * dt);
+        if (!p.downed) p.hp = Math.min(p.stats.maxHp, p.hp + p.mdRate * this.healMul() * dt);
         if (Math.random() < 0.2) this.particles.push({ x: p.x + U.rand(-10, 10), y: p.y + U.rand(-10, 10), vx: 0, vy: -30, life: 0.5, max: 0.5, color: '#7ddc6a', size: 2 });
       }
       // distance walked (positions that jump, like a respawn, don't count)
@@ -196,8 +196,7 @@
     const H = OO.CONFIG.HAZARDS;
     if (e.def.boss) return e.maxHp * H.bossShare;
     if (e.def.elite) return e.maxHp * H.eliteShare;
-    const sh = OO.ENEMIES.shambler;
-    return sh.hp * this.enemyHpMul(sh, this.strain.level) * H.shamblerHits;
+    return this.hordeHp() * H.shamblerHits;   // horde-scaled (not overtime-scaled: see hordeHp)
   };
 
   /** Any blast near a drum sets it off after a short delay (chain reactions). */

@@ -2,6 +2,38 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
+## [0.10.0] - 2026-11-10
+
+Branch `feature/v0.10-infinite-mode`.
+
+### Added
+- **Ranked achievements.** An achievement can now have up to six ranks on one counter: Bronze, Silver, Gold, Platinum, Diamond and Biohazard.
+  - Each rank is its own unlock with its own notice ("Rank up · Diamond") and points. Ranks are saved as `<id>.<rank>`.
+  - Pest Control now runs 1,000 / 5,000 / 15,000 / 30,000 / 60,000 / 100,000 lifetime kills. Marksman, Breach and Clear and Live Wire run 500 to 30,000 signature kills.
+  - New ranked achievements: Boss Hunter, Trigger Discipline, Demolitions, Veteran, Time in the Zone, Into the Dark, Apex Predator, Ascension.
+  - New one-off: Point of No Return. That makes 34 achievements and 83 unlocks.
+  - Dossier cards show the current rank's metal, a pip per rank and progress to the next rank. The summary shows all six tiers and the points total.
+- **Infinite Mode** (menu > Mode; in co-op the host's choice counts).
+  - The run carries on past the 15:00 extraction mark into overtime.
+  - Every overtime minute compounds enemy HP (×1.16), damage (×1.09) and speed (+2%, up to +50%).
+  - The director refills faster, mixes Brutes in (capped at ~15% of spawns; their cases drop 20% of the time) and repeats stampedes, rings, Stalker hunts and the Hare Trigger.
+  - Necrosis weakens all healing, down to 30%.
+  - Horde-scaled damage (drums, Sentry, Necrotic Pulse, Volatile Blood) ignores the overtime HP multiplier, so it falls behind.
+  - The per-hit ceiling still holds.
+  - "Call extraction" on the pause screen ends an overtime run as an evacuation (host only in co-op).
+  - Payout: the run to 15:00 pays as normal. Overtime adds 15 credits a minute, 1 per 200 kills and 10% of pickups. Without this, the bot test's best 28-minute run banked ~19,500 credits.
+  - Overtime has a red HUD clock and a multiplier readout. The results screen and Dossier statistics have Infinite sections.
+- **Apex mutations:** 13 stackable, game-breaking upgrades.
+  - Overclock (weapons past max level), Berserker Gene, Adrenal Overdrive, Hive Swarm, Blast Radius, Titan Frame, Regenerator Cells, Hemophage, Hyperstride, Phase Skin, Necrotic Pulse, Volatile Blood, Hot Mic.
+  - Offered on every card once an operative hits max rank, and at least once per level-up in overtime.
+  - Shown in pink on the cards, the HUD ("APEX n", "+n" overclock badges) and the pause screen.
+- **120 FPS render cap** (`CONFIG.MAX_FPS`). Frames that arrive faster are skipped, with drift correction, so 144 Hz still draws close to 120. The simulation stays on fixed 1/60 s steps. The menu ECG animation is capped the same way.
+- `npm run sim -- standard 1 god infinite:30` runs bots through Infinite Mode.
+
+### Changed
+- Removed the "Outfits are cosmetic" line from the wardrobe and the README.
+- Co-op: the start message carries the mode. Player state carries Apex stacks, weapon overclocks, the call-down recharge rate and phase. Each side earns its own Point of No Return and Infinite ranks.
+
 ## [0.9.0] - 2026-11-09
 
 Branch `feature/v0.9-dossier`.

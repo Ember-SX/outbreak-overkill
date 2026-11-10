@@ -60,15 +60,15 @@
   };
 
   UI.renderArchiveSummary = function () {
-    const P = this.g.progress, c = P.tierCounts(), total = OO.ACHIEVEMENTS.length, got = P.unlockedCount;
+    const P = this.g.progress, c = P.tierCounts(), total = P.totalCount, got = P.unlockedCount;
     const pct = Math.round((P.points / P.maxPoints) * 100);
-    const plat = got === total;
+    const full = got === total;
     $('archive-summary').innerHTML = `
-      <img class="archive-trophy" src="${OO.Icons.url('trophy', 30, plat ? '#e8f4ff' : '#f2c14a')}" alt="">
+      <img class="archive-trophy" src="${OO.Icons.url('trophy', 30, full ? '#e8f4ff' : '#f2c14a')}" alt="">
       <div class="archive-score">
-        <span class="archive-count"><strong>${got}</strong> / ${total}${plat ? ' <em>Platinum</em>' : ''}</span>
-        <span class="archive-tiers">${['gold', 'silver', 'bronze'].map((t) => `<span class="tier-dot tier-${t}" title="${OO.TIERS[t].name}"></span>${c[t]}`).join(' ')}</span>
-        <span class="archive-bar" aria-label="${pct}% of commendation points"><i style="width:${pct}%"></i></span>
+        <span class="archive-count"><strong>${got}</strong> / ${total} unlocks · ${n(P.points)} pts${full ? ' <em>Full clearance</em>' : ''}</span>
+        <span class="archive-tiers">${OO.TIER_ORDER.slice().reverse().map((t) => `<span class="tier-dot tier-${t}" title="${OO.TIERS[t].name}"></span>${c[t]}`).join(' ')}</span>
+        <span class="archive-bar" aria-label="${pct}% of achievement points"><i style="width:${pct}%"></i></span>
       </div>`;
   };
 
@@ -77,12 +77,13 @@
     const P = this.g.progress, box = $('archive-ach');
     box.innerHTML = OO.ACH_CATS.map(([cat, label]) => {
       const list = OO.ACHIEVEMENTS.filter((a) => a.cat === cat);
-      const got = list.filter((a) => P.has(a.id)).length;
+      const units = OO.ACH_UNITS.filter((u) => u.a.cat === cat);
+      const got = units.filter((u) => P.has(u.key)).length;
       return `<section class="ach-group">
-        <h3 class="ach-group-title">${esc(label)} <span>${got} / ${list.length}</span></h3>
-        <div class="ach-grid">${list.map((a) => this.achCard(a)).join('')}</div>
+        <h3 class="ach-group-title">${esc(label)} <span>${got} / ${units.length}</span></h3>
+        <div class="ach-grid">${list.map((a) => (a.ranks ? this.rankCard(a) : this.achCard(a))).join('')}</div>
       </section>`;
-    }).join('') + '<p class="hint">Achievements are saved on this device. In co-op each of you earns your own.</p>';
+    }).join('') + '<p class="hint">Ranked achievements climb Bronze, Silver, Gold, Platinum, Diamond and Biohazard on one counter; every rank counts as an unlock. Saved on this device. In co-op each of you earns your own.</p>';
   };
 
   UI.achCard = function (a) {
@@ -102,6 +103,32 @@
       <div class="ach-body">
         <h4 class="ach-title">${esc(title)} <em class="ach-tier">${T.name}</em></h4>
         <p class="ach-desc">${esc(text)}</p>
+        ${extra}
+      </div>
+    </article>`;
+  };
+
+  /** A ranked achievement: current rank's metal, a pip per rank, progress toward the next one. */
+  UI.rankCard = function (a) {
+    const P = this.g.progress, PR = OO.Progress, r = P.rank(a.id), max = a.ranks.length;
+    const cur = r ? OO.ACH_UNITS.find((u) => u.key === a.id + '.' + r) : null;
+    const next = r < max ? OO.ACH_UNITS.find((u) => u.key === a.id + '.' + (r + 1)) : null;
+    const tier = cur ? cur.tier : a.ranks[0][1], T = OO.TIERS[tier];
+    const v = P.progressOf(a);
+    const fmt = (x) => (a.fmt ? PR.fmtGoal(a, x) : n(x));
+    const shown = a.fmt === 'hours' ? (v / 3600).toFixed(1) + ' h' : a.fmt === 'time' ? U.formatTime(v) : n(v);
+    const pips = a.ranks.map(([goal, t], i) => `<i class="rank-pip tier-${t}${i < r ? ' on' : ''}" title="${PR.ROMAN[i + 1]} · ${OO.TIERS[t].name} · ${esc(fmt(goal))}"></i>`).join('');
+    let extra;
+    if (next) {
+      const prev = r ? a.ranks[r - 1][0] : 0, k = U.clamp((v - prev) / (next.goal - prev), 0, 1);
+      extra = `<span class="ach-bar"><i style="width:${k * 100}%"></i></span><span class="ach-prog">${shown} / ${esc(fmt(next.goal))} · next: ${PR.ROMAN[r + 1]} ${OO.TIERS[next.tier].name}</span>`;
+    } else extra = `<span class="ach-date">Max rank · ${esc(date(P.ach[cur.key]))}</span>`;
+    return `<article class="ach ranked tier-${tier}${r ? ' on' : ' locked'}${!next ? ' maxed' : ''}">
+      <span class="medal"><img src="${OO.Icons.url(a.icon, 24, r ? T.color : '#5a7672')}" alt="">${r ? `<b class="medal-rank">${PR.ROMAN[r]}</b>` : ''}</span>
+      <div class="ach-body">
+        <h4 class="ach-title">${esc(a.name)}${r ? ' ' + PR.ROMAN[r] : ''} <em class="ach-tier">${r ? T.name : 'Unranked'}</em></h4>
+        <p class="ach-desc">${esc(PR.unitText(next || cur))}</p>
+        <span class="rank-pips" aria-label="Rank ${r} of ${max}">${pips}</span>
         ${extra}
       </div>
     </article>`;
@@ -240,6 +267,9 @@
       ['Damage taken', n(s.dmgTaken)], ['Hits taken', n(s.hitsTaken)], ['Times downed', n(s.downs)],
       ['Partners revived', n(s.revives)], ['Call-downs used', n(s.calls)], ['Supply cases opened', n(s.cases)],
       ['Levels gained', n(s.levels)], ['Distance on foot', distance(s.dist)], ['Credits banked', n(s.credits)],
+    ]) + group('Infinite Mode', [
+      ['Infinite runs', n(s.infiniteRuns)], ['Longest survival', s.bestInfinite ? U.formatTime(s.bestInfinite) : '-'],
+      ['Apex mutations taken', n(s.apexTaken)], ['Most Apex in a run', n(s.bestApex)],
     ]) + `<section class="stat-group"><h3 class="ach-group-title">Operatives</h3>
       <div class="table-wrap"><table class="res-table"><thead><tr><th>Operative</th><th>Runs</th><th>Evacs</th><th>Kills</th><th>Signature kills</th><th>Time</th></tr></thead><tbody>${ops}</tbody></table></div></section>
       <p class="hint">Lifetime totals on this device. Runs from before v0.9 count toward runs, evacuations and records only.</p>`;
