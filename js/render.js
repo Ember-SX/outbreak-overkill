@@ -578,8 +578,6 @@
     }
 
     drawCrate(ctx, e) {
-      // e.level = seconds left (host and co-op client alike): blink before it despawns
-      if (e.level <= OO.CONFIG.PICKUPS.blink && Math.floor(this.g.time * 8) % 2 === 0) return;
       ctx.save();
       ctx.translate(e.x, e.y);
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -1543,7 +1541,7 @@
       ctx.font = `600 10px ${FONT_UI}`;
       ctx.fillStyle = over ? '#ff8a94' : '#82a09b';
       const sub = over ? 'Overtime +' + U.formatTime(-remaining)
-        : (g.infinite ? 'Extraction mark in ' : 'Evac in ') + U.formatTime(remaining);
+        : (g.infinite ? 'Overtime in ' : 'Evac in ') + U.formatTime(remaining);
       ctx.fillText(sub + (g.difficulty !== OO.DIFFICULTY.standard ? '  ' + g.difficulty.name : ''), W / 2, cy + (narrow ? 29 : 32) - 1);
 
       // Strain line under the clock

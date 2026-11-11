@@ -92,7 +92,7 @@
       this.netEvents = [];
       this.turrets = []; this.fuses = []; this._killer = null;
       this.infinite = this.settings.mode === 'infinite';   // Infinite Mode (co-op clients take the host's)
-      this.overtime = false; this.maxRankShown = false; this._extracted = false; this.mark = null;
+      this.overtime = false; this.maxRankShown = false; this.mark = null;
       this.tally = { stalkers: 0, mechs: 0, stampedes: 0, lastStampede: -99 };   // team counters for commendations
       this.gemCount = 0; this.otherCount = 0; this.nextPickupId = 0; this.nextProjId = 0; this._immuneT = -9;
       this.team = { level: 1, xp: 0, xpNext: OO.CONFIG.xpToNext(1), pending: 0 };
@@ -141,13 +141,14 @@
 
     endRun(victory) {
       if (this.state === 'results') return;
-      // Infinite Mode: reaching the extraction mark counts as an evacuation, however the run ends.
+      // Infinite Mode: there is no evac; holding out to 15:00 still counts as surviving the run
+      // (for records and achievements), and the run itself only ends when the team is overrun.
       if (this.infinite && this.time >= OO.CONFIG.RUN_LENGTH) victory = true;
       this.state = 'results';
       const summary = {
         victory, time: this.time, level: this.team.level, kills: this.kills, credits: this.credits,
-        infinite: this.infinite, overtime: this.infinite ? Math.max(0, this.time - OO.CONFIG.RUN_LENGTH) : 0, extracted: !!this._extracted,
-        mark: this.overtime && this.mark ? this.mark : null,   // credits and kills at the extraction mark (payout)
+        infinite: this.infinite, overtime: this.infinite ? Math.max(0, this.time - OO.CONFIG.RUN_LENGTH) : 0,
+        mark: this.overtime && this.mark ? this.mark : null,   // credits and kills at 15:00 (payout)
         apex: this.player && this.player.rs ? this.player.rs.apex : 0,
         strain: this.strain.peak, difficulty: this.difficulty.name, coop: this.coop,
         team: this.players.map((p) => ({ tag: p.tag, name: p.name, downed: p.downed })),
@@ -162,7 +163,7 @@
     finishRun(summary, weapons) {
       this.state = 'results';
       // Run payout goes into the local Armory bank (each co-op player banks their own).
-      // Infinite Mode: the run up to the extraction mark pays as normal; overtime pays a flat rate
+      // Infinite Mode: the run up to 15:00 pays as normal; overtime pays a flat rate
       // per minute plus a trickle from kills and pickups, so one endless run can't empty the Armory.
       const I = OO.CONFIG.INFINITE, ot = summary.mark ? summary.overtime || 0 : 0;
       const credits = summary.mark ? summary.mark.credits + Math.floor((summary.credits - summary.mark.credits) * I.overtimePickupShare) : summary.credits;
@@ -179,7 +180,7 @@
       r.bestKills = Math.max(r.bestKills, summary.kills);
       U.storage.set('oo.records', r);
       const commendations = this.progress.runEnd(summary, payout);
-      OO.Audio.play(summary.victory && !(summary.infinite && !summary.extracted) ? 'victory' : 'gameover');
+      OO.Audio.play(summary.victory && !summary.infinite ? 'victory' : 'gameover');
       this.ui.setHud(false);
       this.ui.showResults(Object.assign({}, summary, { payout, bank: this.meta.bank, weapons, commendations }));
     }
@@ -342,7 +343,9 @@
         speed: P.speed * (1 + (b.speed || 0) + lv('speed') * 0.08 + m('stride') * 0.05),
         area: 1 + lv('area') * 0.1,
         cooldown: 1 - lv('cooldown') * 0.08,
-        magnet: P.pickupRange * (1 + (b.magnet || 0) + lv('magnet') * 0.3 + m('collector') * 0.15),
+        // Pickup radius: the base range raised only by Magnetic upgrade levels (Scavenger Pack in the
+        // run plus any free level an operative starts with, Sample Collector in the Armory), capped.
+        magnet: Math.min(OO.CONFIG.PICKUPS.maxMagnet, P.pickupRange * (1 + (lv('magnet') + (b.magnetLv || 0)) * 0.3 + m('collector') * 0.15)),
         maxHp: P.maxHp + (b.maxHp || 0) + lv('maxhp') * 35 + m('vitality') * 25,
         regen: lv('maxhp') * 0.6 + m('vitality') * 0.3,
         amount: lv('amount'),
@@ -443,10 +446,13 @@
     // ------------------------------------------------------------ level-ups (shared team XP)
     // XP is pooled. When the team levels up, every player picks their own upgrade; the game
     // waits until everyone has chosen.
-    /** XP for the next level: the standard curve, steepening past INFINITE.xpFrom in Infinite Mode. */
+    /**
+     * XP for the next level: the standard curve, and in Infinite Mode past INFINITE.xpFrom a steady
+     * linear slow-down on top (x(1 + xpSlope per level)), so late levels keep coming, just slower.
+     */
     xpToNext(level) {
       const I = OO.CONFIG.INFINITE, base = OO.CONFIG.xpToNext(level);
-      return this.infinite && level > I.xpFrom ? Math.round(base * Math.pow(I.xpGrowth, level - I.xpFrom)) : base;
+      return this.infinite && level > I.xpFrom ? Math.round(base * (1 + I.xpSlope * (level - I.xpFrom))) : base;
     }
 
     checkLevel() {
@@ -563,7 +569,9 @@
             this.applyApex(p, opt, true);
             got.push('Apex: ' + d.name.replace(/ [IVX]+\+?$/, ''));
           }
-          this.team.xp += this.team.xpNext * OO.CONFIG.CASES.apexXp;
+          // A share of the *standard* curve's cost: in Infinite past INFINITE.xpFrom the real cost keeps
+          // climbing, so case XP shrinks relative to it instead of outpacing the slow-down.
+          this.team.xp += OO.CONFIG.xpToNext(this.team.level) * OO.CONFIG.CASES.apexXp;
           got.push('+XP');
         }
       }
@@ -808,7 +816,6 @@
         dmg: d.dmg * this.enemyDmgScale(true, d), r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
-      if (d.crate) { e.life = OO.CONFIG.CRATES.life; e.level = Math.ceil(e.life); }
       if (!d.crate && !d.burster && this.world) this.world.resolveCircle(e, e.r);
       this.enemies.push(e);
       return e;
@@ -820,10 +827,11 @@
         if (e.dead) continue;
         e.flash -= dt; e.t += dt;
         if (e.def.crate) {
-          // Pass-through supply crate: blocks nothing, opens on contact, gone after CRATES.life s.
-          e.life -= dt;
-          e.level = Math.max(0, Math.ceil(e.life));   // seconds left (rides in the co-op snapshot for the blink)
-          if (e.life <= 0) { e.dead = true; continue; }
+          // Pass-through supply crate: blocks nothing, opens on contact, never times out. One left
+          // far behind every operative is cleared off-screen so the director can place a fresh one.
+          let near = Infinity;
+          for (const q of this.players) near = Math.min(near, U.dist2(e.x, e.y, q.x, q.y));
+          if (near > OO.CONFIG.CRATES.recycleDist ** 2) { e.dead = true; continue; }
           for (const q of alive) if (U.dist2(e.x, e.y, q.x, q.y) < (e.r + q.r) ** 2) { this.openCrate(q, e); break; }
           continue;
         }
@@ -1121,6 +1129,7 @@
       const buf = this._exBuf;
       while (this.pendingExplosions.length && n++ < 40) {
         const ex = this.pendingExplosions.shift();
+        ex.r = this.capAoe(ex.r);
         const blood = ex.kind === 'blood', fire = ex.kind === 'fire';
         this.addEffect({ kind: 'burst', x: ex.x, y: ex.y, r: ex.r, life: 0.35, max: 0.35, blood, tint: fire ? 'fire' : undefined });
         this.addDecal(ex.x, ex.y, ex.r * 0.8, blood ? 'red' : fire ? 'scorch' : 'bile');
@@ -1290,12 +1299,29 @@
     }
 
     // ------------------------------------------------------------ projectiles & areas
+    /**
+     * Fire a player projectile. Engine limits (CONFIG.LIMITS): past maxProjectiles live ones a new
+     * shot simply isn't fired, and nothing flies faster than maxProjectileSpeed.
+     */
     spawnProjectile(o) {
+      const L = OO.CONFIG.LIMITS;
+      if (this.projectiles.length >= L.maxProjectiles) return null;   // compacted every update, so this is ~live count
+      const sp = Math.hypot(o.vx, o.vy);
+      if (sp > L.maxProjectileSpeed) { const k = L.maxProjectileSpeed / sp; o.vx *= k; o.vy *= k; }
       this.countShot(o.weapon);
       o.hit = new Set();
       o.dead = false;
       o.id = ++this.nextProjId;
       this.projectiles.push(o);
+      return o;
+    }
+
+    /** Largest radius any blast, pool, shockwave or flashbang may have: just past a full screen across. */
+    capAoe(r) {
+      const L = OO.CONFIG.LIMITS;
+      let vw = Math.max(this.viewW || 0, this.viewH || 0);
+      if (this.remoteView) vw = Math.max(vw, this.remoteView.w || 0, this.remoteView.h || 0);
+      return Math.min(r, Math.max(L.aoeMin, vw * L.aoeScreen));
     }
 
     updateProjectiles(dt) {
@@ -1343,7 +1369,9 @@
         if (l.t >= l.dur) {
           l.dead = true;
           this.countShot(l.zone && l.zone.weapon);
-          this.zones.push(Object.assign({ x: l.x1, y: l.y1, max: l.zone.life, tickT: 0, seed: Math.random() * 100 }, l.zone));
+          const z = Object.assign({ x: l.x1, y: l.y1, max: l.zone.life, tickT: 0, seed: Math.random() * 100 }, l.zone);
+          z.r = this.capAoe(z.r);
+          this.zones.push(z);
           this.addLight(l.x1, l.y1, 160, 1, 0.25);
           OO.Audio.play('ignite');
         }
@@ -1451,16 +1479,21 @@
           } else this.emit(['s', 'xp', 4]);
           break;
         case 'herb': this.heal(p, 30); break;
-        case 'credit':
-          this.credits += g.value;
-          this.addText(p.x, p.y - 24, '+' + g.value + 'c', 'credit');
+        case 'credit': {
+          const v = Math.round(g.value * (p.stats.creditMul || 1));   // Scavenger's Cut (Apex)
+          this.credits += v;
+          this.addText(p.x, p.y - 24, '+' + v + 'c', 'credit');
           this.sfxFor(p, 'xp', 10);
           break;
-        case 'magnet':
-          for (const o of this.pickups) if (o.kind === 'xp') o.attract = true;
+        }
+        case 'magnet': {
+          // Scanner pulse: pulls the DNA within a few pickup radii of you, never the whole map.
+          const reach = p.stats.magnet * OO.CONFIG.PICKUPS.scannerReach;
+          for (const o of this.pickups) if (o.kind === 'xp' && U.dist2(o.x, o.y, p.x, p.y) < reach * reach) o.attract = true;
           this.banner('Scanner pulse: samples incoming', 'good');
           this.sfxFor(p, 'select');
           break;
+        }
         case 'bomb': this._killer = p; this.airstrike(p); this._killer = null; break;
         case 'case': this.openChest(p, !!g.big); break;
       }

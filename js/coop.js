@@ -361,7 +361,7 @@
     this.mode = 'client';
     this.resetRun(m.seed);
     this.infinite = !!m.inf;   // the host's mode decides
-    if (this.infinite) setTimeout(() => this.banner('Infinite Mode: your host is staying past the extraction mark', 'warn'), 600);
+    if (this.infinite) setTimeout(() => this.banner('Infinite Mode: no evac, this run goes on until you fall', 'warn'), 600);
     this.players = m.players.map((pp) => {
       const local = pp.slot === m.you;
       const p = this.makePlayer(pp.slot, pp.charId, local ? this.meta.ranks : {}, local, local ? this.skinFor(pp.charId) : String(pp.skin || ''), OO.CALLDOWNS[pp.cd] ? pp.cd : 'flashbang');

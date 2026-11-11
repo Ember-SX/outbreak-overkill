@@ -10,6 +10,8 @@
 //   npm run sim -- standard 1 god infinite:60 mortal-from:15
 //                                    unkillable until 15:00, then real damage: how long a grown build
 //                                    lasts in overtime (the survival limit).
+//   npm run sim -- standard 1 god infinite:40 ops:mara,rin
+//                                    only these operatives (any of the above).
 //
 // Bots: "random" picks upgrades at random; "smart" prefers owned weapons and evolution
 // partners, and runs behind the nearest obstacle when a stampede is coming.
@@ -31,6 +33,8 @@ const infinite = !!infArg;
 const capMin = infinite ? Number(infArg.split(':')[1] || 30) : 15;
 const mortalArg = process.argv.find((a) => a.startsWith('mortal-from'));
 const mortalFrom = mortalArg ? Number(mortalArg.split(':')[1] || 15) : Infinity;
+const opsArg = process.argv.find((a) => a.startsWith('ops:'));
+const onlyOps = opsArg ? opsArg.slice(4).split(',') : null;   // e.g. ops:mara,rin
 
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
@@ -38,7 +42,7 @@ page.on('pageerror', (e) => console.error('page error:', e.message));
 await page.goto(pathToFileURL(join(root, 'index.html')).href);
 await page.waitForFunction(() => window.OO && OO.game);
 
-const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, mortalFrom }) => {
+const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, mortalFrom, onlyOps }) => {
   const g = OO.game;
   g.ui.banner = () => {};
   g.setDifficulty(difficulty);
@@ -144,7 +148,7 @@ const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, 
   };
 
   const out = [];
-  for (const ch of Object.keys(OO.CHARACTERS)) {
+  for (const ch of Object.keys(OO.CHARACTERS).filter((c) => !onlyOps || onlyOps.includes(c))) {
     for (const bot of ['random', 'smart']) {
       for (let r = 0; r < runs; r++) {
         for (const k in src) delete src[k];
@@ -152,7 +156,7 @@ const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, 
         const bank0 = g.meta.bank;
         g.start(ch);
         let steps = 0, boss = null, minute = 0;
-        const hpCurve = [];
+        const hpCurve = [], lvCurve = [];
         let guard = 0;
         while (g.state !== 'results' && steps < 60 * 60 * (MIN + 1) && guard++ < 60 * 60 * (MIN + 1) * 3 && g.time < MIN * 60) {
           if (g.state === 'playing') steps++;
@@ -160,7 +164,7 @@ const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, 
           if (g.state === 'playing') {
             g.update(1 / 60);
             if (!boss) boss = g.enemies.find((e) => e.def.mech) || null;
-            if (g.time >= minute * 60) { hpCurve.push(g.enemyHpMul(OO.ENEMIES.shambler, g.strain.level).toFixed(1)); minute += 1; }
+            if (g.time >= minute * 60) { hpCurve.push(g.enemyHpMul(OO.ENEMIES.shambler, g.strain.level).toFixed(1)); lvCurve.push(g.team.level); minute += 1; }
           }
           else if (g.state === 'levelup') { const opts = g.player.luOptions; g.chooseUpgrade(g.player, bot === 'smart' ? opts.indexOf(smartPick(opts)) : Math.floor(Math.random() * opts.length)); }
         }
@@ -169,6 +173,7 @@ const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, 
           weapons: g.player.weapons.map((w) => w.id + (w.def.evolved ? '*' : w.level)).join(' '),
           boss: boss ? (boss.dead ? 'scrapped at ' + Math.floor(g.time / 60) + ':' + String(Math.floor(g.time % 60)).padStart(2, '0') : Math.round(100 * boss.hp / boss.maxHp) + '% HP left') : '-',
           hpCurve: hpCurve.join(' '),
+          lvCurve: lvCurve.join(' '),
           perMin: Array.from({ length: MIN }, (_, i) => perMin[i] || 0),
           biggest: Array.from({ length: MIN }, (_, i) => biggest[i] || 0),
           damage: Object.entries(src).map(([k, v]) => k.replace(/^(update|process)/, '') + ' ' + Math.round(v)).join(', '),
@@ -182,7 +187,7 @@ const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, 
   g.meta = JSON.parse(savedMeta); g.saveMeta();
   g.records = JSON.parse(savedRecords); OO.U.storage.set('oo.records', g.records);
   return out;
-}, { difficulty, runs, god, infinite, capMin, mortalFrom });
+}, { difficulty, runs, god, infinite, capMin, mortalFrom, onlyOps });
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 console.log(`\n${difficulty}${infinite ? ', Infinite Mode to ' + capMin + ':00' : ''}, ${runs} run(s) per operative per bot${god ? ' (god mode: damage counted, not applied' + (Number.isFinite(mortalFrom) ? ' until ' + mortalFrom + ':00, real after' : '') + ')' : ''}\n`);
@@ -194,6 +199,8 @@ for (const r of results) {
 if (god) {
   console.log('\nShambler HP multiplier at each minute mark (0:00, 1:00, ...):');
   for (const r of results) console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.hpCurve}`);
+  console.log('\nTeam level at each minute mark (0:00, 1:00, ...):');
+  for (const r of results) console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.lvCurve}`);
   const avg = (key) => Array.from({ length: MINS }, (_, i) => Math.round(results.reduce((a, r) => a + r[key][i], 0) / results.length));
   const max = (key) => Array.from({ length: MINS }, (_, i) => Math.max(...results.map((r) => r[key][i])));
   console.log('\nMinute:                   ' + Array.from({ length: MINS }, (_, i) => String(i + 1).padStart(5)).join(''));

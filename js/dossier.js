@@ -26,16 +26,52 @@
   }
 
   UI.bindArchive = function () {
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('screen-dossier').hidden) this.showMenu(); });
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || $('screen-dossier').hidden) return;
+      if (this.resetStage) this.resetStep(0); else this.showMenu();   // Esc backs out of a reset first
+    });
     this.archiveTab = 'ach';
     this.codexSel = 'shambler';
     $('btn-archive').addEventListener('click', () => { OO.Audio.init(); OO.Audio.play('select'); this.showArchive('ach'); });
     $('btn-ach-view').addEventListener('click', () => this.showArchive('ach'));
     $('btn-calldown-pick').addEventListener('click', () => this.showArchive('calls'));
     $('archive-back').addEventListener('click', () => this.showMenu());
+    $('archive-reset').addEventListener('click', () => this.resetStep(1));
+    $('reset-cancel').addEventListener('click', () => this.resetStep(0));
+    $('reset-go').addEventListener('click', () => this.resetStep(this.resetStage + 1));
     for (const t of TABS) $('tab-' + t).addEventListener('click', () => this.showArchive(t));
     const btn = $('btn-calldown');
     btn.addEventListener('click', () => { OO.Audio.init(); this.g.requestCalldown(); btn.blur(); });
+  };
+
+  /**
+   * Reset all data, with two confirmations: step 1 explains what goes, step 2 is the last chance,
+   * step 3 wipes this game's localStorage completely (achievements and ranks, statistics, the
+   * bestiary, credits, Armory upgrades, outfits, call-downs, settings, secret codes) and reloads.
+   */
+  UI.resetStep = function (step) {
+    this.resetStage = step;
+    const box = $('reset-confirm');
+    if (!step) { box.hidden = true; $('archive-reset').hidden = false; return; }
+    if (step >= 3) {
+      try { localStorage.clear(); } catch (e) { /* storage blocked: nothing saved to wipe */ }
+      location.reload();
+      return;
+    }
+    OO.Audio.init(); OO.Audio.play(step === 1 ? 'select' : 'hurt');
+    $('archive-reset').hidden = true;
+    box.hidden = false;
+    box.classList.toggle('final', step === 2);
+    if (step === 1) {
+      $('reset-title').textContent = 'Reset all data?';
+      $('reset-text').textContent = 'This erases everything the game has saved on this device: achievements and ranks, statistics, the bestiary, banked credits, Armory upgrades, outfits, call-downs, settings and secret codes. It cannot be undone.';
+      $('reset-go').textContent = 'Continue';
+    } else {
+      $('reset-title').textContent = 'Last chance';
+      $('reset-text').textContent = 'Erase all progress and start again from zero?';
+      $('reset-go').textContent = 'Erase everything';
+    }
+    $('reset-cancel').focus();
   };
 
   /** Called by Progress when something unlocks: keep visible menu text in step. */
@@ -46,6 +82,7 @@
 
   UI.showArchive = function (tab) {
     this.hideAll();
+    this.resetStep(0);
     this.archiveTab = tab || this.archiveTab;
     for (const t of TABS) {
       $('tab-' + t).setAttribute('aria-selected', String(t === this.archiveTab));

@@ -35,7 +35,6 @@
       $('btn-skip').addEventListener('click', () => { if (performance.now() >= this.lockUntil) this.g.requestSkip(); });
       $('btn-resume').addEventListener('click', () => this.g.resume());
       $('btn-quit').addEventListener('click', () => this.g.quitToMenu());
-      $('btn-extract').addEventListener('click', () => this.g.extractNow());
       $('btn-retry').addEventListener('click', () => this.retry());
       $('btn-menu').addEventListener('click', () => this.g.quitToMenu());
       $('btn-pause').addEventListener('click', () => (this.g.state === 'paused' ? this.g.resume() : this.g.pause()));
@@ -185,13 +184,13 @@
       }
     }
 
-    /** Mode: Standard (evac at 15:00) or Infinite (overtime past the extraction mark). */
+    /** Mode: Standard (evac at 15:00) or Infinite (overtime until the team is overrun). */
     buildModes() {
       const list = $('mode-list');
       list.innerHTML = '';
       const modes = {
         standard: ['Standard', 'Hold out for 15:00 and make the evac helicopter.'],
-        infinite: ['Infinite', 'Stay past the extraction mark. The horde scales forever; level past max rank with Apex mutations.'],
+        infinite: ['Infinite', 'No evac. Past 15:00 the horde keeps scaling until you fall; level past max rank with Apex mutations.'],
       };
       for (const id in modes) {
         const b = document.createElement('button');
@@ -425,10 +424,8 @@
       const rows = p.weapons.map((w) => `<li><img src="${OO.Icons.url(w.def.icon, 24, w.def.evolved ? '#ff6f4a' : '#e3a33b')}" alt=""><span>${esc(w.def.name)}</span><b>${w.def.evolved ? 'Evolved' : 'Lv ' + w.level}${w.over ? ' +' + w.over : ''}</b></li>`)
         .concat(p.passiveOrder.map((id) => `<li><img src="${OO.Icons.url(OO.PASSIVES[id].icon, 24, '#56d6c0')}" alt=""><span>${esc(OO.PASSIVES[id].name)}</span><b>Lv ${p.passives[id]}</b></li>`));
       const apex = Object.keys(p.apex || {}).filter((id) => p.apex[id] && id !== 'overclock')
-        .map((id) => `<li class="apex-row"><img src="${OO.Icons.url(OO.APEX[id].icon, 24, '#ff7ad9')}" alt=""><span>${esc(OO.APEX[id].name)}</span><b>x${p.apex[id]}</b></li>`);
+        .map((id) => `<li class="apex-row"><img src="${OO.Icons.url(OO.APEX[id].icon, 24, '#ff7ad9')}" alt=""><span>${esc(OO.APEX[id].name)}</span><b>${OO.APEX[id].max ? p.apex[id] + ' / ' + OO.APEX[id].max : 'x' + p.apex[id]}</b></li>`);
       $('pause-build').innerHTML = rows.concat(apex).join('');
-      // Infinite Mode: past the mark, the host (or a solo player) can end the run as an evacuation
-      $('btn-extract').hidden = !(this.g.infinite && this.g.overtime && this.g.mode !== 'client');
       // Field manual: evolution recipes for the weapons you carry
       const recipes = p.weapons.filter((w) => OO.EVOLUTIONS[w.id]).map((w) => {
         const E = OO.EVOLUTIONS[w.id], gear = OO.PASSIVES[E.needs];
@@ -450,11 +447,11 @@
     showResults(r) {
       this.hideAll();
       const ot = r.infinite && r.overtime > 0;
-      $('res-eyebrow').textContent = r.infinite ? (ot ? 'Infinite Mode · ' + U.formatTime(r.overtime) + ' past the extraction mark' : 'Infinite Mode · Signal lost') : r.victory ? 'Extraction confirmed' : 'Signal lost';
+      $('res-eyebrow').textContent = r.infinite ? 'Infinite Mode · ' + (ot ? U.formatTime(r.overtime) + ' in overtime' : 'Signal lost') : r.victory ? 'Extraction confirmed' : 'Signal lost';
       $('res-title').textContent = r.infinite
-        ? (r.extracted ? 'Called the evac at ' + U.formatTime(r.time) : ot ? 'Lost in the dark at ' + U.formatTime(r.time) : 'You were overrun')
+        ? (ot ? 'Lost in the dark at ' + U.formatTime(r.time) : 'You were overrun')
         : r.victory ? 'You made the chopper' : 'You were overrun';
-      $('screen-results').classList.toggle('won', r.victory);
+      $('screen-results').classList.toggle('won', r.victory && !r.infinite);
       const team = r.coop && r.team ? ' · Co-op: ' + r.team.map((t) => esc(t.tag + ' ' + t.name)).join(', ') : '';
       const locked = Object.keys(OO.SKINS).some((c) => OO.SKINS[c].some((k) => !this.g.ownsSkin(c, k.id)));
       const toGo = OO.SKIN_COST - r.bank;

@@ -852,7 +852,24 @@ kbd {
 .card-apex:hover, .card-apex:focus-visible { border-color: #ff7ad9; box-shadow: 0 0 20px rgba(255, 122, 217, 0.25); }
 .apex-row span, .apex-row b { color: #ff9be3; }
 .lv-over { color: #ff7ad9; margin-left: 2px; }
-.btn-extract { border-color: var(--infect); color: #ffb3ba; }
+
+/* ------------------------------------------------------------------ v0.12: reset all data */
+.panel-archive .panel-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.btn-danger { color: #ffb3ba; border-color: rgba(255, 59, 78, 0.55); }
+.btn-danger:hover, .btn-danger:focus-visible { color: #fff; border-color: var(--infect); background: rgba(255, 59, 78, 0.12); }
+.reset-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 59, 78, 0.5);
+  border-left: 3px solid var(--infect);
+  background: rgba(40, 6, 10, 0.55);
+}
+.reset-confirm.final { background: rgba(70, 8, 14, 0.7); box-shadow: 0 0 22px rgba(255, 59, 78, 0.2); }
+.reset-title { margin: 0; font-size: 17px; font-weight: 700; color: #ffd5d9; }
+.reset-text { margin: 0; font-size: 13px; line-height: 1.45; color: #e6c3c6; max-width: 70ch; }
+.reset-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.reset-confirm.final #reset-go { background: var(--infect); color: #fff; border-color: var(--infect); }
 
 /* ------------------------------------------------------------------ small screens */
 @media (max-width: 860px) {
