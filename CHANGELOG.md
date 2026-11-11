@@ -20,7 +20,16 @@ Branch `feature/v0.11-crates-cleanup`.
   - A save with the old one-off Body Count (or the v0.9 Pest Control or masteries) gets every rank up to its old goal, so nothing already earned is lost.
   - That makes 88 unlocks in all.
 - **Achievements no longer show unlock dates.** A maxed ranked achievement just says "Max rank".
-- **Outfit descriptions** (all 15, in `js/characters.js`) now describe what the portraits actually show. For example, Dex's street-clothes shotgun is slung on his back, not in a gym bag, and Rin's Ghost protocol lines glow.
+- **New painted portraits:** all 15 outfit images in `assets/portraits` replaced with the owner's new painted set. Mara's and Rin's swimsuit portraits no longer have sunglasses or goggles.
+- **Outfit descriptions** (all 15, in `js/characters.js`) rewritten against the new portraits:
+  - Mara's patrol vest carries the badge.
+  - Night shift has no cap, and its chest harness is now a plate carrier.
+  - Off the books: white tee and a hip holster, no shoulder holster.
+  - Dex wears a skull cap on Black site and carries a duffel bag in street clothes.
+  - Rin's field kit has a thigh holster and no knee pads.
+  - Her lab coat is over a navy turtleneck.
+  - Her swimsuit has no white trim, and she keeps the earpiece.
+- **In-game sprites** follow suit: no cap on Night shift, a plate carrier and hip holster where the portraits show them, and no white trim (earpiece instead) on Rin's swimsuit.
 - **Removed text:** the wardrobe line "Each one costs 1,800 credits, about three full evacuations. Your partner sees your outfit in co-op." and "Evacuated N of M runs" from the main-menu records line.
 - **Stampede warnings show exactly the charge.**
   - A single solid band the full width of the row, with edge lines and chevrons along the line of travel.
