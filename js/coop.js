@@ -13,7 +13,7 @@
  *
  * Messages (all objects with a `t` field):
  *   client -> host: hello, in, pick, reroll, skip, pause, resume, view, cd (use call-down), bye
- *   host -> client: welcome, reject, full, start, snap, lvl, lvldone, chest, paused, resumed, results, bye
+ *   host -> client: welcome, reject, full, start, snap, lvl, lvldone, paused, resumed, results, bye
  */
 (function (OO) {
   'use strict';
@@ -26,7 +26,7 @@
   const PICK_KINDS = ['xp', 'herb', 'credit', 'magnet', 'bomb', 'case'];
   const PICK_INDEX = Object.fromEntries(PICK_KINDS.map((k, i) => [k, i]));
   const TIER_VALUE = [1, 3, 10];
-  const IN_RUN = new Set(['playing', 'levelup', 'paused', 'chest']);
+  const IN_RUN = new Set(['playing', 'levelup', 'paused']);
   const I16 = (v) => Math.max(-32767, Math.min(32767, Math.round(v)));
 
   // ================================================================ lobby
@@ -208,7 +208,6 @@
         OO.Audio.play('levelup');
         break;
       case 'lvldone': if (this.mode === 'client' && this.state === 'levelup') { this.state = 'playing'; this.ui.hideAll(); } break;
-      case 'chest': this.ui.chestToast(m.results, m.bonus); OO.Audio.play('chest'); break;
       case 'paused': if (this.mode === 'client') { this.state = 'paused'; this.ui.showPause(); } break;
       case 'resumed': if (this.mode === 'client' && this.state === 'paused') { this.state = 'playing'; this.ui.hideAll(); } break;
       case 'results': if (this.mode === 'client') this.finishRun(m.summary, m.weapons); break;
@@ -323,7 +322,7 @@
       l: this.lobs.map((o) => [Math.round(o.x0), Math.round(o.y0), Math.round(o.x1), Math.round(o.y1), r1(o.t), r1(o.dur)]),
       s: this.enemyShots.map((o) => [Math.round(o.x0), Math.round(o.y0), Math.round(o.x1), Math.round(o.y1), r1(o.t), r1(o.dur), o.r]),
       h: this.hazards.filter((o) => near(o.x, o.y)).map((o) => [Math.round(o.x), Math.round(o.y), o.r, r1(o.life), r1(o.max), r1(o.seed)]),
-      st: this.stampedes.map((o) => [o.a, Math.round(o.ax), Math.round(o.ay), r1(o.t), o.warn, o.locked ? 1 : 0, o.count, o.ranks, o.gap]),
+      st: this.stampedes.map((o) => [o.a, Math.round(o.ax), Math.round(o.ay), r1(o.t), o.warn, o.locked ? 1 : 0, o.count, o.ranks]),
       bo: this.enemies.filter((e) => !e.dead && e.def.mech).map((e) => this.mechaState(e)),
       mi: this.missiles.map((o) => [Math.round(o.x0), Math.round(o.y0), Math.round(o.x1), Math.round(o.y1), Math.round(o.t * 100) / 100, o.dur, o.r]),
       tu: this.turrets.map((o) => [o.id, Math.round(o.x), Math.round(o.y), Math.round(o.a * 100) / 100, r1(o.life), o.max, o.flash > 0 ? 1 : 0]),
@@ -525,7 +524,7 @@
     if (m.bo) for (const st of m.bo) { const e = mir.enemies.get(st[0]); if (e) this.applyMechaState(e, st); }
     this.turrets = (m.tu || []).map(([id, x, y, a, life, max, fl]) => ({ id, x, y, a, life, max, flash: fl ? 0.06 : 0 }));
     this.missiles = (m.mi || []).map(([x0, y0, x1, y1, t, dur, r]) => ({ x0, y0, x1, y1, t, dur, r }));
-    this.stampedes = m.st.map(([a, sx, sy, t, warn, locked, count, ranks, gap]) => ({ a, ax: sx, ay: sy, t, warn, locked: !!locked, count, ranks, gap }));
+    this.stampedes = m.st.map(([a, sx, sy, t, warn, locked, count, ranks]) => ({ a, ax: sx, ay: sy, t, warn, locked: !!locked, count, ranks }));
 
     for (const ev of m.ev) this.applyEvent(ev);
   };

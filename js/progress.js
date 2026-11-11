@@ -43,6 +43,9 @@
 
   function num(v) { return Number.isFinite(v) ? v : 0; }
 
+  // Goal each achievement had when it was still a one-off (see migrateRanks).
+  const LEGACY_GOALS = { pest_control: 50000, master_mara: 5000, master_dex: 5000, master_rin: 5000, body_count: 3000 };
+
   const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
   /** A rank's goal as the achievement text shows it. */
   function fmtGoal(a, goal) {
@@ -76,13 +79,21 @@
     }
 
     /**
-     * v0.10: Pest Control and the three signature-weapon masteries became ranked. Drop their old
-     * one-off keys and grant every rank the lifetime stats already prove, quietly, with one notice.
+     * One-off achievements that later became ranked (v0.10: Pest Control and the signature-weapon
+     * masteries; v0.11: Body Count). Each old key becomes every rank up to its old goal, so nothing
+     * already earned is lost (Body Count II keeps the Sentry Turret unlocked). Then every rank the
+     * lifetime stats prove is granted, quietly, with one notice.
      */
     migrateRanks() {
-      let dirty = false;
-      for (const a of OO.ACHIEVEMENTS) if (a.ranks && this.ach[a.id]) { delete this.ach[a.id]; dirty = true; }
-      const got = this.checkRanks(true);
+      let dirty = false, got = 0;
+      for (const a of OO.ACHIEVEMENTS) {
+        if (!a.ranks || !this.ach[a.id]) continue;
+        const old = LEGACY_GOALS[a.id] || 0, ts = this.ach[a.id];
+        a.ranks.forEach(([goal], i) => { const k = a.id + '.' + (i + 1); if (goal <= old && !this.ach[k]) { this.ach[k] = ts; got++; } });
+        delete this.ach[a.id];
+        dirty = true;
+      }
+      got += this.checkRanks(true);
       if (dirty || got) this.saveAch();
       if (got) this.push({ kind: 'note', icon: 'trophy', title: 'Service record reviewed', text: got + (got === 1 ? ' achievement rank' : ' achievement ranks') + ' backdated from your lifetime stats. See the Dossier.' });
     }
@@ -256,7 +267,6 @@
       if (!rs || !T) return;
       const s = this.stats, u = (id, ok) => { if (ok && !this.ach[id]) this.unlock(id); };
       u('first_blood', rs.kills >= 1);
-      u('body_count', g.kills >= 3000);
       u('stalker_down', T.stalkers >= 1);
       u('restraining', T.stalkers >= 4);
       u('scrap_metal', T.mechs >= 1);

@@ -93,8 +93,7 @@
     const title = secret ? 'Classified' : a.name;
     const text = secret ? a.hint : a.text;
     let extra = '';
-    if (on) extra = `<span class="ach-date">Unlocked ${esc(date(P.ach[a.id]))}</span>`;
-    else if (a.goal) {
+    if (!on && a.goal) {
       const v = Math.min(a.goal, P.progressOf(a));
       extra = `<span class="ach-bar"><i style="width:${(v / a.goal) * 100}%"></i></span><span class="ach-prog">${n(v)} / ${n(a.goal)}</span>`;
     }
@@ -122,7 +121,7 @@
     if (next) {
       const prev = r ? a.ranks[r - 1][0] : 0, k = U.clamp((v - prev) / (next.goal - prev), 0, 1);
       extra = `<span class="ach-bar"><i style="width:${k * 100}%"></i></span><span class="ach-prog">${shown} / ${esc(fmt(next.goal))} · next: ${PR.ROMAN[r + 1]} ${OO.TIERS[next.tier].name}</span>`;
-    } else extra = `<span class="ach-date">Max rank · ${esc(date(P.ach[cur.key]))}</span>`;
+    } else extra = '<span class="ach-date">Max rank</span>';
     return `<article class="ach ranked tier-${tier}${r ? ' on' : ' locked'}${!next ? ' maxed' : ''}">
       <span class="medal"><img src="${OO.Icons.url(a.icon, 24, r ? T.color : '#5a7672')}" alt="">${r ? `<b class="medal-rank">${PR.ROMAN[r]}</b>` : ''}</span>
       <div class="ach-body">
@@ -228,12 +227,12 @@
       const c = OO.CALLDOWNS[id], open = g.calldownUnlocked(id), on = id === eq;
       const card = document.createElement('article');
       card.className = 'call' + (on ? ' equipped' : '') + (open ? '' : ' locked');
-      const req = c.unlock && OO.ACHIEVEMENTS.find((a) => a.id === c.unlock);
+      const req = c.unlock && OO.achUnit(c.unlock);
       card.innerHTML = `<img class="call-icon" src="${OO.Icons.url(open ? c.icon : 'lock', 36, open ? (on ? '#52e6c6' : '#f2b23a') : '#5a7672')}" alt="">
         <h3 class="call-name">${esc(c.name)}</h3>
         <p class="call-cd">Cooldown ${C[id].cd} s</p>
         <p class="call-text">${esc(c.text)}</p>
-        ${open ? '' : `<p class="call-req">Unlock: ${esc(req.name)}. ${esc(req.text)}</p>`}`;
+        ${open ? '' : `<p class="call-req">Unlock: ${esc(OO.Progress.unitName(req))}. ${esc(OO.Progress.unitText(req))}</p>`}`;
       const b = document.createElement('button');
       b.type = 'button';
       if (on) { b.className = 'btn-small btn-equipped'; b.textContent = 'Equipped'; b.disabled = true; }

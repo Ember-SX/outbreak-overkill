@@ -33,7 +33,8 @@
     { id: 'first_blood', cat: 'milestones', tier: 'bronze', icon: 'skull', name: 'First Blood', text: 'Put down your first infected.' },
     { id: 'extraction', cat: 'milestones', tier: 'silver', icon: 'heli', name: 'Extraction', text: 'Survive until the evac helicopter lands at 15:00.' },
     { id: 'full_roster', cat: 'milestones', tier: 'gold', icon: 'heli', name: 'Full Roster', text: 'Evacuate with all three operatives.', goal: 3, track: 'roster' },
-    { id: 'body_count', cat: 'milestones', tier: 'silver', icon: 'skull', name: 'Body Count', text: 'Kill 3,000 infected in a single run.', goal: 3000, track: 'bestKills' },
+    { id: 'body_count', cat: 'milestones', icon: 'skull', name: 'Body Count', text: 'Kill {n} infected in a single run.', track: 'bestKills',
+      ranks: [[1000, 'bronze'], [3000, 'silver'], [7500, 'gold'], [15000, 'platinum'], [30000, 'diamond'], [50000, 'biohazard']] },
     { id: 'dressed', cat: 'milestones', tier: 'bronze', icon: 'credits', name: 'Dressed to Kill', text: 'Buy an outfit in the Armory wardrobe.' },
 
     // Combat mastery

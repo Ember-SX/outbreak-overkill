@@ -6,7 +6,7 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.10.0';
+  OO.VERSION = '0.11.0';
 
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory); the extraction mark in Infinite Mode
@@ -18,10 +18,17 @@
     // last `blink` seconds. Past maxGems, the oldest DNA sample on the ground is recycled and its
     // XP rides along with the new drop, so no XP is lost to the cap. Past maxOther, the oldest
     // non-gem pickup (herb, credits, scanner, flare) is removed. Supply cases never despawn.
+    // Supply crates (the breakable boxes): pass-through (they block nothing), opened by walking
+    // over them, gone after `life` seconds (blinking for the last PICKUPS.blink).
+    CRATES: { life: 20 },
+    // Supply cases (Brute and boss drops): when an operative has nothing left to level, each roll
+    // becomes an Apex mutation plus apexXp of a level in XP.
+    CASES: { apexXp: 0.3 },
     PICKUPS: {
       maxGems: 320,
       maxOther: 60,
-      life: { xp: 60, herb: 45, credit: 45, magnet: 45, bomb: 45, case: 0 },
+      // Supply cases auto-collect on contact (no case screen) and despawn after 20 s like everything else.
+      life: { xp: 60, herb: 45, credit: 45, magnet: 45, bomb: 45, case: 20 },
       blink: 5,
     },
     MAX_WEAPONS: 6,
@@ -379,7 +386,7 @@
   OO.CALLDOWNS = {
     flashbang: { name: 'Flashbang',      icon: 'flash',  unlock: null,
                  text: 'Stuns every infected around you for 2.6 s. Elites shake it off faster, bosses barely flinch. Bursters are deaf to it.' },
-    sentry:    { name: 'Sentry Turret',  icon: 'turret', unlock: 'body_count',
+    sentry:    { name: 'Sentry Turret',  icon: 'turret', unlock: 'body_count.2',   // Body Count II: 3,000 kills in a run
                  text: 'Drops an automated turret for 15 s. It tracks the nearest infected and keeps pace with the strain.' },
     meddrone:  { name: 'Med Drone',      icon: 'drone',  unlock: 'extraction',
                  text: 'A field drone patches you up for 35% of your max HP over 4 s.' },

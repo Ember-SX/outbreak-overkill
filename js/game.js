@@ -23,7 +23,7 @@
   class Game {
     constructor(canvas) {
       this.canvas = canvas;
-      this.state = 'menu';            // menu | playing | levelup | chest | paused | results
+      this.state = 'menu';            // menu | playing | levelup | paused | results
       this.mode = 'solo';             // solo | host | client
       this.debug = false;
       this.player = null;
@@ -531,45 +531,62 @@
     }
 
     // ------------------------------------------------------------ supply cases
+    /**
+     * Walking over a supply case applies it on the spot: no case screen, no pause, nothing to
+     * confirm. A ready evolution goes first, then each roll levels up something you own. When
+     * there is nothing left to level ("max rank"), a roll becomes an Apex mutation plus a chunk
+     * of XP instead. Floating text and a one-line banner say what you got.
+     */
     openChest(p, big) {
-      const results = [];
+      const got = [];
       p.rs.cases++;
       let rolls = big ? 3 : 1;
       const ready = this.findEvolution(p);
       if (ready) {
         const nw = this.evolve(p, ready);
-        results.push({ icon: nw.def.icon, name: nw.def.name, badge: 'Evolved', text: nw.def.desc, type: 'Evolution', evolved: true });
+        got.push(nw.def.name + ' evolved');
         rolls--;
       }
       for (let i = 0; i < rolls; i++) {
         const cands = [];
         for (const w of p.weapons) if (w.level < w.maxLevel) cands.push({ kind: 'weapon', id: w.id });
         for (const id of p.passiveOrder) if (p.passives[id] < OO.PASSIVES[id].max) cands.push({ kind: 'passive', id });
-        const opt = cands.length ? U.pick(cands) : { kind: 'credits' };
-        const d = this.describeUpgrade(p, opt);
-        this.applyUpgrade(p, opt);
-        results.push(d);
+        if (cands.length) {
+          const opt = U.pick(cands), d = this.describeUpgrade(p, opt);
+          this.applyUpgrade(p, opt);
+          got.push(d.name + ' ' + d.badge);
+        } else {
+          // Nothing left to level: Apex mutation + XP (works in Standard as well as Infinite).
+          const opt = this.rollApex(p, 1)[0];
+          if (opt) {
+            const d = this.describeApex(p, opt);
+            this.applyApex(p, opt, true);
+            got.push('Apex: ' + d.name.replace(/ [IVX]+\+?$/, ''));
+          }
+          this.team.xp += this.team.xpNext * OO.CONFIG.CASES.apexXp;
+          got.push('+XP');
+        }
       }
       const bonus = big ? 60 : 20;
       this.credits += bonus;
+      got.forEach((txt, i) => this.addText(p.x, p.y - 30 - i * 14, txt, 'heal'));
+      this.banner((this.coop ? p.name + ': ' : '') + 'Supply case: ' + got.join(' · ') + ' · +' + bonus + 'c', 'good');
       this.sfxFor(p, 'chest');
-      if (!this.coop) {
-        // Solo: the case screen pauses the game, as before.
-        this.state = 'chest';
-        this.ui.showChest(results, bonus);
-      } else if (p.local) {
-        // Co-op: nobody else should be frozen by your loot, so it shows as a toast.
-        this.ui.chestToast(results, bonus);
-      } else {
-        this.netSend({ t: 'chest', results, bonus });
-      }
     }
 
-    closeChest() {
-      if (this.state !== 'chest') return;
-      this.state = 'playing';
-      this.ui.hideAll();
-      this.checkLevel();
+    /**
+     * Supply crate (the wooden box that turns up around you): walking over it opens it on the
+     * spot and the contents go straight to whoever touched it.
+     */
+    openCrate(p, e) {
+      e.dead = true;
+      this.burst(e.x, e.y, '#8a6a3c', 12, 160);
+      OO.Audio.play('crate');
+      const kind = U.weightedPick([['herb', 45], ['credit', 25], ['magnet', 20], ['bomb', 10]]);
+      if (kind === 'credit') {
+        const v = U.randInt(10, 25);
+        this.collect(p, { kind, value: v });
+      } else this.collect(p, { kind, value: 1 });
     }
 
     heal(p, n, raw) {
@@ -791,6 +808,7 @@
         dmg: d.dmg * this.enemyDmgScale(true, d), r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
+      if (d.crate) { e.life = OO.CONFIG.CRATES.life; e.level = Math.ceil(e.life); }
       if (!d.crate && !d.burster && this.world) this.world.resolveCircle(e, e.r);
       this.enemies.push(e);
       return e;
@@ -801,7 +819,14 @@
       for (const e of this.enemies) {
         if (e.dead) continue;
         e.flash -= dt; e.t += dt;
-        if (e.def.crate) continue;
+        if (e.def.crate) {
+          // Pass-through supply crate: blocks nothing, opens on contact, gone after CRATES.life s.
+          e.life -= dt;
+          e.level = Math.max(0, Math.ceil(e.life));   // seconds left (rides in the co-op snapshot for the blink)
+          if (e.life <= 0) { e.dead = true; continue; }
+          for (const q of alive) if (U.dist2(e.x, e.y, q.x, q.y) < (e.r + q.r) ** 2) { this.openCrate(q, e); break; }
+          continue;
+        }
         if (e.def.burster) { this.updateBurster(e, dt); continue; }
         if (e.stun > 0) {
           // Flashbanged: reeling in place, no attacks, no contact damage (knockback still carries them).
@@ -897,8 +922,8 @@
         if (e.dead || e.def.crate || e.def.burster || e.airborne) continue;
         this.grid.query(e.x, e.y, e.r + 32, buf);
         for (const o of buf) {
-          if (o === e || o.dead || o.def.burster || o.airborne) continue;   // bursters plough straight through
-          if (!o.def.crate && o.id < e.id) continue;   // each enemy pair handled once
+          if (o === e || o.dead || o.def.burster || o.def.crate || o.airborne) continue;   // bursters plough straight through; crates block nothing
+          if (o.id < e.id) continue;   // each enemy pair handled once
           let dx = e.x - o.x, dy = e.y - o.y;
           const min = e.r + o.r;
           let d2 = dx * dx + dy * dy;
@@ -906,7 +931,6 @@
           if (d2 < 0.01) { dx = U.rand(-1, 1); dy = U.rand(-1, 1); d2 = dx * dx + dy * dy; }
           const d = Math.sqrt(d2), push = (min - d) * 0.5;
           const nx = dx / d, ny = dy / d;
-          if (o.def.crate) { e.x += nx * push * 2; e.y += ny * push * 2; continue; }
           const tm = e.mass + o.mass;
           e.x += nx * push * (o.mass / tm); e.y += ny * push * (o.mass / tm);
           o.x -= nx * push * (e.mass / tm); o.y -= ny * push * (e.mass / tm);
@@ -961,7 +985,7 @@
     }
 
     damageEnemy(e, dmg, kbx, kby, weapon) {
-      if (e.dead || e.def.invulnerable || e.airborne) return;   // Bursters: nothing hurts them. A mech mid-jump is out of reach
+      if (e.dead || e.def.invulnerable || e.airborne || e.def.crate) return;   // Bursters: nothing hurts them. A mech mid-jump is out of reach. Crates open by walking over them
       dmg = Math.max(1, Math.round(dmg));
       e.hits++;
       const dealt = Math.min(dmg, e.hp);
@@ -984,12 +1008,6 @@
         weapon.kills++;
         const ls = weapon.def.base.lifesteal, o = weapon.owner;
         if (ls && o && !o.downed) o.hp = Math.min(o.stats.maxHp, o.hp + ls * this.healMul());
-      }
-      if (e.def.crate) {
-        this.crateLoot(e);
-        this.burst(e.x, e.y, '#8a6a3e', 12, 170);
-        OO.Audio.play('crate');
-        return;
       }
       this.kills++;
       this.creditKill(e, weapon);
@@ -1026,11 +1044,6 @@
         if (weapon.id === sigW || (OO.EVOLUTIONS[sigW] && OO.EVOLUTIONS[sigW].into === weapon.id)) rs.sig++;
       }
       if (by.apexTotal) this.apexOnKill(by, e);   // Hemophage, Volatile Blood (infinite.js)
-    }
-
-    crateLoot(e) {
-      const kind = U.weightedPick([['herb', 45], ['credit', 25], ['magnet', 20], ['bomb', 10]]);
-      this.addPickup(kind, e.x, e.y, kind === 'credit' ? { value: U.randInt(10, 25) } : {});
     }
 
     /**
@@ -1138,14 +1151,9 @@
       const S = OO.CONFIG.STAMPEDE;
       for (const st of this.stampedes) {
         st.t -= dt;
-        if (!st.locked) {
-          // the lane follows its target until it locks (if they go down, it picks the nearest player)
-          let p = this.playerBySlot(st.target);
-          if (!p || p.downed) p = this.nearestPlayer(st.ax, st.ay);
-          st.ax = U.lerp(st.ax, p.x, Math.min(1, dt * 4));
-          st.ay = U.lerp(st.ay, p.y, Math.min(1, dt * 4));
-          if (st.t <= S.lockAt) { st.locked = true; OO.Audio.play('shriek', 1); }
-        }
+        // The lane never moves once the warning is up (no player tracking); the last lockAt
+        // seconds only change the sound and the pulse.
+        if (!st.locked && st.t <= S.lockAt) { st.locked = true; OO.Audio.play('shriek', 1); }
         if (!st.shrieked && st.t <= st.warn * 0.55) { st.shrieked = true; OO.Audio.play('shriek', 0.5); }
         const k = 1 - Math.max(0, st.t) / st.warn;
         this.shake(1 + k * 3.5);
@@ -1169,8 +1177,7 @@
     launchStampede(st) {
       const L = this.stampedeLane(st), sp = OO.CONFIG.STAMPEDE.spacing;
       for (let r = 0; r < st.ranks; r++) {
-        for (let j = 0; j < st.count; j++) {
-          if (j === st.gap || j === st.gap + 1) continue;
+        for (let j = 0; j < st.count; j++) {   // a solid row: every slot filled
           const off = (j - (st.count - 1) / 2) * sp;
           const x = L.sx + L.nx * off - L.dx * r * 60, y = L.sy + L.ny * off - L.dy * r * 60;
           const e = this.spawnEnemy('burster', x, y);
@@ -1307,7 +1314,7 @@
         }
         this.grid.query(pr.x, pr.y, pr.r + 32, buf);
         for (const e of buf) {
-          if (e.dead || e.airborne || pr.hit.has(e.id)) continue;
+          if (e.dead || e.airborne || e.def.crate || pr.hit.has(e.id)) continue;   // shots pass through crates
           if (U.dist2(pr.x, pr.y, e.x, e.y) > (pr.r + e.r) ** 2) continue;
           if (e.def.invulnerable) {
             // glances off the carapace
@@ -1420,13 +1427,12 @@
         const p = this.nearestPlayer(g.x, g.y);
         if (p.downed) continue;
         const dx = p.x - g.x, dy = p.y - g.y, d = Math.hypot(dx, dy) || 1;
-        if (!g.attract && g.kind !== 'case' && d < p.stats.magnet) g.attract = true;
+        if (!g.attract && d < p.stats.magnet) g.attract = true;
         if (g.attract) {
           g.v = Math.min(g.v + 1500 * dt, 1100);
           const step = g.v > 0 ? Math.min(d, g.v * dt) : g.v * dt;
           g.x += (dx / d) * step; g.y += (dy / d) * step;
         }
-        if (g.kind === 'case' && this.state !== 'playing') continue;   // one case screen at a time
         if (U.dist2(p.x, p.y, g.x, g.y) < (p.r + 10) ** 2) this.collect(p, g);
       }
       this.gemCount = gems; this.otherCount = other;

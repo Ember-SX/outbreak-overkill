@@ -116,16 +116,17 @@
   }
 
   /**
-   * Start a Burster stampede. Phases: 'warn' (rumble, shrieks, a lane that tracks you),
-   * locked for the last STAMPEDE.lockAt seconds, then the row launches across the lane.
+   * Start a Burster stampede. The lane is fixed the moment the warning appears: aimed through
+   * where the anchor player stands right then, and it never moves after that. The row is solid
+   * (no gaps), so the warning shows exactly the strip the Bursters will run down. Get out of the
+   * strip or behind cover. The warning pulses faster for the last STAMPEDE.lockAt seconds.
    */
   Director.prototype.stampede = function (ev) {
     const g = this.g, p = g.anchorPlayer(), S = OO.CONFIG.STAMPEDE;
     const count = ev.count || 9;
-    const gap = U.randInt(1, Math.max(1, count - 3));    // two empty slots somewhere in the row
     g.stampedes.push({
       a: U.rand(0, U.TAU), ax: p.x, ay: p.y, t: S.warn, warn: S.warn, locked: false,
-      count, ranks: ev.ranks || 1, gap, shrieked: false, target: p.slot,
+      count, ranks: ev.ranks || 1, shrieked: false,
     });
     if (!ev.text) g.banner("Stampede! Bursters can't be stopped. Get behind cover", 'boss');
     OO.Audio.play('rumble');

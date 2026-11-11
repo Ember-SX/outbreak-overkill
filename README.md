@@ -4,7 +4,7 @@ A bio-horror horde survival game for the browser. You play one operative inside 
 
 The core loop follows the Vampire Survivors formula: move only, auto-firing weapons, XP gems (DNA samples here), a pick-one-of-three upgrade screen, weapon and passive slots, elites that drop supply cases, and a wave script that escalates until you're overrun or extracted.
 
-**Status:** v0.10.0. Playable start to finish, solo or 2-player online co-op, with cover, volatile drums, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions, tactical call-downs, an endless **Infinite Mode** with Apex mutations past max rank, and between runs an Armory with upgrades and an outfit wardrobe plus a Dossier with ranked achievements, a bestiary and lifetime statistics.
+**Status:** v0.11.0. Playable start to finish, solo or 2-player online co-op, with cover, volatile drums, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions, tactical call-downs, an endless **Infinite Mode** with Apex mutations past max rank, and between runs an Armory with upgrades and an outfit wardrobe plus a Dossier with ranked achievements, a bestiary and lifetime statistics.
 
 ## Play it
 
@@ -47,7 +47,14 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 - **Field Medkit:** +35 max HP and +0.6 HP/s regeneration per rank, and heals 25 HP when you take it.
 - **How protection works:** damage is first cut by your percentage reduction, then by flat armor. Reduction from all sources is capped at 50%.
 
-**Evolutions:** a max-level weapon plus its partner gear evolves when you open a supply case.
+**Evolutions:** a max-level weapon plus its partner gear evolves when you pick up a supply case.
+
+**Supply cases** (dropped by Brutes and bosses) apply the moment you walk over them; there is no case screen and nothing to confirm.
+- A ready evolution goes first.
+- Then each roll levels up a weapon or gear you own (one roll, three from a boss case), plus 20 credits (60 from a boss case).
+- When there's nothing left to level, each roll becomes an **Apex mutation plus 30% of a level in XP**, in Standard as well as Infinite Mode.
+- Floating text and a one-line banner say what you got.
+- Cases are pulled in by your pickup range like other items and despawn after 20 seconds.
 
 | Weapon | + Gear | = Evolution |
 | --- | --- | --- |
@@ -68,7 +75,12 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 - **Overdrive (below half health).** Faster, shorter pauses, bigger volleys, and a **visor laser**: a dashed line tracks you, goes solid when it locks, then the beam sweeps toward you. Walls stop it; outrun the sweep up close or put an obstacle between you.
 - Destroy it and it drops a big supply case and herbs, and Biscuit ejects by parachute, unharmed and furious. Tuning lives in `OO.ENEMIES.mecha.mech`; the AI is in `js/boss.js`.
 
-**Stampedes:** a rumble, rising screen shake and distant shrieks give 3 seconds of warning. A red lane shows where the row of Bursters will run, with a STAMPEDE arrow on the screen edge they come from. The lane follows you until it locks 0.8s before launch. Once the Bursters launch they run in a dead-straight line and never turn after you, so a wall between you and the lane always stops them. Bursters are invincible: auto-aim ignores them and bullets glance off their carapace, so you can't thin the row out. Get behind a car, barrier or pillar: obstacles stop Bursters and block every blast, including Bloater bile. The two-slot gap in the row is also safe.
+**Stampedes:** a rumble, rising screen shake and distant shrieks give 3 seconds of warning, with a STAMPEDE arrow on the screen edge the Bursters come from.
+- The warning is a solid red band exactly as wide as the row and exactly along the line the row will run. The row has no gaps.
+- The band is fixed the moment it appears, aimed through where you stood then. It doesn't follow you; it only pulses faster for the last 0.8 seconds.
+- Once launched, the Bursters run in a dead-straight line and never turn after you.
+- Bursters are invincible: auto-aim ignores them and bullets glance off their carapace, so you can't thin the row out.
+- To survive, step out of the band, or put a car, barrier or pillar between you and the row. Obstacles stop Bursters and block every blast, including Bloater bile.
 
 **Cover:** the map is littered with wrecked cars, a burnt-out bus, jersey barriers, dumpsters, pillars and hazmat barrels, generated in chunks from a seed so it stays consistent while you roam. You and the infected collide with them, and the infected steer around them. Your bullets and pellets stop on cover, and guns only aim at targets they can actually hit.
 
@@ -79,19 +91,20 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 | Call-down | Cooldown | Effect | Unlocked by |
 |---|---|---|---|
 | Flashbang | 30 s | Stuns every infected around you for 2.6 s (elites 1.6 s, bosses 0.8 s). Stunned infected can't attack or hurt you on contact. Bursters are deaf to it. | Available from the start |
-| Sentry Turret | 50 s | An automated turret for 15 s that tracks the nearest infected. Its damage keeps pace with the strain level. | Body Count |
+| Sentry Turret | 50 s | An automated turret for 15 s that tracks the nearest infected. Its damage keeps pace with the strain level. | Body Count II (3,000 kills in a run) |
 | Med Drone | 70 s | Heals 35% of your max HP over 4 s. | Extraction |
 | Airstrike Beacon | 90 s | The flare pickup's strike: clears the screen around you, bosses take a heavy hit. | Stalker Down |
 
 In co-op each operative brings their own call-down; the host runs it and both screens see it. Tuning: `OO.CONFIG.CALLDOWN`, names and text in `OO.CALLDOWNS`.
 
 **Dossier (main menu):** the field archive, saved in your browser.
-- **Achievements:** 34 achievements, 83 unlocks in all, in seven groups: milestones, combat mastery, operative specializations, tactics and teamwork, career ranks, Infinite Mode, and two classified ones for the secret codes.
-  - One-off achievements are Bronze, Silver or Gold (First Blood, Extraction, Body Count, Stalker Down, Untouchable, Point of No Return, and so on).
+- **Achievements:** 34 achievements, 88 unlocks in all, in seven groups: milestones, combat mastery, operative specializations, tactics and teamwork, career ranks, Infinite Mode, and two classified ones for the secret codes.
+  - One-off achievements are Bronze, Silver or Gold (First Blood, Extraction, Stalker Down, Untouchable, Point of No Return, and so on).
   - **Ranked achievements** climb one counter through up to six ranks: **Bronze, Silver, Gold, Platinum, Diamond, Biohazard**. Each rank is its own unlock, notice and points.
 
     | Ranked achievement | Counter | Ranks |
     |---|---|---|
+    | Body Count | kills in a single run | 1,000 · 3,000 · 7,500 · 15,000 · 30,000 · 50,000 |
     | Pest Control | lifetime kills | 1,000 · 5,000 · 15,000 · 30,000 · 60,000 · 100,000 |
     | Marksman / Breach and Clear / Live Wire | kills with each operative's signature weapon | 500 · 2,500 · 5,000 · 15,000 · 30,000 |
     | Boss Hunter | Stalkers and Hare Triggers | 5 · 15 · 40 · 100 · 250 |
@@ -211,13 +224,17 @@ Tuning lives in `OO.CONFIG.THREAT`, `OO.CONFIG.SURGE` and `OO.CONFIG.HIT_CEILING
 
 **Threat levels:** Standard uses what v0.2 called Nightmare (35% tougher, 25% harder-hitting, 25% bigger waves). Nightmare is locked until it gets its own tuning in a future update.
 
-**Pickups:** DNA samples (XP), Green Herb (heal), Scanner (pulls every sample on the map), Airstrike Flare (clears the screen), credits, supply cases. Supply crates spawn around the map; shoot them open. Items on the ground despawn (DNA samples after 60s, other items after 45s; supply cases never) and blink for their last 5 seconds. If 320 samples are already on the ground, the oldest one is recycled and its XP rides along with the new drop. Tuning lives in `OO.CONFIG.PICKUPS`.
+**Pickups:** DNA samples (XP), Green Herb (heal), Scanner (pulls every sample on the map), Airstrike Flare (clears the screen), credits, supply cases.
+- **Supply crates** (the wooden boxes that turn up around you) open the moment you walk over them; the herb, credits, scanner or flare goes straight to you.
+- Crates don't block anything: you, the infected and bullets all pass through them.
+- Crates disappear after 20 seconds.
+- Items on the ground despawn (DNA samples after 60 s, supply cases after 20 s, other items after 45 s) and blink for their last 5 seconds, crates included. If 320 samples are already on the ground, the oldest one is recycled and its XP rides along with the new drop. Tuning lives in `OO.CONFIG.PICKUPS`.
 
 **Co-op (2 players, online):** press **Co-op** on the main menu. One player picks **Host a room** and reads out the 3-digit code; the other types it in and presses **Join**. Each of you plays the operative selected on your own main menu, with your own Armory upgrades.
 - XP is shared. On each team level-up both of you pick an upgrade; the game waits for both.
 - Infected chase whoever is closest and have **1.5x health** while a partner is connected (`COOP.enemyHp`).
 - At 0 HP you go down instead of dying. Stand next to a downed partner for 3 seconds to revive them at 35% HP. The run ends when both of you are down.
-- Supply cases show as a toast instead of a pause screen. Either player can pause for both.
+- Supply cases never pause anything: they apply on contact for whoever picks them up. Either player can pause for both.
 - Each player banks their own payout. After a run, **Back to lobby** keeps the room open for another go.
 - If your partner drops, the host keeps playing solo; if the host drops, the run ends for the partner.
 
@@ -271,7 +288,7 @@ js/
   spawner.js        the Director: wave table and scripted events
   scenery.js        baked ground detail per chunk, street lamps and beacons, haze, dust, grain
   render.js         world drawing, sprite cache, darkness pass, HUD (ECG vitals monitor)
-  ui.js             DOM screens: menu, level up, supply case, pause, results
+  ui.js             DOM screens: menu, level up, pause, results, Armory, co-op
   game.js           run state, fixed-timestep loop, simulation (any number of players)
   net.js            PeerJS wrapper: rooms, 3-digit codes, the data channel
   boss.js           the Hare Trigger final boss (AI, attacks, co-op state)

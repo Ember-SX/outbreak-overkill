@@ -163,7 +163,6 @@ const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, 
             if (g.time >= minute * 60) { hpCurve.push(g.enemyHpMul(OO.ENEMIES.shambler, g.strain.level).toFixed(1)); minute += 1; }
           }
           else if (g.state === 'levelup') { const opts = g.player.luOptions; g.chooseUpgrade(g.player, bot === 'smart' ? opts.indexOf(smartPick(opts)) : Math.floor(Math.random() * opts.length)); }
-          else if (g.state === 'chest') g.closeChest();
         }
         out.push({
           ch, bot, won: g.time >= OO.CONFIG.RUN_LENGTH, payout: g.meta.bank - bank0, time: Math.round(g.time), level: g.team.level, kills: g.kills, apex: g.player.apexTotal || 0,
