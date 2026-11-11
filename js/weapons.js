@@ -47,6 +47,11 @@
       s.cd = Math.max(0.1, s.cd * ps.cooldown);
       s.amount = (s.amount || 1) + ps.amount;
       s.area = (s.area || 1) * ps.area;
+      // Engine limits (CONFIG.LIMITS): projectiles per volley and area stop growing past these.
+      const L = OO.CONFIG.LIMITS;
+      s.amount = Math.min(s.amount, L.maxAmount);
+      s.area = Math.min(s.area, L.maxArea);
+      if (s.speed) s.speed = Math.min(s.speed, L.maxProjectileSpeed);
       this._stats = s;
       this._ver = player.statsVersion;
       return s;

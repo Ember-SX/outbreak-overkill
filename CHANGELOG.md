@@ -2,6 +2,54 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
+## [0.12.0] - 2026-11-11
+
+Branch `feature/v0.12-scaling-caps`.
+
+### Changed
+- **Apex mutations have hard stack caps.** Every mutation that adds per-frame work or raw power stops at a cap, so a deep Infinite run can't drag the frame rate down:
+  - Overclock 5 per weapon, Berserker Gene 8, Adrenal Overdrive 6, Hive Swarm 4, Blast Radius 6, Titan Frame 8.
+  - Regenerator Cells 8, Hemophage 6, Hyperstride 5, Phase Skin 4, Necrotic Pulse 5, Volatile Blood 5, Hot Mic 5.
+  - A capped card shows its count (`3 / 8`) and stops appearing once full. Overclock is only offered on weapons below 5.
+- **Four new uncapped Apex mutations** fill the hand once everything else is capped, so there's always a card to draft:
+  - Scavenger's Cut: +10% credits per credit pickup.
+  - Field Notes: a quarter of a level in XP, right now (a share of the Standard curve). It's a one-off rather than an XP multiplier, which would feed on itself with hundreds of stacks.
+  - Field Dressing: heal 25% of max HP.
+  - Supply Cache: +50 credits.
+- **Infinite Mode has no extraction.**
+  - The pause screen's **Call extraction** button and `extractNow()` are gone, and so is the "extraction mark" wording.
+  - Before 15:00 the clock reads "Overtime in m:ss". After it the run continues until the operative (the whole team, in co-op) falls.
+  - Reaching 15:00 still counts as an evacuation for achievements and stats.
+  - Results read "Lost in the dark at …", with how long you lasted in overtime.
+- **Overtime scaling is a hybrid curve.** Enemy HP is `(1 + 0.1m) · 1.05^m` and damage `(1 + 0.06m) · 1.03^m`, where m is minutes past 15:00. Bosses use 60% of both HP rates.
+  - That's the same ×1.16 HP in the first minute as before, but ×17 HP at +30 min instead of ×86, and ×131 at +60 instead of ×7,400.
+  - Damage is ×6.8 at +30 and ×27 at +60, instead of ×13 and ×176.
+  - 0:00–15:00 is exactly as before, in both modes.
+- **Late XP slows down steadily.** Past level 60 in Infinite, each level costs `1 + 0.02 · (level − 60)` times the Standard amount. That's linear rather than the old compound ×1.02 per level, so level 200 costs ×3.8 instead of ×16 and level 300 ×5.8 instead of ×115.
+  - Supply-case XP at max rank (30% of a level per roll) is now based on the Standard curve. Before, it scaled with the slowed-down cost and handed out hundreds of levels in deep runs.
+  - In the god-mode sim, a strong build now levels fastest just after it comes together (10–35 levels a minute), then slows steadily to under 10 a minute by 40:00. Before, leveling kept speeding up, to 40+ a minute and level 900+ by 40:00.
+- **Map crates no longer despawn.**
+  - They stay until you walk over them and no longer blink.
+  - A crate left more than 1,600 px behind every player is quietly cleared (`CRATES.recycleDist`), so the director's 4-crate limit doesn't fill up with boxes nobody will reach.
+  - Supply cases dropped by Brutes and bosses keep their strict 20-second timer.
+
+### Fixed
+- **Map-wide pickup attraction.**
+  - The Scanner pickup pulled every DNA sample on the map. Since v0.11, crates open on contact and one in five holds a Scanner, so whole-map vacuums happened all the time. It now pulls samples within 3× your pickup radius (`PICKUPS.scannerReach`).
+  - Hyperstride's hidden +50% pickup range per stack is gone.
+  - The radius is 80 px and only the magnet stat raises it: Scavenger Pack levels, Sample Collector ranks, and Rin's perk, now one free Scavenger Pack level (same value as before). It has a hard cap of 280 px (`PICKUPS.maxMagnet`).
+
+### Added
+- **Engine limits** (`CONFIG.LIMITS`):
+  - at most 700 live player projectiles
+  - projectile speed capped at 1,400 px/s
+  - weapon area ×5 and 12 projectiles per volley at most
+  - explosions, fire pools, Necrotic Pulse and Flashbang capped at 55% of the larger screen side in each direction (at least 520 px), just past a full screen width
+- **Reset all data** in the Dossier, next to Back.
+  - It confirms twice ("Reset all data?" → Continue → "Last chance" → Erase everything), then clears `localStorage` and reloads with achievements, statistics, bestiary, credits, upgrades, outfits, records and settings back to zero.
+  - Cancel or Esc backs out at either step.
+- `npm run sim` prints the team level at each minute mark (with `god`) and takes `ops:mara,rin` to run only some operatives.
+
 ## [0.11.0] - 2026-11-11
 
 Branch `feature/v0.11-crates-cleanup`.

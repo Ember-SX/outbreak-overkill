@@ -65,7 +65,8 @@
   };
 
   G.flashbang = function (p) {
-    const F = OO.CONFIG.CALLDOWN.flashbang;
+    const F = Object.assign({}, OO.CONFIG.CALLDOWN.flashbang);
+    F.r = this.capAoe(F.r);
     this.addEffect({ kind: 'flashbang', x: p.x, y: p.y, r: F.r, life: 0.55, max: 0.55 });
     this.addLight(p.x, p.y, F.r * 1.5, 1, 0.45);
     OO.Audio.play('flashbang');

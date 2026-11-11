@@ -1,19 +1,21 @@
 /*
- * Infinite Mode (v0.10). Extends OO.Game.prototype, like boss.js and tactical.js.
+ * Infinite Mode (v0.10, reworked in v0.12). Extends OO.Game.prototype, like boss.js and tactical.js.
  *
- * Chosen on the main menu (Mode: Infinite). The run doesn't end at the extraction mark
- * (CONFIG.RUN_LENGTH, 15:00): it goes into overtime and keeps going until the team is overrun or
- * calls the evac from the pause screen. In overtime (m = minutes past the mark):
+ * Chosen on the main menu (Mode: Infinite). The run doesn't end at 15:00 (CONFIG.RUN_LENGTH):
+ * it goes into overtime and keeps going until the team is overrun. There is no evac and no way
+ * to call one. In overtime (m = minutes past 15:00):
  *
- *   - enemy HP, damage and speed compound every minute (CONFIG.INFINITE), the director refills
- *     faster and mixes in Brutes, and stampedes, Stalker hunts, skinner rings and the Hare
- *     Trigger keep coming back (spawner.js);
+ *   - enemy HP and damage grow on a hybrid curve (linear x gentle compound, CONFIG.INFINITE),
+ *     speed creeps up, the director refills faster and mixes in Brutes, and stampedes, Stalker
+ *     hunts, skinner rings and the Hare Trigger keep coming back (spawner.js);
  *   - necrosis: every source of healing weakens, down to a floor;
  *   - the per-hit ceiling still holds: no single hit kills a healthy operative.
  *
  * Leveling never stops. Once an operative's weapons and gear are all maxed ("max rank"), and on
- * every level-up during overtime, the cards offer Apex mutations (OO.APEX): stackable,
- * uncapped (bar a few performance limits) and deliberately game-breaking.
+ * every level-up during overtime, the cards offer Apex mutations (OO.APEX). The heavy ones
+ * (damage, fire rate, projectiles, area, HP, pulses) have hard stack caps; the light, stateless
+ * ones (a credit multiplier, a one-off XP, heal or credit drop) never run out, so there is always
+ * a card to take.
  *
  * Host-authoritative in co-op: the host runs all of this; the client mirrors apex stacks and the
  * overtime flag from the snapshot.
@@ -26,20 +28,24 @@
   const roman = (n) => ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][n] || String(n);
 
   // ================================================================ overtime scaling
-  /** Minutes past the extraction mark (0 outside Infinite Mode). */
+  /** Minutes past 15:00 (0 outside Infinite Mode). */
   G.overtimeMinutes = function (time = this.time) {
     if (!this.infinite) return 0;
     return Math.max(0, (time - OO.CONFIG.RUN_LENGTH) / 60);
   };
+  /** Hybrid growth: a linear part times a gentle compound part (1 at m = 0). */
+  const hybrid = (m, lin, rate) => (1 + lin * m) * Math.pow(1 + rate, m);
   G.overtimeHp = function (d) {
     const m = this.overtimeMinutes();
     if (!m || (d && d.crate)) return 1;
-    const I = OO.CONFIG.INFINITE;
-    return Math.pow(1 + (d && d.boss ? I.hpPerMin * I.bossHpScale : I.hpPerMin), m);
+    const I = OO.CONFIG.INFINITE, k = d && d.boss ? I.bossHpScale : 1;
+    return hybrid(m, I.hpLin * k, I.hpPerMin * k);
   };
   G.overtimeDmg = function (time) {
     const m = this.overtimeMinutes(time);
-    return m ? Math.pow(1 + OO.CONFIG.INFINITE.dmgPerMin, m) : 1;
+    if (!m) return 1;
+    const I = OO.CONFIG.INFINITE;
+    return hybrid(m, I.dmgLin, I.dmgPerMin);
   };
   G.overtimeSpeed = function () {
     const I = OO.CONFIG.INFINITE;
@@ -66,21 +72,11 @@
   G.enterOvertime = function () {
     this.overtime = true;
     this.mark = { credits: this.credits, kills: this.kills };
-    this.banner('Extraction mark passed. The helicopter circles once and leaves. You\'re staying', 'boss');
+    this.banner('Overtime. Nobody is coming. Hold out as long as you can', 'boss');
     OO.Audio.play('boss');
     this.shakeAll(8);
     this.emit(['ot']);
     if (this.progress) this.progress.unlock('no_return');
-  };
-
-  /** Pause-screen "Call extraction" (host or solo, overtime only): end the run as an evacuation. */
-  G.extractNow = function () {
-    if (!this.infinite || !this.overtime || this.mode === 'client') return;
-    if (this.state !== 'paused' && this.state !== 'playing') return;
-    this.state = 'playing';
-    this.netSend({ t: 'resumed' });
-    this._extracted = true;
-    this.endRun(true);
   };
 
   // ================================================================ Apex mutations
@@ -113,15 +109,27 @@
     return out;
   };
 
+  /** True if this mutation can still be taken (stack caps; Overclock is capped per weapon). */
+  G.apexOpen = function (p, id, weaponId) {
+    const a = OO.APEX[id];
+    if (!a) return false;
+    if (id === 'overclock') {
+      const w = p.weapons.find((q) => q.id === weaponId);
+      return !!w && (w.over || 0) < a.max;
+    }
+    return !a.max || (p.apex[id] || 0) < a.max;
+  };
+
   G.rollApex = function (p, n) {
     const pool = [];
     for (const id in OO.APEX) {
       const a = OO.APEX[id];
       if (id === 'overclock') {
-        for (const w of p.weapons) pool.push([{ kind: 'apex', id, weapon: w.id }, a.weight / p.weapons.length]);
+        const open = p.weapons.filter((w) => this.apexOpen(p, id, w.id));
+        for (const w of open) pool.push([{ kind: 'apex', id, weapon: w.id }, a.weight / open.length]);
         continue;
       }
-      if (a.max && (p.apex[id] || 0) >= a.max) continue;
+      if (!this.apexOpen(p, id)) continue;
       pool.push([{ kind: 'apex', id }, a.weight]);
     }
     const out = [];
@@ -141,13 +149,14 @@
       const over = (w ? w.over || 0 : 0) + 1;
       return { icon: w ? w.def.icon : 'might', name: 'Overclock: ' + (w ? w.def.name : opt.weapon), badge: 'Lv ' + ((w ? w.maxLevel : 8) + over), text: a.text.replace('One weapon', 'This weapon'), type: 'Apex mutation', apex: true };
     }
-    return { icon: a.icon, name: a.name + (n > 1 ? ' ' + roman(Math.min(n, 10)) + (n > 10 ? '+' : '') : ''), badge: n > 1 ? 'x' + n : 'Apex', text: a.text, type: 'Apex mutation', apex: true };
+    const badge = a.max ? n + ' / ' + a.max : n > 1 ? 'x' + n : 'Apex';
+    return { icon: a.icon, name: a.name + (a.max && n > 1 ? ' ' + roman(Math.min(n, 10)) : ''), badge, text: a.text, type: 'Apex mutation', apex: true };
   };
 
   /** quiet: no banner (a supply case announces everything it gave in one line). */
   G.applyApex = function (p, opt, quiet) {
     const a = OO.APEX[opt.id];
-    if (!a) return;
+    if (!a || !this.apexOpen(p, opt.id, opt.weapon || (p.weapons[0] && p.weapons[0].id))) return;   // capped: nothing to add
     p.apex[opt.id] = (p.apex[opt.id] || 0) + 1;
     p.apexTotal++;
     p.rs.apex++;
@@ -157,6 +166,9 @@
     }
     this.recalcStats(p);
     if (opt.id === 'titan') this.heal(p, p.stats.maxHp, true);
+    if (opt.id === 'dressing') this.heal(p, p.stats.maxHp * 0.25);
+    if (opt.id === 'cache') { this.credits += 50; this.addText(p.x, p.y - 24, '+50c', 'credit'); }
+    if (opt.id === 'notes') this.team.xp += OO.CONFIG.xpToNext(this.team.level) * 0.25;   // checkLevel() picks it up next tick
     if (!quiet) this.banner((this.coop ? p.name + ': ' : '') + 'Apex mutation: ' + (opt.id === 'overclock' ? 'Overclock' : a.name), 'good');
     if (p.local) this.flashWhite = Math.max(this.flashWhite, 0.2);
   };
@@ -170,13 +182,13 @@
     s.area += 0.25 * n('blast');
     s.maxHp += 40 * n('titan');
     s.regen += 2 * n('regen');
-    s.speed *= 1 + 0.1 * n('sprint');
-    s.magnet *= 1 + 0.5 * n('sprint');
+    s.speed *= 1 + 0.1 * n('sprint');            // (no pickup-range part any more: see PICKUPS.maxMagnet)
     s.lifeOnKill = 0.25 * n('hemophage');
     s.phase = 0.15 * n('phase');
     s.cdRate = 1 + 0.3 * n('hotmic');
     s.pulse = n('pulse');
     s.chain = Math.min(0.3, OO.APEX_FX.chain.chance * n('chain'));
+    s.creditMul = 1 + 0.1 * n('scav');            // uncapped, stateless
   };
 
   /** Hemophage and Volatile Blood, for kills credited to p. */
@@ -197,7 +209,7 @@
     p.pulseT -= dt;
     if (p.pulseT > 0) return;
     p.pulseT = F.every;
-    const r = F.r * (1 + F.rPerStack * (lv - 1));
+    const r = this.capAoe(F.r * (1 + F.rPerStack * (lv - 1)));
     const dmg = this.hordeHp() * F.shamblerHits * (1 + F.perStack * (lv - 1)) * p.stats.might;
     this.addEffect({ kind: 'pulse', x: p.x, y: p.y, r, life: 0.45, max: 0.45 });
     this._killer = p;

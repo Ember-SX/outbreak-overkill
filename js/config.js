@@ -6,10 +6,10 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.11.0';
+  OO.VERSION = '0.12.0';
 
   OO.CONFIG = {
-    RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory); the extraction mark in Infinite Mode
+    RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory); where overtime starts in Infinite Mode
     // Rendering is capped at MAX_FPS frames per second on high-refresh displays. The simulation
     // always runs in fixed 1/60 s steps regardless of the frame rate.
     MAX_FPS: 120,
@@ -17,10 +17,12 @@
     // Ground items. Every pickup has a lifetime (seconds; 0 = never despawns) and blinks for the
     // last `blink` seconds. Past maxGems, the oldest DNA sample on the ground is recycled and its
     // XP rides along with the new drop, so no XP is lost to the cap. Past maxOther, the oldest
-    // non-gem pickup (herb, credits, scanner, flare) is removed. Supply cases never despawn.
-    // Supply crates (the breakable boxes): pass-through (they block nothing), opened by walking
-    // over them, gone after `life` seconds (blinking for the last PICKUPS.blink).
-    CRATES: { life: 20 },
+    // non-gem pickup (herb, credits, scanner, flare) is removed. Dropped supply cases despawn
+    // after life.case seconds.
+    // Supply crates (the wooden boxes on the map): pass-through (they block nothing), opened by
+    // walking over them, and they never time out. A crate left more than recycleDist from every
+    // operative is quietly cleared off-screen so the director can place fresh ones nearby.
+    CRATES: { recycleDist: 1600 },
     // Supply cases (Brute and boss drops): when an operative has nothing left to level, each roll
     // becomes an Apex mutation plus apexXp of a level in XP.
     CASES: { apexXp: 0.3 },
@@ -30,7 +32,18 @@
       // Supply cases auto-collect on contact (no case screen) and despawn after 20 s like everything else.
       life: { xp: 60, herb: 45, credit: 45, magnet: 45, bomb: 45, case: 20 },
       blink: 5,
+      // Pickup magnetism comes only from the operative's pickup radius: PLAYER.pickupRange raised by
+      // Magnetic upgrade levels alone (Scavenger Pack +30% per level, including Rin's free level,
+      // and the Armory's Sample Collector +15% per rank), capped at maxMagnet. The scanner pickup
+      // pulls DNA within scannerReach x that radius instead of the whole map.
+      maxMagnet: 280,
+      scannerReach: 3,
     },
+    // Engine limits, so deep Infinite runs stay smooth. Player projectiles past maxProjectiles are
+    // not fired; no projectile flies faster than maxProjectileSpeed; weapon area is capped at
+    // maxArea; and no blast, pool, shockwave or flashbang reaches past aoeScreen x the wider of the
+    // two players' view widths (just beyond a full screen across).
+    LIMITS: { maxProjectiles: 700, maxProjectileSpeed: 1400, maxArea: 5, maxAmount: 12, aoeScreen: 0.55, aoeMin: 520 },
     MAX_WEAPONS: 6,
     MAX_PASSIVES: 6,
     LIGHT_RADIUS: 330,            // flashlight radius in world units
@@ -113,17 +126,20 @@
       meddrone:  { cd: 70, heal: 0.35, dur: 4 },
       airstrike: { cd: 90 },
     },
-    // Infinite Mode: the run doesn't end at the extraction mark (RUN_LENGTH). From there on
-    // ("overtime", m = minutes past the mark) everything compounds every minute, forever:
-    //   enemy HP x(1 + hpPerMin)^m (bosses x(1 + hpPerMin * bossHpScale)^m), damage x(1 + dmgPerMin)^m,
-    //   speed +speedPerMin per minute up to +maxSpeed, the director refills faster and mixes in
-    //   Brutes, and scripted pressure repeats (stampedes, Stalker hunts, skinner rings, the Hare Trigger).
+    // Infinite Mode: the run doesn't stop at 15:00 (RUN_LENGTH); it goes on until the team is
+    // overrun. From there on ("overtime", m = minutes past 15:00) enemy HP and damage follow a
+    // hybrid curve, a linear part times a gentle compound part:
+    //   HP  x (1 + hpLin * m) * (1 + hpPerMin)^m     (bosses: both rates x bossHpScale)
+    //   DMG x (1 + dmgLin * m) * (1 + dmgPerMin)^m
+    // 0:00-15:00 is untouched (m = 0). Speed rises +speedPerMin per minute up to +maxSpeed, the
+    // director refills faster and mixes in Brutes, and scripted pressure repeats (stampedes,
+    // Stalker hunts, skinner rings, the Hare Trigger).
     //   Necrosis: all healing is multiplied by max(minHeal, 1 - necrosisPerMin * m).
     // The per-hit ceiling (HIT_CEILING) still holds: deaths come from many hits, never one.
     // Past max rank (every weapon and gear slot maxed) and on every overtime level-up, Apex
-    // mutations (OO.APEX) are offered: stackable, uncapped, game-breaking.
+    // mutations (OO.APEX) are offered: heavy ones have hard stack caps, light ones never run out.
     INFINITE: {
-      hpPerMin: 0.16, bossHpScale: 0.6, dmgPerMin: 0.09,
+      hpLin: 0.1, hpPerMin: 0.05, bossHpScale: 0.6, dmgLin: 0.06, dmgPerMin: 0.03,
       speedPerMin: 0.02, maxSpeed: 0.5,
       necrosisPerMin: 0.03, minHeal: 0.3,
       refillPerMin: 0.08,          // spawn interval / (1 + refillPerMin * m), down to half
@@ -134,9 +150,9 @@
       // minute, 1 credit per overtimeKillsPerCredit kills and overtimePickupShare of credits picked up.
       overtimeCredits: 15, overtimeKillsPerCredit: 200, overtimePickupShare: 0.1,
       apexInOvertime: 1,           // Apex options guaranteed on each level-up during overtime
-      // Past xpFrom, each level costs xpGrowth times more than the last (Infinite Mode only), so a
-      // runaway build still levels steadily instead of opening a card screen every few seconds.
-      xpFrom: 60, xpGrowth: 1.02,
+      // Past xpFrom (Infinite Mode only), each level costs (1 + xpSlope * (level - xpFrom)) times the
+      // standard curve: a steady, linear slow-down rather than an exponential wall.
+      xpFrom: 60, xpSlope: 0.02,
     },
     PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.45 },
     // Damage reduction from Kevlar Vest (per rank) and Trauma Plates (per Armory rank), capped.
@@ -357,23 +373,32 @@
   ];
 
   // ---------------------------------------------------------------- APEX MUTATIONS (Infinite Mode)
-  // Offered past max rank and during overtime. Stackable; `max` only where more would break the
-  // frame rate (projectile counts) or the game in a dull way (permanent invulnerability).
-  // Numbers per stack; recalcStats() and Weapon.getStats() apply them.
+  // Offered past max rank and during overtime. Numbers per stack; recalcStats() and
+  // Weapon.getStats() apply them.
+  //   max:     hard stack cap. Every mutation that adds projectiles, fire rate, area, damage, HP or
+  //            per-tick work is capped (Overclock per weapon), so a deep run can't drag the frame rate.
+  //   uncapped (no max): light, stateless picks (a credit multiplier, one-off XP, heal or credits). Once
+  //            the capped ones are full these fill the hand, so there is always something to draft.
+  //            Field Notes' XP is a share of the *standard* curve, so it shrinks as Infinite levels slow down.
   OO.APEX = {
-    overclock: { name: 'Overclock',          icon: null,     weight: 1.6, text: 'One weapon past its max level: +20% damage, 6% faster, +1 projectile every second overclock.' },
-    berserk:   { name: 'Berserker Gene',     icon: 'might',  weight: 1,   text: '+25% damage for every weapon.' },
-    adrenal:   { name: 'Adrenal Overdrive',  icon: 'cooldown', weight: 1, text: 'Every weapon fires 10% faster.' },
+    overclock: { name: 'Overclock',          icon: null,     weight: 1.6, max: 5, text: 'One weapon past its max level: +20% damage, 6% faster, +1 projectile every second overclock. Up to 5 per weapon.' },
+    berserk:   { name: 'Berserker Gene',     icon: 'might',  weight: 1,   max: 8, text: '+25% damage for every weapon.' },
+    adrenal:   { name: 'Adrenal Overdrive',  icon: 'cooldown', weight: 1, max: 6, text: 'Every weapon fires 10% faster.' },
     swarm:     { name: 'Hive Swarm',         icon: 'amount', weight: 0.7, max: 4, text: '+1 projectile, blade or bolt for every weapon.' },
-    blast:     { name: 'Blast Radius',       icon: 'area',   weight: 0.9, text: '+25% weapon area.' },
-    titan:     { name: 'Titan Frame',        icon: 'maxhp',  weight: 1,   text: '+40 max HP and a full heal (necrosis can\'t stop this one).' },
-    regen:     { name: 'Regenerator Cells',  icon: 'herb',   weight: 0.9, text: '+2 HP per second.' },
-    hemophage: { name: 'Hemophage',          icon: 'dna',    weight: 0.8, text: 'Every kill restores 0.25 HP.' },
-    sprint:    { name: 'Hyperstride',        icon: 'speed',  weight: 0.7, max: 5, text: '+10% move speed and +50% pickup range.' },
+    blast:     { name: 'Blast Radius',       icon: 'area',   weight: 0.9, max: 6, text: '+25% weapon area.' },
+    titan:     { name: 'Titan Frame',        icon: 'maxhp',  weight: 1,   max: 8, text: '+40 max HP and a full heal (necrosis can\'t stop this one).' },
+    regen:     { name: 'Regenerator Cells',  icon: 'herb',   weight: 0.9, max: 8, text: '+2 HP per second.' },
+    hemophage: { name: 'Hemophage',          icon: 'dna',    weight: 0.8, max: 6, text: 'Every kill restores 0.25 HP.' },
+    sprint:    { name: 'Hyperstride',        icon: 'speed',  weight: 0.7, max: 5, text: '+10% move speed.' },
     phase:     { name: 'Phase Skin',         icon: 'armor',  weight: 0.6, max: 4, text: '+0.15 s of invulnerability after every hit.' },
-    pulse:     { name: 'Necrotic Pulse',     icon: 'pulse',  weight: 0.8, text: 'Every 4 s a shockwave hits the infected around you. More stacks: harder hits, wider ring.' },
+    pulse:     { name: 'Necrotic Pulse',     icon: 'pulse',  weight: 0.8, max: 5, text: 'Every 4 s a shockwave hits the infected around you. More stacks: harder hits, wider ring.' },
     chain:     { name: 'Volatile Blood',     icon: 'barrel', weight: 0.6, max: 5, text: '+6% chance for an infected you kill to burst like a fuel drum.' },
     hotmic:    { name: 'Hot Mic',            icon: 'beacon', weight: 0.6, max: 5, text: 'Your call-down recharges 30% faster.' },
+    // uncapped, stateless
+    scav:      { name: "Scavenger's Cut",    icon: 'credits', weight: 0.5, text: '+10% credits from every credit pickup.' },
+    notes:     { name: 'Field Notes',        icon: 'dna',    weight: 0.5, text: 'Study the samples: a quarter of a level in XP, right now.' },
+    dressing:  { name: 'Field Dressing',     icon: 'herb',   weight: 0.5, text: 'Patch up now: heal 25% of max HP.' },
+    cache:     { name: 'Supply Cache',       icon: 'credits', weight: 0.5, text: '+50 credits, right now.' },
   };
   OO.APEX_FX = {
     overclockDmg: 0.2, overclockCd: 0.94,
@@ -406,7 +431,7 @@
     },
     rin: {
       name: 'Rin Sato', role: 'Helix lab technician', weapon: 'tesla',
-      bonus: { speed: 0.1, magnet: 0.3 }, bonusText: '+10% speed, +30% pickup range', vest: '#5a5f66',
+      bonus: { speed: 0.1, magnetLv: 1 }, bonusText: '+10% speed, +1 Scavenger Pack level', vest: '#5a5f66',
     },
   };
 

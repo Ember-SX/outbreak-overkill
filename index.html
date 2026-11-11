@@ -179,6 +179,15 @@
       <div id="archive-stats" role="tabpanel" aria-labelledby="tab-stats" hidden></div>
       <div class="panel-actions">
         <button id="archive-back" class="btn btn-primary" type="button">Back</button>
+        <button id="archive-reset" class="btn btn-ghost btn-danger" type="button">Reset all data</button>
+      </div>
+      <div id="reset-confirm" class="reset-confirm" role="alertdialog" aria-labelledby="reset-title" aria-describedby="reset-text" hidden>
+        <p id="reset-title" class="reset-title"></p>
+        <p id="reset-text" class="reset-text"></p>
+        <div class="reset-actions">
+          <button id="reset-cancel" class="btn btn-ghost" type="button">Cancel</button>
+          <button id="reset-go" class="btn btn-ghost btn-danger" type="button"></button>
+        </div>
       </div>
     </div>
   </section>
@@ -218,7 +227,6 @@
       </div>
       <div class="panel-actions">
         <button id="btn-resume" class="btn btn-primary" type="button">Resume</button>
-        <button id="btn-extract" class="btn btn-ghost btn-extract" type="button" hidden>Call extraction</button>
         <button id="btn-quit" class="btn btn-ghost" type="button">Abandon run</button>
       </div>
     </div>

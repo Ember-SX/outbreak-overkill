@@ -75,7 +75,7 @@
       ranks: [[3600, 'bronze'], [5 * 3600, 'silver'], [12 * 3600, 'gold'], [24 * 3600, 'platinum'], [48 * 3600, 'diamond']] },
 
     // Infinite Mode
-    { id: 'no_return', cat: 'infinite', tier: 'silver', icon: 'heli', name: 'Point of No Return', text: 'Stay past the extraction mark in Infinite Mode.' },
+    { id: 'no_return', cat: 'infinite', tier: 'silver', icon: 'heli', name: 'Point of No Return', text: 'Hold out into overtime (past 15:00) in Infinite Mode.' },
     { id: 'into_dark', cat: 'infinite', icon: 'stalker', name: 'Into the Dark', text: 'Survive to {n} in Infinite Mode.', track: 'bestInfinite', fmt: 'time',
       ranks: [[20 * 60, 'bronze'], [25 * 60, 'silver'], [30 * 60, 'gold'], [40 * 60, 'platinum'], [50 * 60, 'diamond'], [60 * 60, 'biohazard']] },
     { id: 'apex', cat: 'infinite', icon: 'apex', name: 'Apex Predator', text: 'Take {n} Apex mutations in a single run.', track: 'bestApex',
