@@ -144,7 +144,8 @@
     return { icon: a.icon, name: a.name + (n > 1 ? ' ' + roman(Math.min(n, 10)) + (n > 10 ? '+' : '') : ''), badge: n > 1 ? 'x' + n : 'Apex', text: a.text, type: 'Apex mutation', apex: true };
   };
 
-  G.applyApex = function (p, opt) {
+  /** quiet: no banner (a supply case announces everything it gave in one line). */
+  G.applyApex = function (p, opt, quiet) {
     const a = OO.APEX[opt.id];
     if (!a) return;
     p.apex[opt.id] = (p.apex[opt.id] || 0) + 1;
@@ -156,7 +157,7 @@
     }
     this.recalcStats(p);
     if (opt.id === 'titan') this.heal(p, p.stats.maxHp, true);
-    this.banner((this.coop ? p.name + ': ' : '') + 'Apex mutation: ' + (opt.id === 'overclock' ? 'Overclock' : a.name), 'good');
+    if (!quiet) this.banner((this.coop ? p.name + ': ' : '') + 'Apex mutation: ' + (opt.id === 'overclock' ? 'Overclock' : a.name), 'good');
     if (p.local) this.flashWhite = Math.max(this.flashWhite, 0.2);
   };
 

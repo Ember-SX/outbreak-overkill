@@ -578,6 +578,8 @@
     }
 
     drawCrate(ctx, e) {
+      // e.level = seconds left (host and co-op client alike): blink before it despawns
+      if (e.level <= OO.CONFIG.PICKUPS.blink && Math.floor(this.g.time * 8) % 2 === 0) return;
       ctx.save();
       ctx.translate(e.x, e.y);
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -1186,8 +1188,10 @@
     }
 
     /**
-     * Stampede warning lane, drawn over the darkness: a red band with chevrons running in the
-     * direction of travel. The two-slot gap in the row is left unshaded. Pulses faster once locked.
+     * Stampede warning lane, drawn over the darkness: one solid red band exactly as wide as the
+     * Burster row and as long as its run, with edge lines and chevrons in the direction of travel.
+     * It is fixed in place from the first frame (the lane never tracks anyone). Pulses faster in
+     * the last STAMPEDE.lockAt seconds.
      */
     drawStampedeLanes(ctx) {
       const g = this.g, t = g.time, sp = OO.CONFIG.STAMPEDE.spacing;
@@ -1199,13 +1203,13 @@
         ctx.save();
         ctx.translate(L.sx, L.sy);
         ctx.rotate(ang);
-        // one band per row slot (local x = direction of travel, local y = across the row)
-        for (let j = 0; j < st.count; j++) {
-          if (j === st.gap || j === st.gap + 1) continue;
-          const y = (j - (st.count - 1) / 2) * sp;
-          ctx.fillStyle = `rgba(210,30,25,${(0.05 + k * 0.1) + pulse * 0.06})`;
-          ctx.fillRect(0, y - sp / 2, len, sp);
-        }
+        // one continuous band covering the whole row (local x = direction of travel, local y = across)
+        const halfW = (st.count * sp) / 2;
+        ctx.fillStyle = `rgba(210,30,25,${(0.05 + k * 0.1) + pulse * 0.06})`;
+        ctx.fillRect(0, -halfW, len, halfW * 2);
+        ctx.strokeStyle = `rgba(255,60,50,${0.35 + k * 0.35 + (st.locked ? pulse * 0.25 : 0)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, -halfW); ctx.lineTo(len, -halfW); ctx.moveTo(0, halfW); ctx.lineTo(len, halfW); ctx.stroke();
         // chevrons
         ctx.strokeStyle = `rgba(255,80,60,${0.18 + k * 0.3 + (st.locked ? pulse * 0.3 : 0)})`;
         ctx.lineWidth = 3;

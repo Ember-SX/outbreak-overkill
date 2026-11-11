@@ -365,25 +365,8 @@ kbd {
 .card-name { font-weight: 700; font-size: 22px; line-height: 1.05; }
 .card-text { font-size: 14px; line-height: 1.4; color: #b9cbc6; }
 
-/* ------------------------------------------------------------------ chest, pause, results */
-.chest-list, .build-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.build-list { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 18px; }
-.chest-list li {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  gap: 12px;
-  align-items: start;
-  font-size: 14px;
-  color: #b9cbc6;
-  animation: deal 0.3s ease-out backwards;
-}
-.chest-list li:nth-child(2) { animation-delay: 0.15s; }
-.chest-list li:nth-child(3) { animation-delay: 0.3s; }
-.chest-list li:nth-child(4) { animation-delay: 0.45s; }
-.chest-list strong { font-size: 18px; color: var(--bone); }
-.chest-list em { font-style: normal; font-family: var(--font-mono); font-size: 11px; color: var(--hazard); }
-.chest-list img { width: 28px; height: 28px; }
-.chest-list li.evo strong, .chest-list li.evo em { color: #ff7a52; }
+/* ------------------------------------------------------------------ pause, results */
+.build-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 18px; }
 
 .build-list li { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: center; font-size: 14px; }
 .build-list img { width: 24px; height: 24px; }
@@ -561,28 +544,7 @@ kbd {
 .coop-relay-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 .coop-relay-actions { display: flex; align-items: center; gap: 8px; }
 
-/* ------------------------------------------------------------------ toast, HUD buttons, banner */
-.toast {
-  position: fixed;
-  z-index: 6;
-  right: 10px;
-  top: calc(64px + env(safe-area-inset-top, 0px));
-  width: min(260px, calc(100% - 20px));
-  padding: 10px 12px;
-  background: var(--glass);
-  border: 1px solid var(--wire);
-  border-left: 3px solid var(--hazard);
-  font-size: 13px;
-  pointer-events: none;
-}
-.toast p { margin: 0 0 4px; display: flex; align-items: center; gap: 6px; }
-.toast img { width: 20px; height: 20px; }
-.toast em { font-style: normal; font-family: var(--font-mono); font-size: 10px; color: var(--hazard); }
-.toast .evo strong, .toast .evo em { color: #ff7a52; }
-.toast-title { font-size: 12px; font-weight: 600; color: var(--hazard); }
-.toast.show { animation: toast 4.5s ease-out forwards; }
-@keyframes toast { 0% { opacity: 0; transform: translateX(12px); } 6% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
-
+/* ------------------------------------------------------------------ HUD buttons, banner */
 .hud-buttons {
   position: fixed;
   z-index: 5;

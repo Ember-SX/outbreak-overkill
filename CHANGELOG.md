@@ -2,6 +2,40 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
+## [0.11.0] - 2026-11-11
+
+Branch `feature/v0.11-crates-cleanup`.
+
+### Changed
+- **Supply cases apply instantly on contact.** There's no case screen or co-op toast any more: the pause screen, the `chest` state and the `chest` message are all gone.
+  - A ready evolution comes first, then each roll levels up something you own.
+  - When nothing is left to level, a roll becomes an Apex mutation plus 30% of a level in XP. This works in Standard as well as Infinite Mode.
+  - Floating text and a one-line banner report the haul.
+  - Cases are pulled in by pickup range and despawn after 20 s, blinking for the last 5.
+- **Supply crates** (the wooden boxes) are pass-through: they no longer push infected around or stop bullets, and nothing can damage them.
+  - Walking over one opens it and its contents go straight to you.
+  - They despawn after 20 s and blink first. The time left rides in the co-op snapshot, so the partner sees the blink too.
+- **Body Count** is now a single-run ranked achievement: 1,000 / 3,000 / 7,500 / 15,000 / 30,000 / 50,000 kills.
+  - The Sentry Turret now unlocks at Body Count II, the old 3,000-kill goal.
+  - A save with the old one-off Body Count (or the v0.9 Pest Control or masteries) gets every rank up to its old goal, so nothing already earned is lost.
+  - That makes 88 unlocks in all.
+- **Achievements no longer show unlock dates.** A maxed ranked achievement just says "Max rank".
+- **New painted portraits:** all 15 outfit images in `assets/portraits` replaced with the owner's new painted set. Mara's and Rin's swimsuit portraits no longer have sunglasses or goggles.
+- **Outfit descriptions** (all 15, in `js/characters.js`) rewritten against the new portraits:
+  - Mara's patrol vest carries the badge.
+  - Night shift has no cap, and its chest harness is now a plate carrier.
+  - Off the books: white tee and a hip holster, no shoulder holster.
+  - Dex wears a skull cap on Black site and carries a duffel bag in street clothes.
+  - Rin's field kit has a thigh holster and no knee pads.
+  - Her lab coat is over a navy turtleneck.
+  - Her swimsuit has no white trim, and she keeps the earpiece.
+- **In-game sprites** follow suit: no cap on Night shift, a plate carrier and hip holster where the portraits show them, and no white trim (earpiece instead) on Rin's swimsuit.
+- **Removed text:** the wardrobe line "Each one costs 1,800 credits, about three full evacuations. Your partner sees your outfit in co-op." and "Evacuated N of M runs" from the main-menu records line.
+- **Stampede warnings show exactly the charge.**
+  - A single solid band the full width of the row, with edge lines and chevrons along the line of travel.
+  - The row no longer has a two-slot gap.
+  - The lane is fixed when the warning appears, aimed where the anchor player stood. It no longer tracks anyone; the last 0.8 s only change the pulse and the shriek.
+
 ## [0.10.0] - 2026-11-10
 
 Branch `feature/v0.10-infinite-mode`.

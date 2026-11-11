@@ -13,7 +13,7 @@
       this.lockUntil = 0;
       this.selectedChar = U.storage.get('oo.char', 'mara');
       if (!OO.CHARACTERS[this.selectedChar]) this.selectedChar = 'mara';
-      this.screens = ['screen-menu', 'screen-levelup', 'screen-chest', 'screen-pause', 'screen-results', 'screen-armory', 'screen-coop', 'screen-dossier'];
+      this.screens = ['screen-menu', 'screen-levelup', 'screen-pause', 'screen-results', 'screen-armory', 'screen-coop', 'screen-dossier'];
 
       this.buildMenu();
       this.buildDifficulty();
@@ -38,7 +38,6 @@
       $('btn-extract').addEventListener('click', () => this.g.extractNow());
       $('btn-retry').addEventListener('click', () => this.retry());
       $('btn-menu').addEventListener('click', () => this.g.quitToMenu());
-      $('chest-ok').addEventListener('click', () => this.g.closeChest());
       $('btn-pause').addEventListener('click', () => (this.g.state === 'paused' ? this.g.resume() : this.g.pause()));
       $('btn-mute').addEventListener('click', () => { OO.Audio.init(); this.g.toggleMute(); });
       this.bindCoop();
@@ -122,17 +121,6 @@
       $('screen-coop').hidden = false;
     }
 
-    /** Co-op supply case: a toast instead of a pause screen, so your partner keeps playing. */
-    chestToast(results, credits) {
-      const el = $('toast');
-      el.innerHTML = '<p class="toast-title">Supply case</p>' + results.map((d) =>
-        `<p class="${d.evolved ? 'evo' : ''}"><img src="${OO.Icons.url(d.icon, 20, d.evolved ? '#ff6f4a' : '#e3a33b')}" alt=""> <strong>${esc(d.name)}</strong> <em>${esc(d.badge)}</em></p>`).join('')
-        + `<p><img src="${OO.Icons.url('credits', 20, '#e3a33b')}" alt=""> <strong>+${credits} credits</strong></p>`;
-      el.hidden = false;
-      el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
-      clearTimeout(this._toastT);
-      this._toastT = setTimeout(() => { el.hidden = true; }, 4500);
-    }
 
     // ------------------------------------------------------------ menu
     buildMenu() {
@@ -254,7 +242,7 @@
       $('banner').hidden = true;   // a run's last banner shouldn't hang over the menu
       const r = this.g.records;
       $('records').textContent = r.runs
-        ? `Longest survival ${U.formatTime(r.bestTime)} · Most kills ${r.bestKills} · Evacuated ${r.wins} of ${r.runs} runs`
+        ? `Longest survival ${U.formatTime(r.bestTime)} · Most kills ${r.bestKills}`
         : 'No runs on file yet.';
       this.refreshDossier();
       $('screen-menu').hidden = false;
@@ -341,7 +329,6 @@
     /** Wardrobe: five outfits per operative. Buy with banked credits, then equip. */
     renderWardrobe() {
       const g = this.g, cid = this.wardrobeChar in OO.CHARACTERS ? this.wardrobeChar : this.selectedChar;
-      $('skin-cost').textContent = OO.SKIN_COST.toLocaleString();
       const seg = $('wardrobe-chars');
       seg.innerHTML = '';
       for (const id in OO.CHARACTERS) {
@@ -432,17 +419,6 @@
       $('screen-levelup').hidden = false;
     }
 
-    // ------------------------------------------------------------ supply case
-    showChest(results, credits) {
-      const ul = $('chest-list');
-      ul.innerHTML = results.map((d) => `
-        <li class="${d.evolved ? 'evo' : ''}"><img src="${OO.Icons.url(d.icon, 28, d.evolved ? '#ff6f4a' : '#e3a33b')}" alt="">
-          <span><strong>${esc(d.name)}</strong> <em>${esc(d.badge)}</em><br>${esc(d.text)}</span></li>`).join('')
-        + `<li><img src="${OO.Icons.url('credits', 28, '#e3a33b')}" alt=""><span><strong>+${credits} credits</strong></span></li>`;
-      this.lockUntil = performance.now() + 400;
-      $('screen-chest').hidden = false;
-    }
-
     // ------------------------------------------------------------ pause
     showPause() {
       const p = this.g.player;
@@ -522,8 +498,6 @@
         if (n >= 1 && n <= this.options.length) this.pick(n - 1);
         else if (!locked && !this.waiting && (e.key === 'r' || e.key === 'R')) this.g.requestReroll();
         else if (!locked && !this.waiting && (e.key === 'x' || e.key === 'X')) this.g.requestSkip();
-      } else if (s === 'chest') {
-        if (!locked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); this.g.closeChest(); }
       } else if (s === 'menu' && !$('screen-menu').hidden) {
         if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') this.startRun();
         const ids = Object.keys(OO.CHARACTERS);
