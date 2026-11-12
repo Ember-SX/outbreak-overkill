@@ -6,6 +6,9 @@
 (function (OO) {
   'use strict';
 
+  // Nightmare palette (v0.13): HUD accent, darkness tint, colour grade.
+  const NM = { accent: '#e5484d', accentDeep: '#5a0d14', stable: '#f09a86', dark: 'rgba(12,0,3,0.92)', grade: 'rgb(255,128,120)' };
+
   const U = OO.U;
   const TAU = Math.PI * 2;
   const FONT_DISPLAY = '"Big Shoulders Stencil Display", Impact, "Arial Narrow", sans-serif';
@@ -218,8 +221,11 @@
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       ctx.fillStyle = '#0d0f0e';
       ctx.fillRect(0, 0, this.w, this.h);
+      const nm = g.nightmare;
+      this.acc = nm ? NM.accent : '#52e6c6';      // HUD accent: containment teal, or blood red in Nightmare
+      if (this.nmClass !== nm) { this.nmClass = nm; document.body.classList.toggle('nightmare', nm); }
 
-      if (!g.player) { this.renderMenuBackdrop(); return; }
+      if (!g.player) { this.renderMenuBackdrop(); if (nm) this.nightmareFx(g.menuTime, false, true); return; }
 
       const p = g.player, z = g.zoom;
       let sx = 0, sy = 0;
@@ -275,6 +281,7 @@
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       if (!p.downed && fx === 'high') this.scenery.drawMotes(ctx, (p.x - camX) * z + sx, (p.y - camY) * z + sy, p.faceAngle, 520 * z, g.time);
       this.scenery.drawPost(ctx, this.w, this.h, g.time, g.reducedMotion, fx === 'high');
+      if (nm) this.nightmareFx(g.time, fx === 'high');
       this.drawScreenFx();
       if (g.state !== 'results') this.drawHud();
       this.g.ui.updateCalldown();
@@ -1374,7 +1381,7 @@
 
       d.globalCompositeOperation = 'source-over';
       d.clearRect(0, 0, W, H);
-      d.fillStyle = 'rgba(2,9,11,0.88)';
+      d.fillStyle = g.nightmare ? NM.dark : 'rgba(2,9,11,0.88)';
       d.fillRect(0, 0, W, H);
       d.globalCompositeOperation = 'destination-out';
 
@@ -1400,6 +1407,59 @@
     }
 
     // ---------------------------------------------------------------- screen space
+    /**
+     * Nightmare look, a screen-space pass over the finished world (and the menu backdrop):
+     * a blood-red grade, a heavy red-black vignette that throbs with a slow heartbeat, heavy film
+     * grain, and every few seconds a brief dark flicker. Cheap (a few full-screen fills); the
+     * desaturation step only runs at the high FX level. Reduced motion freezes the grain and the
+     * flicker. On the menu (menu = true) only the grade runs: the DOM overlay (css) does the rest.
+     */
+    nightmareFx(t, high, menu) {
+      const ctx = this.ctx, w = this.w, h = this.h, reduced = this.g.reducedMotion;
+      ctx.save();
+      if (high) {   // drain the colour first, so the red grade reads as blood, not as a filter
+        ctx.globalCompositeOperation = 'saturation';
+        ctx.fillStyle = 'rgba(128,128,128,0.45)'; ctx.fillRect(0, 0, w, h);
+      }
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = NM.grade; ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'source-over';
+      if (menu) { ctx.restore(); return; }
+      // vignette (cached per size), pulsing at ~54 bpm
+      if (!this.nmVig || this.nmVig.w !== w || this.nmVig.h !== h) {
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(w / 2)); c.height = Math.max(1, Math.round(h / 2));
+        const x = c.getContext('2d'), cx = c.width / 2, cy = c.height / 2;
+        const gr = x.createRadialGradient(cx, cy, Math.min(cx, cy) * 0.45, cx, cy, Math.hypot(cx, cy));
+        gr.addColorStop(0, 'rgba(40,0,4,0)'); gr.addColorStop(0.55, 'rgba(48,0,6,0.45)'); gr.addColorStop(1, 'rgba(22,0,2,0.94)');
+        x.fillStyle = gr; x.fillRect(0, 0, c.width, c.height);
+        this.nmVig = { canvas: c, w, h };
+      }
+      const beat = reduced ? 0 : Math.pow(Math.max(0, Math.sin(t * 5.6)), 12);
+      ctx.globalAlpha = 0.88 + 0.12 * beat;
+      ctx.drawImage(this.nmVig.canvas, 0, 0, w, h);
+      // heavy grain: the scenery grain, twice, with its own jitter
+      const sc = this.scenery;
+      if (sc && sc.grain) {
+        if (!this.nmGrain) this.nmGrain = ctx.createPattern(sc.grain, 'repeat');
+        const j = reduced ? 0 : Math.floor(t * 30);
+        ctx.fillStyle = this.nmGrain;
+        for (let k = 0; k < 2; k++) {
+          ctx.globalAlpha = 0.9;
+          ctx.save();
+          ctx.translate(-((j + k * 7) * 61) % 160, -((j + k * 13) * 29) % 160);
+          ctx.fillRect(0, 0, w + 160, h + 160);
+          ctx.restore();
+        }
+      }
+      // flicker: a dark blink every few seconds
+      if (!reduced) {
+        const f = (t * 0.37) % 1;
+        if (f < 0.025 || (f > 0.05 && f < 0.06)) { ctx.globalAlpha = 0.35; ctx.fillStyle = '#080001'; ctx.fillRect(0, 0, w, h); }
+      }
+      ctx.restore();
+    }
+
     drawScreenFx() {
       const g = this.g, p = g.player, ctx = this.ctx, w = this.w, h = this.h;
       if (p.downed) {
@@ -1431,7 +1491,7 @@
       const ctx = this.ctx, b = 8;
       ctx.fillStyle = 'rgba(5,14,16,0.78)'; ctx.fillRect(x, y, w, h);
       ctx.strokeStyle = 'rgba(46,90,95,0.55)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-      ctx.fillStyle = accent || '#52e6c6';
+      ctx.fillStyle = accent || this.acc || '#52e6c6';
       for (const [cx, cy, sx, sy] of [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]]) {
         ctx.fillRect(sx > 0 ? cx : cx - b, sy > 0 ? cy : cy - 1, b, 1);
         ctx.fillRect(sx > 0 ? cx : cx - 1, sy > 0 ? cy : cy - b, 1, b);
@@ -1442,7 +1502,7 @@
     vitals(p) {
       const k = p.stats && p.stats.maxHp ? U.clamp(p.hp / p.stats.maxHp, 0, 1) : 0;
       if (p.downed) return { k: 0, status: 'DOWN', color: '#ff3b4e', bpm: 0, flat: true };
-      if (k > 0.6) return { k, status: 'STABLE', color: '#52e6c6', bpm: Math.round(66 + (1 - k) * 40), flat: false };
+      if (k > 0.6) return { k, status: 'STABLE', color: this.g.nightmare ? NM.stable : '#52e6c6', bpm: Math.round(66 + (1 - k) * 40), flat: false };
       if (k > 0.3) return { k, status: 'STRAINED', color: '#f2b23a', bpm: Math.round(96 + (0.6 - k) * 90), flat: false };
       return { k, status: 'CRITICAL', color: '#ff3b4e', bpm: Math.round(128 + (0.3 - k) * 140), flat: false };
     }
@@ -1492,7 +1552,7 @@
       const T = g.team, prog = U.clamp(T.xp / T.xpNext, 0, 1);
       ctx.fillStyle = 'rgba(5,14,16,0.9)'; ctx.fillRect(0, 0, W, 6);
       const xg = ctx.createLinearGradient(0, 0, W * prog, 0);
-      xg.addColorStop(0, '#1d6f62'); xg.addColorStop(1, '#52e6c6');
+      xg.addColorStop(0, this.acc === '#52e6c6' ? '#1d6f62' : NM.accentDeep); xg.addColorStop(1, this.acc);
       ctx.fillStyle = xg; ctx.fillRect(0, 0, W * prog, 6);
       ctx.fillStyle = 'rgba(5,14,16,0.7)';
       for (let x = 24; x < W; x += 24) ctx.fillRect(x, 0, 1, 6);
@@ -1502,7 +1562,7 @@
       const vx = 12, vy = 14, vw = narrow ? 200 : 250;
       const vh = this.drawVitals(vx, vy, vw, p, true);
       ctx.font = `700 11px ${FONT_MONO}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.fillStyle = '#52e6c6';
+      ctx.fillStyle = this.acc;
       const lvl = 'LV ' + T.level;
       ctx.fillText(lvl, vx + vw + 8, vy + 2);
 
@@ -1526,38 +1586,36 @@
           ctx.fillStyle = '#ff7ad9'; ctx.fillText('+' + w.over, x + slot - 2, sy0 + 1);
         }
       });
-      p.passiveOrder.forEach((id, i) => drawSlot(vx + i * (slot + gap), sy0 + slot + gap, OO.PASSIVES[id].icon, p.passives[id], OO.PASSIVES[id].max, '#52e6c6'));
+      p.passiveOrder.forEach((id, i) => drawSlot(vx + i * (slot + gap), sy0 + slot + gap, OO.PASSIVES[id].icon, p.passives[id], OO.PASSIVES[id].max, this.acc));
       if (g.players.length > 1) this.drawPartnerPanel(sy0 + (slot + gap) * 2 + 6, vw);
 
-      // Mission clock, centre top
+      // Mission clock, centre top. Infinite Mode shows the timer and nothing else (no overtime or
+      // evac text); Standard keeps the "Evac in" countdown and the strain line.
       const remaining = OO.CONFIG.RUN_LENGTH - g.time;
       const over = g.infinite && remaining <= 0;
-      const cw = narrow ? 120 : 150, cx = W / 2 - cw / 2, cy = 14;
-      this.plate(cx, cy, cw, 44, over ? '#ff3b4e' : remaining < 60 ? '#f2b23a' : '#52e6c6');
+      const cw = narrow ? 120 : 150, cx = W / 2 - cw / 2, cy = 14, ch = g.infinite ? 36 : 44;
+      this.plate(cx, cy, cw, ch, over ? '#ff3b4e' : !g.infinite && remaining < 60 ? '#f2b23a' : this.acc);
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.font = `600 ${narrow ? 22 : 26}px ${FONT_MONO}`;
-      ctx.fillStyle = over ? '#ff6b78' : remaining < 60 ? '#f2b23a' : '#dce7e3';
-      ctx.fillText(U.formatTime(g.time), W / 2, cy + 4);
-      ctx.font = `600 10px ${FONT_UI}`;
-      ctx.fillStyle = over ? '#ff8a94' : '#82a09b';
-      const sub = over ? 'Overtime +' + U.formatTime(-remaining)
-        : (g.infinite ? 'Overtime in ' : 'Evac in ') + U.formatTime(remaining);
-      ctx.fillText(sub + (g.difficulty !== OO.DIFFICULTY.standard ? '  ' + g.difficulty.name : ''), W / 2, cy + (narrow ? 29 : 32) - 1);
+      ctx.fillStyle = over ? '#ff6b78' : !g.infinite && remaining < 60 ? '#f2b23a' : '#dce7e3';
+      ctx.fillText(U.formatTime(g.time), W / 2, cy + (g.infinite ? 5 : 4));
+      if (!g.infinite) {
+        ctx.font = `600 10px ${FONT_UI}`;
+        ctx.fillStyle = '#82a09b';
+        ctx.fillText('Evac in ' + U.formatTime(remaining) + (g.difficulty !== OO.DIFFICULTY.standard ? '  ' + g.difficulty.name : ''), W / 2, cy + (narrow ? 29 : 32) - 1);
+      }
 
-      // Strain line under the clock
-      const S = g.strain, sl = S.level;
+      // Strain line under the clock (Standard, and Infinite before 15:00)
+      const S = g.strain, sl = S.level, ly = cy + ch + 6;
       ctx.font = `600 11px ${FONT_MONO}`;
       ctx.fillStyle = sl >= 12 ? '#ff3b4e' : sl >= 6 ? '#f2b23a' : '#82a09b';
       const surge = g.surgeMinutes() > 0 ? '   SURGE HP x' + g.surgeHp().toFixed(1) + (S.capped ? ' (MAX)' : '') + '  DMG x' + g.surgeDmg().toFixed(1) : '';
       if (surge) ctx.fillStyle = '#ff3b4e';
-      if (over) {
-        ctx.fillStyle = '#ff3b4e';
-        ctx.fillText('OVERTIME  HP x' + g.overtimeHp().toFixed(1) + '  DMG x' + g.overtimeDmg().toFixed(1) + '  SPD x' + g.overtimeSpeed().toFixed(2) + '  HEAL ' + Math.round(g.healMul() * 100) + '%', W / 2, cy + 50);
-      } else ctx.fillText('STRAIN ' + sl + (S.rising > 0 ? '  ▲ ADAPTING' : '') + surge, W / 2, cy + 50);
+      if (!over) ctx.fillText('STRAIN ' + sl + (S.rising > 0 ? '  ▲ ADAPTING' : '') + surge, W / 2, ly);
       if (p.apexTotal) {
         ctx.font = `700 11px ${FONT_UI}`;
         ctx.fillStyle = '#ff7ad9';
-        ctx.fillText('APEX ' + p.apexTotal, W / 2, cy + 64);
+        ctx.fillText('APEX ' + p.apexTotal, W / 2, over ? ly : ly + 14);
       }
 
       this.drawOffscreenMarkers();

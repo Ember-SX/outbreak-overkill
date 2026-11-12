@@ -1,21 +1,25 @@
 /*
- * Infinite Mode (v0.10, reworked in v0.12). Extends OO.Game.prototype, like boss.js and tactical.js.
+ * Infinite Mode (v0.10, reworked in v0.12 and v0.13). Extends OO.Game.prototype, like boss.js and tactical.js.
  *
  * Chosen on the main menu (Mode: Infinite). The run doesn't end at 15:00 (CONFIG.RUN_LENGTH):
  * it goes into overtime and keeps going until the team is overrun. There is no evac and no way
  * to call one. In overtime (m = minutes past 15:00):
  *
- *   - enemy HP and damage grow on a hybrid curve (linear x gentle compound, CONFIG.INFINITE),
- *     speed creeps up, the director refills faster and mixes in Brutes, and stampedes, Stalker
- *     hunts, skinner rings and the Hare Trigger keep coming back (spawner.js);
+ *   - enemy HP grows linearly (1 + hpLin * m, no compounding: weapons stay viable), damage on a
+ *     hybrid curve (linear x gentle compound); speed creeps up; the director packs the screen
+ *     tighter and mixes in Brutes; stampedes (always the same fixed size) come more often, with
+ *     crossfire pairs later on; Stalker hunts, skinner rings and the Hare Trigger keep coming back;
  *   - necrosis: every source of healing weakens, down to a floor;
  *   - the per-hit ceiling still holds: no single hit kills a healthy operative.
  *
- * Leveling never stops. Once an operative's weapons and gear are all maxed ("max rank"), and on
- * every level-up during overtime, the cards offer Apex mutations (OO.APEX). The heavy ones
- * (damage, fire rate, projectiles, area, HP, pulses) have hard stack caps; the light, stateless
- * ones (a credit multiplier, a one-off XP, heal or credit drop) never run out, so there is always
- * a card to take.
+ * Leveling never stops. Before 15:00 the XP curve is Standard's; in overtime it climbs steeply
+ * and steadily (polynomial, from the level you reach 15:00 with, or 60; CONFIG.INFINITE).
+ * Apex mutations (OO.APEX) only appear in overtime: on every overtime level-up, and in place of
+ * normal cards once an operative's weapons and gear are all maxed ("max rank"). Before 15:00 max
+ * rank gets herb / credits cards, as in Standard. The heavy mutations have hard stack caps, and
+ * damage stacking (Berserker, Adrenal, Overclock) has diminishing returns; the light, stateless
+ * ones (a credit multiplier, a one-off XP, heal or credit drop) never run out, so there is
+ * always a card to take.
  *
  * Host-authoritative in co-op: the host runs all of this; the client mirrors apex stacks and the
  * overtime flag from the snapshot.
@@ -35,11 +39,16 @@
   };
   /** Hybrid growth: a linear part times a gentle compound part (1 at m = 0). */
   const hybrid = (m, lin, rate) => (1 + lin * m) * Math.pow(1 + rate, m);
+  /**
+   * Enemy HP in overtime: purely linear-additive (v0.13), 1 + hpLin * m (bosses: x bossHpScale on
+   * the rate). No compounding, so weapons stay viable at 30-40+ minutes; late pressure comes from
+   * crowding and stampedes instead.
+   */
   G.overtimeHp = function (d) {
     const m = this.overtimeMinutes();
     if (!m || (d && d.crate)) return 1;
     const I = OO.CONFIG.INFINITE, k = d && d.boss ? I.bossHpScale : 1;
-    return hybrid(m, I.hpLin * k, I.hpPerMin * k);
+    return 1 + I.hpLin * k * m;
   };
   G.overtimeDmg = function (time) {
     const m = this.overtimeMinutes(time);
@@ -72,6 +81,7 @@
   G.enterOvertime = function () {
     this.overtime = true;
     this.mark = { credits: this.credits, kills: this.kills };
+    this.otLevel = this.team.level;   // the overtime XP climb starts from here (game.xpToNext)
     this.banner('Overtime. Nobody is coming. Hold out as long as you can', 'boss');
     OO.Audio.play('boss');
     this.shakeAll(8);
@@ -96,6 +106,8 @@
    * on every overtime level-up.
    */
   G.mixApex = function (p, picked, n) {
+    // No Apex mutations before 15:00: until overtime, max rank gets the usual herb / credits cards.
+    if (!this.overtime) return picked.length ? picked : [{ kind: 'herb' }, { kind: 'credits' }];
     const want = Math.max(n - picked.length, this.overtime ? OO.CONFIG.INFINITE.apexInOvertime : 0);
     if (want <= 0) return picked;
     const apex = this.rollApex(p, want);
@@ -176,8 +188,9 @@
   /** Stat side of the Apex stacks; called at the end of recalcStats(). */
   G.applyApexStats = function (p) {
     const s = p.stats, A = p.apex || {}, n = (id) => A[id] || 0;
-    s.might += 0.25 * n('berserk');
-    s.cooldown *= Math.pow(0.9, n('adrenal'));
+    const dr = OO.APEX_FX.stacks;                 // diminishing returns on damage stacking (v0.13)
+    s.might += 0.25 * dr(n('berserk'));
+    s.cooldown /= 1 + 0.11 * dr(n('adrenal'));
     s.amount += n('swarm');
     s.area += 0.25 * n('blast');
     s.maxHp += 40 * n('titan');

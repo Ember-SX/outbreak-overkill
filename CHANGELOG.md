@@ -2,6 +2,56 @@
 
 All notable changes to Outbreak Overkill. Versions follow `MAJOR.MINOR.PATCH`.
 
+## [0.13.0] - 2026-11-12
+
+Branch `feature/v0.13-nightmare-stampedes`.
+
+### Added
+- **Nightmare is unlocked.**
+  - Enemy base HP and base damage are 2.0× Standard's (2.7 and 2.5 absolute) and every infected moves 1.5× faster, Bursters and bosses included. Credits pay double.
+  - The per-hit ceiling still holds. It stacks with Infinite Mode.
+  - In co-op the host's threat level now goes to the client in the start message (`dif`), with its look. Before, each side used its own menu setting.
+- **Nightmare has its own look.**
+  - Menu (`body.nightmare` CSS variables): blood-red accents, red-black glass, ember buttons, a faster red menu heartbeat, and an animated grain and vignette overlay.
+  - In a run (`Renderer.nightmareFx`):
+    - a desaturated blood-red colour grade
+    - a heavy red-black vignette that throbs with a slow heartbeat
+    - double film grain
+    - a brief dark flicker every few seconds
+    - red-black darkness and a red HUD
+  - Reduced motion freezes the grain and flicker.
+- **Balance sim** prints kills per minute, infected alive per minute (crowding) and seconds of full-loadout fire per Brute (bullet sponges).
+
+### Changed
+- **Stampedes are one fixed size for the whole run.**
+  - Every stampede is 15 Bursters wide (660 px) and 2 rows deep (60 px apart): the size the 15:00 stampede had in v0.12. That covers the first at 2:45 as well as Infinite overtime, where v0.12 grew them to 21 × 4. `CONFIG.STAMPEDE.count/ranks/rankGap`; events no longer carry sizes.
+  - Burster blast damage goes from 50 to 120 base, so a stampede hit always lands at the full per-hit ceiling.
+- **Infinite overtime pressure** comes from crowding and stampedes:
+  - The director refills up to 3× faster (was 2×) with +1 per batch every 2 minutes (was every 3).
+  - Stampedes come every 55 s, minus 1 s per overtime minute, down to every 25 s. From 30:00 every second one is a crossfire pair at right angles.
+- **Apex mutations only appear in Infinite overtime.**
+  - Before 15:00 (and always in Standard), max rank gets herb / credits cards.
+  - Supply cases at max rank give 30% of a level in XP plus a 20% heal instead of an Apex mutation.
+- **Diminishing returns on damage stacking.** Each further stack of Berserker Gene, Adrenal Overdrive or Overclock damage is worth 80% of the previous one (`APEX_FX.falloff`):
+  - 8 Berserker: +104% (was +200%)
+  - 6 Adrenal: ×1.41 fire rate (was ×1.88)
+  - 5 Overclocks: ×1.67 damage (was ×2)
+- **Overtime enemy HP is linear-additive**, `1 + 0.2m` (bosses `0.12m`), replacing `(1 + 0.1m)·1.05^m`. That's ×4 at 30:00 and ×6 at 40:00, against ×5.2 and ×11.9. In the sim, a strong loadout still drops a Brute in about 1–1.5 s at 35:00. Damage keeps its hybrid curve.
+- **Overtime XP is steep and polynomial.**
+  - Before 15:00 Infinite now uses the Standard curve exactly (v0.12 already slowed it past level 60).
+  - From 15:00, each level costs `1 + 0.06x + 0.0011x²` times Standard, with x counted from the level you reached 15:00 with (or 60): ×5.2 forty levels in, ×18 a hundred in, with no jump at 15:00.
+  - In the god-mode sim, strong builds now gain 4–10 levels a minute from 15:00 to 25:00, easing to 3–5 a minute by 30:00–35:00, against 12–19 a minute in v0.12.
+- **Infinite HUD:** the top header shows only the timer. "Overtime in m:ss", "Overtime +m:ss" and the OVERTIME HP/DMG/SPD/HEAL line are gone, and the plate is shorter. Standard keeps "Evac in" and the strain line.
+
+### Fixed
+- **Wardrobe buttons.** Equip, Equipped and Buy are now one box: full card width, 36 px tall, the same padding, centred, and pinned to the bottom of the card, so a row of cards lines them up whatever the description length. Before, they were 60, 83 and 120 px wide at three different heights.
+
+### Removed
+- **Dates.**
+  - The Bestiary's "First sighted <date>" line is gone.
+  - Achievements and bestiary entries are stored as flags (`1`) instead of `Date.now()` timestamps. Old saves are converted on load (`Progress.stripDates`).
+  - No game code reads the wall clock any more. The only `Date.now()` left is the TURN relay credential expiry in net.js, which is networking, not gameplay.
+
 ## [0.12.0] - 2026-11-11
 
 Branch `feature/v0.12-scaling-caps`.

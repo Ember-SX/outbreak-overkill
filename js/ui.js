@@ -263,7 +263,7 @@
         const ctx = c.getContext('2d');
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, w, h);
-        OO.ECG.draw(ctx, 0, 0, w, h, now / 1000, { bpm: 64, color: '#52e6c6', reduced: this.g.reducedMotion, grid: false });
+        OO.ECG.draw(ctx, 0, 0, w, h, now / 1000, { bpm: this.g.nightmare ? 92 : 64, color: this.g.nightmare ? '#ff4f5a' : '#52e6c6', reduced: this.g.reducedMotion, grid: false });
         requestAnimationFrame(loop);
       };
       requestAnimationFrame(loop);
@@ -272,6 +272,7 @@
     hideAll() { for (const s of this.screens) $(s).hidden = true; }
 
     setHud(on) {
+      document.body.classList.toggle('in-run', !!on);   // the Nightmare overlay is menu-only; runs get the canvas pass
       $('hud-buttons').hidden = !on;
       $('btn-calldown').hidden = !on;
       this._cdKey = null;
@@ -308,7 +309,7 @@
         row.className = 'armory-item' + (maxed ? ' maxed' : '');
         const pips = Array.from({ length: item.max }, (_, i) => `<i class="${i < r ? 'on' : ''}"></i>`).join('');
         row.innerHTML = `
-          <img src="${OO.Icons.url(item.icon, 28, '#52e6c6')}" alt="">
+          <img src="${OO.Icons.url(item.icon, 28, this.g.nightmare ? '#ff4f5a' : '#52e6c6')}" alt="">
           <div class="armory-body">
             <span class="armory-name">${esc(item.name)}</span>
             <span class="armory-text">${esc(item.text)}</span>
@@ -394,7 +395,7 @@
             <span class="card-type">${esc(d.type)}</span>
             <span class="card-badge">${esc(d.badge)}</span>
           </span>
-          <img class="card-icon" src="${OO.Icons.url(d.icon, 40, d.apex ? '#ff7ad9' : d.isNew ? '#f2b23a' : '#52e6c6')}" alt="">
+          <img class="card-icon" src="${OO.Icons.url(d.icon, 40, d.apex ? '#ff7ad9' : d.isNew ? '#f2b23a' : this.g.nightmare ? '#ff4f5a' : '#52e6c6')}" alt="">
           <span class="card-name">${esc(d.name)}</span>
           <span class="card-text">${esc(d.text)}</span>`;
         b.addEventListener('click', () => this.pick(i));

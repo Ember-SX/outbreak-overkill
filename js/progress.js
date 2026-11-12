@@ -2,9 +2,9 @@
  * Progress: commendations (achievements), lifetime statistics and the bestiary, all saved in
  * localStorage on this device.
  *
- *   oo.achievements   { id: unlocked-at timestamp }
+ *   oo.achievements   { id: 1 }   (earned; v0.13 stores flags, not dates)
  *   oo.stats          lifetime totals (see defaults below)
- *   oo.codex          { enemyType: first-sighted timestamp }
+ *   oo.codex          { enemyType: 1 }   (sighted; v0.13 stores flags, not dates)
  *
  * During a run the host keeps per-player run stats in p.rs (see newRunStats) and team tallies in
  * game.tally; in co-op both reach the partner through the snapshot, so each machine checks its
@@ -76,6 +76,19 @@
       this.scanT = 0;
       if (firstLoad) this.backdate();
       this.migrateRanks();
+      this.stripDates();
+    }
+
+    /**
+     * v0.13: nothing keeps or shows a date any more. Older saves stored the unlock / first-sighted
+     * time (Date.now()); turn those into plain flags, once, so no wall-clock value is left.
+     */
+    stripDates() {
+      let ach = false, codex = false;
+      for (const k in this.ach) if (this.ach[k] && this.ach[k] !== 1) { this.ach[k] = 1; ach = true; }
+      for (const k in this.codex) if (this.codex[k] && this.codex[k] !== 1) { this.codex[k] = 1; codex = true; }
+      if (ach) this.saveAch();
+      if (codex) this.saveCodex();
     }
 
     /**
@@ -124,7 +137,7 @@
     /** First load: grant what the old save already proves, quietly, then one summary toast. */
     backdate() {
       const g = this.g, got = [];
-      const give = (id) => { if (!this.ach[id]) { this.ach[id] = Date.now(); got.push(id); } };
+      const give = (id) => { if (!this.ach[id]) { this.ach[id] = 1; got.push(id); } };
       if (num((g.records || {}).wins) > 0) give('extraction');
       if (num((g.records || {}).bestKills) >= 1) give('first_blood');
       const skins = (g.meta && g.meta.skins) || {};
@@ -168,7 +181,7 @@
     unlock(key, silent) {
       const u = OO.achUnit(key);
       if (!u || this.ach[key]) return false;
-      this.ach[key] = Date.now();
+      this.ach[key] = 1;
       if (silent) return true;          // caller saves and announces
       this.saveAch();
       if (this.live) this.runNew.push(key);
@@ -227,7 +240,7 @@
 
     markSeen(type) {
       if (!OO.CODEX[type] || this.codex[type]) return;
-      this.codex[type] = Date.now();
+      this.codex[type] = 1;
       this.saveCodex();
       const d = OO.ENEMIES[type];
       this.push({ kind: 'codex', type, title: 'New bestiary entry', text: (d.name || type) + ': report filed in the Dossier.' });

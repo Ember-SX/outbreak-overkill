@@ -12,7 +12,6 @@
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const TABS = ['ach', 'codex', 'calls', 'stats'];
   const n = (v) => Math.round(v || 0).toLocaleString();
-  const date = (ts) => new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
   function hours(sec) {
     sec = Math.floor(sec || 0);
@@ -251,7 +250,7 @@
       <dl class="codex-stats">${rows.map(([k, v, wide]) => `<div${wide ? ' class="wide"' : ''}><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
       <ul class="codex-traits">${C.traits.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
       ${C.lore.map((t) => `<p class="codex-lore">${esc(t)}</p>`).join('')}
-      <p class="hint">First sighted ${esc(date(P.codex[type]))}. Base values before strain level, surge and threat scaling.</p>`;
+      <p class="hint">Base values before strain level, surge and threat scaling.</p>`;
     el.appendChild(body);
   };
 

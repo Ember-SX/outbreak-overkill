@@ -38,7 +38,7 @@
       if (this.over) {
         // Apex Overclock (Infinite Mode): levels past max
         const F = OO.APEX_FX;
-        s.dmg *= 1 + F.overclockDmg * this.over;
+        s.dmg *= 1 + F.overclockDmg * F.stacks(this.over);   // diminishing returns (v0.13)
         s.cd *= Math.pow(F.overclockCd, this.over);
         s.amount = (s.amount || 1) + Math.floor(this.over / 2);
       }

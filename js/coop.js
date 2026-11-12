@@ -262,7 +262,7 @@
     this.ui.hideAll();
     this.ui.setHud(true);
     this.netSend({
-      t: 'start', seed: this.seed, you: 1, inf: this.infinite ? 1 : 0,
+      t: 'start', seed: this.seed, you: 1, inf: this.infinite ? 1 : 0, dif: this.runDiff,
       players: this.players.map((p) => ({ slot: p.slot, charId: p.charId, skin: p.skin, cd: p.cd.id, x: p.x, y: p.y })),
     });
     OO.Audio.play('select');
@@ -361,6 +361,7 @@
     this.mode = 'client';
     this.resetRun(m.seed);
     this.infinite = !!m.inf;   // the host's mode decides
+    this.runDiff = OO.DIFFICULTY[m.dif] && !OO.DIFFICULTY[m.dif].locked ? m.dif : 'standard';   // and the host's threat level
     if (this.infinite) setTimeout(() => this.banner('Infinite Mode: no evac, this run goes on until you fall', 'warn'), 600);
     this.players = m.players.map((pp) => {
       const local = pp.slot === m.you;
