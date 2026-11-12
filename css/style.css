@@ -22,6 +22,8 @@
   --wire: #1d3a3e;
   --wire-hi: #2e5a5f;
   --scan: #52e6c6;
+  --scan-rgb: 82, 230, 198;
+  --hazard-rgb: 242, 178, 58;
   --scan-dim: #2b8a78;
   --hazard: #f2b23a;
   --hazard-deep: #a8731a;
@@ -82,7 +84,7 @@ kbd {
   border-bottom-width: 2px;
   border-radius: 2px;
   color: var(--bone);
-  background: rgba(82, 230, 198, 0.05);
+  background: rgba(var(--scan-rgb), 0.05);
 }
 
 /* Bracketed corners: the structural device of every panel. */
@@ -113,7 +115,7 @@ kbd {
 
 .screen-dim {
   background:
-    repeating-linear-gradient(0deg, rgba(82, 230, 198, 0.025) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(0deg, rgba(var(--scan-rgb), 0.025) 0 1px, transparent 1px 3px),
     rgba(3, 9, 10, 0.82);
   animation: fade-in 0.18s ease-out;
 }
@@ -198,7 +200,7 @@ kbd {
   border: 1px solid var(--wire);
   border-left: 3px solid var(--wire-hi);
 }
-.threat-btn[aria-pressed="true"] { border-color: var(--wire-hi); border-left-color: var(--hazard); background: rgba(242, 178, 58, 0.07); }
+.threat-btn[aria-pressed="true"] { border-color: var(--wire-hi); border-left-color: var(--hazard); background: rgba(var(--hazard-rgb), 0.07); }
 .threat-name { font-weight: 700; font-size: 16px; line-height: 1.2; }
 .threat-text { font-size: 12px; color: var(--dim); }
 .threat-btn:disabled { cursor: not-allowed; opacity: 0.55; border-left-style: dashed; }
@@ -212,9 +214,9 @@ kbd {
   justify-items: center;
   padding-top: 6px;
   background:
-    repeating-linear-gradient(90deg, rgba(82, 230, 198, 0.06) 0 1px, transparent 1px 24px),
-    repeating-linear-gradient(0deg, rgba(82, 230, 198, 0.06) 0 1px, transparent 1px 24px),
-    radial-gradient(ellipse at 50% 85%, rgba(82, 230, 198, 0.16), transparent 65%);
+    repeating-linear-gradient(90deg, rgba(var(--scan-rgb), 0.06) 0 1px, transparent 1px 24px),
+    repeating-linear-gradient(0deg, rgba(var(--scan-rgb), 0.06) 0 1px, transparent 1px 24px),
+    radial-gradient(ellipse at 50% 85%, rgba(var(--scan-rgb), 0.16), transparent 65%);
   border-bottom: 1px solid var(--wire);
   overflow: hidden;
 }
@@ -259,7 +261,7 @@ kbd {
 .char-thumb { height: 50px; overflow: hidden; display: block; }
 .char-thumb .thumb { display: block; margin-top: -4px; }
 .char-tab-name { font-size: 13px; font-weight: 600; color: var(--dim); }
-.char-tab[aria-checked="true"] { border-color: var(--scan); background: rgba(82, 230, 198, 0.08); }
+.char-tab[aria-checked="true"] { border-color: var(--scan); background: rgba(var(--scan-rgb), 0.08); }
 .char-tab[aria-checked="true"] .char-tab-name { color: var(--bone); }
 .char-tab:hover { border-color: var(--wire-hi); }
 
@@ -450,8 +452,8 @@ kbd {
 .armory-name { font-weight: 700; font-size: 16px; line-height: 1.2; }
 .armory-text { font-size: 13px; color: #9fb3ae; line-height: 1.35; }
 .pips { display: flex; gap: 3px; margin-top: 4px; }
-.pips i { width: 14px; height: 3px; background: rgba(82, 230, 198, 0.15); }
-.pips i.on { background: var(--scan); box-shadow: 0 0 6px rgba(82, 230, 198, 0.6); }
+.pips i { width: 14px; height: 3px; background: rgba(var(--scan-rgb), 0.15); }
+.pips i.on { background: var(--scan); box-shadow: 0 0 6px rgba(var(--scan-rgb), 0.6); }
 .armory-item.maxed .armory-name { color: var(--scan); }
 .btn-buy { min-width: 78px; font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--hazard); border-color: var(--hazard-deep); }
 
@@ -464,7 +466,7 @@ kbd {
   background: rgba(8, 20, 23, 0.6);
   border: 1px solid var(--wire);
 }
-.seg-btn[aria-checked="true"] { color: var(--bone); border-color: var(--scan); background: rgba(82, 230, 198, 0.08); }
+.seg-btn[aria-checked="true"] { color: var(--bone); border-color: var(--scan); background: rgba(var(--scan-rgb), 0.08); }
 
 .wardrobe { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .outfit { display: grid; grid-template-rows: auto 1fr; --bracket: 10px; }
@@ -474,16 +476,23 @@ kbd {
   height: 172px;
   overflow: hidden;
   background:
-    repeating-linear-gradient(90deg, rgba(82, 230, 198, 0.05) 0 1px, transparent 1px 18px),
-    radial-gradient(ellipse at 50% 90%, rgba(82, 230, 198, 0.14), transparent 70%);
+    repeating-linear-gradient(90deg, rgba(var(--scan-rgb), 0.05) 0 1px, transparent 1px 18px),
+    radial-gradient(ellipse at 50% 90%, rgba(var(--scan-rgb), 0.14), transparent 70%);
   border-bottom: 1px solid var(--wire);
 }
 .outfit-fig .portrait { display: block; }
 .outfit.locked .outfit-fig .portrait { filter: saturate(0.25) brightness(0.62); }
-.outfit-body { display: grid; gap: 6px; align-content: start; padding: 10px; }
+.outfit-body { display: grid; grid-template-rows: auto 1fr auto; gap: 6px; padding: 10px; }
 .outfit-name { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.15; }
 .outfit-text { margin: 0; font-size: 12px; line-height: 1.4; color: #9fb3ae; }
-.outfit .btn-small { justify-self: start; margin-top: 2px; }
+/* Every action (Equip, Equipped, Buy) is the same box, pinned to the bottom of its card, so a row
+   of cards lines its buttons up whatever the description length. */
+.outfit .btn-small {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; min-width: 0; height: 36px; margin-top: 4px; padding: 0 10px;
+  align-self: end; justify-self: stretch;
+  font-size: 13px; line-height: 1; white-space: nowrap; text-align: center;
+}
 .outfit.equipped { border-color: var(--scan-dim); }
 .btn-equipped { color: var(--scan); border-color: var(--scan-dim); }
 .btn-equipped:disabled { opacity: 1; }
@@ -521,7 +530,7 @@ kbd {
   line-height: 1;
   letter-spacing: 0.1em;
   color: var(--scan);
-  text-shadow: 0 0 24px rgba(82, 230, 198, 0.35);
+  text-shadow: 0 0 24px rgba(var(--scan-rgb), 0.35);
   font-variant-numeric: tabular-nums;
 }
 .coop-status { margin: 0; font-size: 14px; color: var(--bone); }
@@ -532,7 +541,7 @@ kbd {
 .coop-roster em { font-style: normal; font-size: 12px; color: var(--mute); }
 .coop-roster .pending { color: var(--mute); animation: coop-blink 1.2s ease-in-out infinite; }
 @keyframes coop-blink { 50% { opacity: 0.45; } }
-.coop-notice { margin: 0; padding: 8px 10px; font-size: 13px; color: #f6dca5; background: rgba(242, 178, 58, 0.1); border-left: 3px solid var(--hazard); }
+.coop-notice { margin: 0; padding: 8px 10px; font-size: 13px; color: #f6dca5; background: rgba(var(--hazard-rgb), 0.1); border-left: 3px solid var(--hazard); }
 .coop-error { margin: 0; padding: 8px 10px; font-size: 13px; color: #ffc0c6; background: rgba(255, 59, 78, 0.12); border-left: 3px solid var(--infect); }
 .coop-relay { font-size: 13px; color: #9fb3ae; }
 .coop-relay summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--dim); }
@@ -683,8 +692,8 @@ kbd {
 .cd-state { font-family: var(--font-mono); font-size: 11px; color: var(--mute); font-variant-numeric: tabular-nums; }
 .cd-key { justify-self: end; }
 .calldown-btn:disabled { cursor: default; }
-.calldown-btn.ready { border-color: var(--hazard); box-shadow: 0 0 18px rgba(242, 178, 58, 0.25); }
-.calldown-btn.ready .cd-fill { height: 100%; background: rgba(242, 178, 58, 0.1); }
+.calldown-btn.ready { border-color: var(--hazard); box-shadow: 0 0 18px rgba(var(--hazard-rgb), 0.25); }
+.calldown-btn.ready .cd-fill { height: 100%; background: rgba(var(--hazard-rgb), 0.1); }
 .calldown-btn.ready .cd-icon { opacity: 1; }
 .calldown-btn.ready .cd-state { color: var(--hazard); }
 .calldown-btn.ready:hover { background: rgba(30, 24, 8, 0.85); }
@@ -704,8 +713,8 @@ kbd {
 .archive-tiers { display: flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 12px; color: var(--dim); }
 .tier-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--tier); margin-left: 6px; box-shadow: 0 0 6px var(--tier); }
 .tier-dot:first-child { margin-left: 0; }
-.archive-bar, .ach-bar { display: block; height: 3px; background: rgba(82, 230, 198, 0.12); }
-.archive-bar i, .ach-bar i { display: block; height: 100%; background: var(--scan); box-shadow: 0 0 6px rgba(82, 230, 198, 0.6); }
+.archive-bar, .ach-bar { display: block; height: 3px; background: rgba(var(--scan-rgb), 0.12); }
+.archive-bar i, .ach-bar i { display: block; height: 100%; background: var(--scan); box-shadow: 0 0 6px rgba(var(--scan-rgb), 0.6); }
 
 .ach-group { display: grid; gap: 8px; }
 .ach-group-title { margin: 6px 0 0; font-size: 14px; font-weight: 700; color: var(--dim); display: flex; gap: 10px; align-items: baseline; }
@@ -749,7 +758,7 @@ kbd {
   background: rgba(8, 20, 23, 0.6);
   border: 1px solid var(--wire);
 }
-.codex-item[aria-selected="true"] { border-color: var(--scan); background: rgba(82, 230, 198, 0.08); }
+.codex-item[aria-selected="true"] { border-color: var(--scan); background: rgba(var(--scan-rgb), 0.08); }
 .codex-item:hover { border-color: var(--wire-hi); }
 .codex-item-name { display: grid; font-size: 14px; font-weight: 600; line-height: 1.15; }
 .codex-item-name em { font-style: normal; font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--mute); }
@@ -769,9 +778,9 @@ kbd {
   place-items: center;
   height: 170px;
   background:
-    repeating-linear-gradient(90deg, rgba(82, 230, 198, 0.06) 0 1px, transparent 1px 17px),
-    repeating-linear-gradient(0deg, rgba(82, 230, 198, 0.06) 0 1px, transparent 1px 17px),
-    radial-gradient(circle at 50% 50%, rgba(82, 230, 198, 0.14), transparent 70%);
+    repeating-linear-gradient(90deg, rgba(var(--scan-rgb), 0.06) 0 1px, transparent 1px 17px),
+    repeating-linear-gradient(0deg, rgba(var(--scan-rgb), 0.06) 0 1px, transparent 1px 17px),
+    radial-gradient(circle at 50% 50%, rgba(var(--scan-rgb), 0.14), transparent 70%);
   border: 1px solid var(--wire);
 }
 .codex-body { display: grid; gap: 8px; align-content: start; min-width: 0; }
@@ -785,7 +794,7 @@ kbd {
 .codex-stats dt { font-size: 11px; color: var(--mute); }
 .codex-stats dd { margin: 0; font-family: var(--font-mono); font-weight: 600; font-size: 14px; }
 .codex-traits { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
-.codex-traits li { padding: 2px 8px; font-size: 12px; color: var(--hazard); border: 1px solid var(--hazard-deep); background: rgba(242, 178, 58, 0.06); }
+.codex-traits li { padding: 2px 8px; font-size: 12px; color: var(--hazard); border: 1px solid var(--hazard-deep); background: rgba(var(--hazard-rgb), 0.06); }
 .codex-lore { margin: 0; font-size: 14px; line-height: 1.5; color: #c3d2ce; max-width: 62ch; }
 
 .calls { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
@@ -797,7 +806,7 @@ kbd {
   background: rgba(8, 20, 23, 0.6);
   border: 1px solid var(--wire);
 }
-.call.equipped { border-color: var(--scan-dim); background: rgba(82, 230, 198, 0.05); }
+.call.equipped { border-color: var(--scan-dim); background: rgba(var(--scan-rgb), 0.05); }
 .call-icon { width: 36px; height: 36px; }
 .call-name { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.15; }
 .call.locked .call-name { color: var(--dim); }
@@ -911,3 +920,39 @@ kbd {
   /* no slide: the notice just appears for its time, then the queue hides it */
   .ach-toast.show { animation: none; transform: translate(-50%, 0); }
 }
+
+/* ------------------------------------------------------------------ Nightmare (v0.13)
+   Set on <body> while Nightmare is the selected threat level (menu) or the run's threat level.
+   The whole terminal turns blood red: containment teal becomes arterial red, amber actions turn
+   to ember, the glass darkens to red-black, and on the menus a grain + vignette layer sits over
+   everything. In a run the canvas does that itself (render.js nightmareFx). */
+body.nightmare {
+  --void: #0c0304;
+  --deck: #170708;
+  --glass: rgba(22, 5, 7, 0.9);
+  --wire: #4a161b;
+  --wire-hi: #7d2530;
+  --scan: #ff4f5a;
+  --scan-dim: #9e2c35;
+  --scan-rgb: 255, 79, 90;
+  --hazard: #ff8a5c;
+  --hazard-deep: #9b3a24;
+  --hazard-rgb: 255, 138, 92;
+  --infect: #ff2a3a;
+  --bone: #f1dcd8;
+  --dim: #b88d88;
+  --mute: #7f5a56;
+}
+body.nightmare:not(.in-run)::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 50; pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(40, 0, 4, 0.55) 80%, rgba(16, 0, 2, 0.85) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.05 0 0 0 0 0.08 0 0 0 0.28 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: nm-grain 0.5s steps(4) infinite;
+}
+@keyframes nm-grain { 0% { background-position: 0 0, 0 0; } 25% { background-position: 0 0, -40px 20px; } 50% { background-position: 0 0, 30px -50px; } 75% { background-position: 0 0, -70px -30px; } 100% { background-position: 0 0, 10px 60px; } }
+@media (prefers-reduced-motion: reduce) { body.nightmare:not(.in-run)::after { animation: none; } }
+body.nightmare .wordmark, body.nightmare h1 { text-shadow: 0 0 18px rgba(255, 30, 50, 0.45); }
+.threat-nightmare .threat-name { color: #ff6b73; }
+.threat-nightmare[aria-pressed="true"] { border-left-color: #ff2a3a; background: rgba(255, 42, 58, 0.1); box-shadow: inset 0 0 24px rgba(255, 42, 58, 0.12); }

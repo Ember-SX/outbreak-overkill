@@ -156,7 +156,8 @@ const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, 
         const bank0 = g.meta.bank;
         g.start(ch);
         let steps = 0, boss = null, minute = 0;
-        const hpCurve = [], lvCurve = [];
+        const hpCurve = [], lvCurve = [], killCurve = [], aliveCurve = [], spongeCurve = [];
+        let lastKills = 0;
         let guard = 0;
         while (g.state !== 'results' && steps < 60 * 60 * (MIN + 1) && guard++ < 60 * 60 * (MIN + 1) * 3 && g.time < MIN * 60) {
           if (g.state === 'playing') steps++;
@@ -164,7 +165,15 @@ const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, 
           if (g.state === 'playing') {
             g.update(1 / 60);
             if (!boss) boss = g.enemies.find((e) => e.def.mech) || null;
-            if (g.time >= minute * 60) { hpCurve.push(g.enemyHpMul(OO.ENEMIES.shambler, g.strain.level).toFixed(1)); lvCurve.push(g.team.level); minute += 1; }
+            if (g.time >= minute * 60) {
+              hpCurve.push(g.enemyHpMul(OO.ENEMIES.shambler, g.strain.level).toFixed(1)); lvCurve.push(g.team.level);
+              killCurve.push(g.kills - lastKills); lastKills = g.kills; aliveCurve.push(g.enemies.length);
+              // Bullet-sponge check: seconds of the whole loadout's single-target fire to drop one Brute.
+              const pl = g.player; let dps = 0;
+              for (const w of pl.weapons) { const st = w.getStats(pl); dps += (st.dmg || 0) * (st.amount || 1) / Math.max(0.1, st.cd || 1); }
+              spongeCurve.push(dps ? (OO.ENEMIES.brute.hp * g.enemyHpMul(OO.ENEMIES.brute, g.strain.level) / dps).toFixed(1) : '-');
+              minute += 1;
+            }
           }
           else if (g.state === 'levelup') { const opts = g.player.luOptions; g.chooseUpgrade(g.player, bot === 'smart' ? opts.indexOf(smartPick(opts)) : Math.floor(Math.random() * opts.length)); }
         }
@@ -174,6 +183,7 @@ const results = await page.evaluate(({ difficulty, runs, god, infinite, capMin, 
           boss: boss ? (boss.dead ? 'scrapped at ' + Math.floor(g.time / 60) + ':' + String(Math.floor(g.time % 60)).padStart(2, '0') : Math.round(100 * boss.hp / boss.maxHp) + '% HP left') : '-',
           hpCurve: hpCurve.join(' '),
           lvCurve: lvCurve.join(' '),
+          killCurve: killCurve.join(' '), aliveCurve: aliveCurve.join(' '), spongeCurve: spongeCurve.join(' '),
           perMin: Array.from({ length: MIN }, (_, i) => perMin[i] || 0),
           biggest: Array.from({ length: MIN }, (_, i) => biggest[i] || 0),
           damage: Object.entries(src).map(([k, v]) => k.replace(/^(update|process)/, '') + ' ' + Math.round(v)).join(', '),
@@ -201,6 +211,12 @@ if (god) {
   for (const r of results) console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.hpCurve}`);
   console.log('\nTeam level at each minute mark (0:00, 1:00, ...):');
   for (const r of results) console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.lvCurve}`);
+  console.log('\nKills during each minute:');
+  for (const r of results) console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.killCurve}`);
+  console.log('\nInfected alive at each minute mark (crowding; cap ' + 500 + '):');
+  for (const r of results) console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.aliveCurve}`);
+  console.log('\nSeconds of full-loadout fire to drop one Brute (bullet-sponge check):');
+  for (const r of results) console.log(`${r.ch.padEnd(5)} ${r.bot.padEnd(6)} ${r.spongeCurve}`);
   const avg = (key) => Array.from({ length: MINS }, (_, i) => Math.round(results.reduce((a, r) => a + r[key][i], 0) / results.length));
   const max = (key) => Array.from({ length: MINS }, (_, i) => Math.max(...results.map((r) => r[key][i])));
   console.log('\nMinute:                   ' + Array.from({ length: MINS }, (_, i) => String(i + 1).padStart(5)).join(''));

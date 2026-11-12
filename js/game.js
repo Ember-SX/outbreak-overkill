@@ -38,7 +38,7 @@
       this.meta = Object.assign({ bank: 0, ranks: {}, skins: {}, outfit: {} }, U.storage.get('oo.meta', {}));
       if (!this.meta.skins || typeof this.meta.skins !== 'object') this.meta.skins = {};
       if (!this.meta.outfit || typeof this.meta.outfit !== 'object') this.meta.outfit = {};
-      // A save from v0.2 may still have Nightmare selected; fall back to Standard while it is locked.
+      // An unknown (or locked) threat level in an old save falls back to Standard.
       const sel = OO.DIFFICULTY[this.settings.difficulty];
       if (!sel || sel.locked) { this.settings.difficulty = 'standard'; U.storage.set('oo.settings', this.settings); }
       OO.Audio.setMuted(this.settings.muted);
@@ -92,7 +92,8 @@
       this.netEvents = [];
       this.turrets = []; this.fuses = []; this._killer = null;
       this.infinite = this.settings.mode === 'infinite';   // Infinite Mode (co-op clients take the host's)
-      this.overtime = false; this.maxRankShown = false; this.mark = null;
+      this.runDiff = this.settings.difficulty;              // threat level for this run (co-op clients take the host's)
+      this.overtime = false; this.maxRankShown = false; this.mark = null; this.otLevel = 0;
       this.tally = { stalkers: 0, mechs: 0, stampedes: 0, lastStampede: -99 };   // team counters for commendations
       this.gemCount = 0; this.otherCount = 0; this.nextPickupId = 0; this.nextProjId = 0; this._immuneT = -9;
       this.team = { level: 1, xp: 0, xpNext: OO.CONFIG.xpToNext(1), pending: 0 };
@@ -303,10 +304,12 @@
       this.saveMeta();
     }
 
+    /** Threat level: the run's (the host's, in co-op) while a run is up, else the menu choice. */
     get difficulty() {
-      const d = OO.DIFFICULTY[this.settings.difficulty];
+      const d = OO.DIFFICULTY[this.player && this.runDiff ? this.runDiff : this.settings.difficulty];
       return d && !d.locked ? d : OO.DIFFICULTY.standard;
     }
+    get nightmare() { return !!this.difficulty.nightmare; }
 
     // ------------------------------------------------------------ players
     alivePlayers() { return this.players.filter((p) => !p.downed); }
@@ -447,12 +450,17 @@
     // XP is pooled. When the team levels up, every player picks their own upgrade; the game
     // waits until everyone has chosen.
     /**
-     * XP for the next level: the standard curve, and in Infinite Mode past INFINITE.xpFrom a steady
-     * linear slow-down on top (x(1 + xpSlope per level)), so late levels keep coming, just slower.
+     * XP for the next level. Before 15:00 (and always in Standard) it's the standard curve, so the
+     * first 15 minutes pace exactly the same in both modes. In Infinite overtime the standard cost
+     * is multiplied by 1 + xpLin*x + xpQuad*x^2, where x counts levels past the higher of
+     * INFINITE.xpFrom and the team's level when overtime began (otLevel): no jump at 15:00, then
+     * a steep, steady, polynomial climb (never an exponential wall).
      */
     xpToNext(level) {
       const I = OO.CONFIG.INFINITE, base = OO.CONFIG.xpToNext(level);
-      return this.infinite && level > I.xpFrom ? Math.round(base * (1 + I.xpSlope * (level - I.xpFrom))) : base;
+      if (!this.infinite || !this.overtime) return base;
+      const x = level - Math.max(I.xpFrom, this.otLevel || 0);
+      return x > 0 ? Math.round(base * (1 + I.xpLin * x + I.xpQuad * x * x)) : base;
     }
 
     checkLevel() {
@@ -540,8 +548,9 @@
     /**
      * Walking over a supply case applies it on the spot: no case screen, no pause, nothing to
      * confirm. A ready evolution goes first, then each roll levels up something you own. When
-     * there is nothing left to level ("max rank"), a roll becomes an Apex mutation plus a chunk
-     * of XP instead. Floating text and a one-line banner say what you got.
+     * there is nothing left to level ("max rank"), a roll becomes a chunk of XP plus, in Infinite
+     * overtime only, an Apex mutation (before 15:00, and in Standard, a field heal instead).
+     * Floating text and a one-line banner say what you got.
      */
     openChest(p, big) {
       const got = [];
@@ -562,8 +571,9 @@
           this.applyUpgrade(p, opt);
           got.push(d.name + ' ' + d.badge);
         } else {
-          // Nothing left to level: Apex mutation + XP (works in Standard as well as Infinite).
-          const opt = this.rollApex(p, 1)[0];
+          // Nothing left to level: XP, plus an Apex mutation in overtime (none before 15:00).
+          const opt = this.overtime ? this.rollApex(p, 1)[0] : null;
+          if (!this.overtime) { this.heal(p, p.stats.maxHp * 0.2); got.push('Field heal'); }
           if (opt) {
             const d = this.describeApex(p, opt);
             this.applyApex(p, opt, true);
@@ -812,7 +822,7 @@
       const e = {
         id: ++this.nextId, type, def: d, x, y, level, hits: 0,
         hp: d.hp * hpMul, maxHp: d.hp * hpMul,
-        speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)) * (d.crate ? 1 : this.overtimeSpeed()),
+        speed: d.speed * (d.boss || d.crate ? 1 : U.rand(0.88, 1.12)) * (d.crate ? 1 : this.overtimeSpeed() * (this.difficulty.speed || 1)),
         dmg: d.dmg * this.enemyDmgScale(true, d), r: d.r, mass: d.mass,
         kbx: 0, kby: 0, flash: 0, dead: false, t: U.rand(0, 10), a: 0, ai: {},
       };
@@ -1184,14 +1194,14 @@
     }
 
     launchStampede(st) {
-      const L = this.stampedeLane(st), sp = OO.CONFIG.STAMPEDE.spacing;
+      const S = OO.CONFIG.STAMPEDE, L = this.stampedeLane(st), sp = S.spacing, gap = S.rankGap;
       for (let r = 0; r < st.ranks; r++) {
         for (let j = 0; j < st.count; j++) {   // a solid row: every slot filled
           const off = (j - (st.count - 1) / 2) * sp;
-          const x = L.sx + L.nx * off - L.dx * r * 60, y = L.sy + L.ny * off - L.dy * r * 60;
+          const x = L.sx + L.nx * off - L.dx * r * gap, y = L.sy + L.ny * off - L.dy * r * gap;
           const e = this.spawnEnemy('burster', x, y);
           e.ai.dx = L.dx; e.ai.dy = L.dy; e.ai.travel = 0;
-          e.ai.max = L.back * 2 + 260 + r * 60;
+          e.ai.max = L.back * 2 + 260 + r * gap;
           e.a = Math.atan2(L.dy, L.dx);
         }
       }

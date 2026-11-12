@@ -6,7 +6,7 @@
 (function (OO) {
   'use strict';
 
-  OO.VERSION = '0.12.0';
+  OO.VERSION = '0.13.0';
 
   OO.CONFIG = {
     RUN_LENGTH: 15 * 60,          // seconds until evac arrives (victory); where overtime starts in Infinite Mode
@@ -103,7 +103,10 @@
     },
     // Burster stampede: warning time, when the lane locks (seconds before launch), row spacing.
     // Bursters charge in a dead-straight line once launched (no homing), so cover always works.
-    STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44 },
+    // v0.13: every stampede, from the first at 2:45 to the last in Infinite overtime, is the same
+    // fixed size, the one the 15:00 stampede had: a solid row `count` Bursters wide (count x
+    // spacing = 660 px) and `ranks` rows deep (rankGap apart). Only how often they come changes.
+    STAMPEDE: { warn: 3.0, lockAt: 0.8, spacing: 44, count: 15, ranks: 2, rankGap: 60 },
     // Spitters hang back and are easy to ignore, so cap how many can be alive: 1 + 0.5/min, max 7.
     spitterCap(minute) { return Math.min(7, 1 + Math.floor(minute * 0.5)); },
     // Volatile drums: share of 'barrels' obstacles that are red fuel drums. A bullet, pellet, fire
@@ -127,32 +130,37 @@
       airstrike: { cd: 90 },
     },
     // Infinite Mode: the run doesn't stop at 15:00 (RUN_LENGTH); it goes on until the team is
-    // overrun. From there on ("overtime", m = minutes past 15:00) enemy HP and damage follow a
-    // hybrid curve, a linear part times a gentle compound part:
-    //   HP  x (1 + hpLin * m) * (1 + hpPerMin)^m     (bosses: both rates x bossHpScale)
-    //   DMG x (1 + dmgLin * m) * (1 + dmgPerMin)^m
-    // 0:00-15:00 is untouched (m = 0). Speed rises +speedPerMin per minute up to +maxSpeed, the
-    // director refills faster and mixes in Brutes, and scripted pressure repeats (stampedes,
-    // Stalker hunts, skinner rings, the Hare Trigger).
+    // overrun. From there on ("overtime", m = minutes past 15:00):
+    //   HP  x (1 + hpLin * m)                        linear-additive, no compounding (v0.13);
+    //                                                bosses use hpLin x bossHpScale
+    //   DMG x (1 + dmgLin * m) * (1 + dmgPerMin)^m   hybrid (the per-hit ceiling caps every hit)
+    // 0:00-15:00 is untouched (m = 0). Speed rises +speedPerMin per minute up to +maxSpeed. Late
+    // difficulty comes from crowding (the director refills up to refillMax times faster with
+    // bigger batches, and mixes in Brutes) and from stampedes: same fixed size as ever, every
+    // `every.stampede` seconds minus stampedeFaster per minute (floor stampedeMin), and from
+    // crossFrom minutes every second one is a crossfire pair. Stalker hunts, skinner rings and the
+    // Hare Trigger repeat too.
     //   Necrosis: all healing is multiplied by max(minHeal, 1 - necrosisPerMin * m).
-    // The per-hit ceiling (HIT_CEILING) still holds: deaths come from many hits, never one.
-    // Past max rank (every weapon and gear slot maxed) and on every overtime level-up, Apex
-    // mutations (OO.APEX) are offered: heavy ones have hard stack caps, light ones never run out.
+    // Apex mutations (OO.APEX) only appear in overtime. Heavy ones have hard stack caps, damage
+    // stacking has diminishing returns (APEX_FX.falloff), light ones never run out.
     INFINITE: {
-      hpLin: 0.1, hpPerMin: 0.05, bossHpScale: 0.6, dmgLin: 0.06, dmgPerMin: 0.03,
+      hpLin: 0.2, bossHpScale: 0.6, dmgLin: 0.06, dmgPerMin: 0.03,
       speedPerMin: 0.02, maxSpeed: 0.5,
       necrosisPerMin: 0.03, minHeal: 0.3,
-      refillPerMin: 0.08,          // spawn interval / (1 + refillPerMin * m), down to half
+      refillPerMin: 0.1, refillMax: 3,   // spawn interval / min(refillMax, 1 + refillPerMin * m)
+      batchEvery: 2,                     // +1 enemy per spawn batch every batchEvery minutes
       brutePerMin: 0.15, bruteMax: 2.5,   // Brute weight added to the spawn pool per overtime minute (capped: ~15% of spawns)
       eliteCaseChance: 0.2,        // overtime Brutes drop a supply case only this often (it'd be a case every few seconds)
       every: { stampede: 55, ring: 90, stalker: 120, mecha: 300 },
+      stampedeFaster: 1, stampedeMin: 25, crossFrom: 15,
       // Payout: the run up to the mark pays as in Standard; overtime adds overtimeCredits per full
       // minute, 1 credit per overtimeKillsPerCredit kills and overtimePickupShare of credits picked up.
       overtimeCredits: 15, overtimeKillsPerCredit: 200, overtimePickupShare: 0.1,
       apexInOvertime: 1,           // Apex options guaranteed on each level-up during overtime
-      // Past xpFrom (Infinite Mode only), each level costs (1 + xpSlope * (level - xpFrom)) times the
-      // standard curve: a steady, linear slow-down rather than an exponential wall.
-      xpFrom: 60, xpSlope: 0.02,
+      // Overtime XP: each level costs (1 + xpLin*x + xpQuad*x^2) times the standard curve, with
+      // x = level - max(xpFrom, level at 15:00). Before 15:00 it's the standard curve exactly.
+      // Steep and steady (polynomial, never an exponential wall): +40 levels costs x5.2, +100 x18.
+      xpFrom: 60, xpLin: 0.06, xpQuad: 0.0011,
     },
     PLAYER: { radius: 14, speed: 140, maxHp: 100, pickupRange: 80, iframes: 0.45 },
     // Damage reduction from Kevlar Vest (per rank) and Trauma Plates (per Armory rank), capped.
@@ -180,7 +188,7 @@
                 // Only arrive in stampedes (see OO.EVENTS kind 'stampede'). Explode on contact with you or cover.
                 // Invulnerable: nothing damages them, auto-aim ignores them, bullets glance off. Cover is the answer.
                 invulnerable: true,
-                burster: { r: 64, dmg: 50, enemyDmg: 90 } },
+                burster: { r: 64, dmg: 120, enemyDmg: 90 } },   // v0.13: dmg 50 -> 120, lands at the per-hit ceiling
     brute:    { name: 'Brute',       hp: 450,  speed: 42, dmg: 18, r: 26, xp: 25,  mass: 10,  body: '#3c3e46', skin: '#6c707c', eye: '#ff3a30', blood: 'red', elite: true },
     stalker:  { name: 'The Stalker', hp: 4800, speed: 58, dmg: 30, r: 32, xp: 120, mass: 40,  body: '#1b1620', skin: '#3b2d45', eye: '#ff2444', blood: 'red', boss: true },
     // Final boss. Lab subject B-0 "Biscuit", a very small and very angry rabbit, at the controls of
@@ -349,13 +357,15 @@
   };
 
   // ---------------------------------------------------------------- THREAT LEVELS
-  // v0.3: what used to be Nightmare (x1.35 HP, x1.25 damage, x1.25 horde size) is now the
-  // Standard baseline. Nightmare is locked until it gets its own, harder tuning; its numbers
-  // below are placeholders and are never applied while `locked` is true.
+  // v0.3: what used to be Nightmare (x1.35 HP, x1.25 damage, x1.25 horde size) is the Standard
+  // baseline; these are absolute multipliers on the base stats in OO.ENEMIES.
+  // v0.13: Nightmare is open. Enemy HP and damage start at 2.0x Standard and every infected moves
+  // 1.5x faster; credits pay double. The per-hit ceiling still holds. The look changes with it:
+  // blood-red palette, heavy grain and vignette (render.js nightmareFx, css body.nightmare).
   OO.DIFFICULTY = {
-    standard:  { name: 'Standard',  hp: 1.35, dmg: 1.25, count: 1.25, credits: 1,   text: 'The intended experience.' },
-    nightmare: { name: 'Nightmare', hp: 1.35, dmg: 1.25, count: 1.25, credits: 1.6, locked: true,
-                 text: 'Locked. Coming in a future update.' },
+    standard:  { name: 'Standard',  hp: 1.35, dmg: 1.25, speed: 1,   count: 1.25, credits: 1, text: 'The intended experience.' },
+    nightmare: { name: 'Nightmare', hp: 2.7,  dmg: 2.5,  speed: 1.5, count: 1.25, credits: 2, nightmare: true,
+                 text: '2x enemy HP and damage, 1.5x speed. Double credits.' },
   };
 
   // ---------------------------------------------------------------- ARMORY (meta progression)
@@ -402,6 +412,11 @@
   };
   OO.APEX_FX = {
     overclockDmg: 0.2, overclockCd: 0.94,
+    // v0.13: damage stacking has diminishing returns. Stack i (from 0) of Berserker Gene, Adrenal
+    // Overdrive and an Overclock's damage is worth falloff^i of the first, so n stacks give
+    // (1 - falloff^n) / (1 - falloff) "first stacks": 8 Berserker = +104% (was +200%).
+    falloff: 0.8,
+    stacks(n) { const f = OO.APEX_FX.falloff; return n > 0 ? (1 - Math.pow(f, n)) / (1 - f) : 0; },
     pulse: { every: 4, r: 190, rPerStack: 0.15, shamblerHits: 3, perStack: 0.5, bossShare: 0.25 },
     chain: { chance: 0.06, r: 80 },
   };
@@ -464,32 +479,32 @@
     { t: 90,  kind: 'pack',  enemy: 'hound',    count: 20 },
     { t: 150, kind: 'elite', enemy: 'brute',    count: 1, text: 'Brute sighted' },
     { t: 135, kind: 'banner', text: 'Spitters: keep moving, the acid lingers' },
-    { t: 165, kind: 'stampede', count: 7,  text: "Stampede! Bursters can't be stopped. Get behind cover" },
+    { t: 165, kind: 'stampede', text: "Stampede! Bursters can't be stopped. Get behind cover" },
     { t: 210, kind: 'ring',  enemy: 'shambler', count: 40, text: 'They have you surrounded' },
     { t: 240, kind: 'elite', enemy: 'brute',    count: 1 },
     { t: 300, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'Warning: The Stalker is hunting you' },
-    { t: 285, kind: 'stampede', count: 9,  text: 'Bursters again. Find cover' },
+    { t: 285, kind: 'stampede', text: 'Bursters again. Find cover' },
     { t: 330, kind: 'elite', enemy: 'brute',    count: 1 },
     { t: 358, kind: 'banner', text: 'The strain is surging. They get stronger every minute now' },
     { t: 360, kind: 'pack',  enemy: 'spitter',  count: 5, text: 'A nest of Spitters' },
     { t: 390, kind: 'pack',  enemy: 'hound',    count: 40 },
-    { t: 405, kind: 'stampede', count: 11 },
+    { t: 405, kind: 'stampede' },
     { t: 420, kind: 'boss',  enemy: 'stalker',  count: 1, text: 'The Stalker is back, and angrier' },
     { t: 450, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 480, kind: 'ring',  enemy: 'bloater',  count: 18, text: 'Bloaters closing in. Keep your distance' },
-    { t: 510, kind: 'stampede', count: 11, ranks: 2, text: 'Double stampede' },
+    { t: 510, kind: 'stampede', text: 'Bursters! Get behind something solid' },
     { t: 540, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 600, kind: 'boss',  enemy: 'stalker',  count: 2, text: 'Two Stalkers. They hunt as a pair' },
-    { t: 645, kind: 'stampede', count: 13, ranks: 2 },
+    { t: 645, kind: 'stampede' },
     { t: 660, kind: 'pack',  enemy: 'hound',    count: 60 },
     { t: 690, kind: 'elite', enemy: 'brute',    count: 2 },
     { t: 720, kind: 'ring',  enemy: 'skinner',  count: 70, text: 'Skinners in the walls' },
-    { t: 735, kind: 'stampede', count: 13, ranks: 2 },
+    { t: 735, kind: 'stampede' },
     { t: 765, kind: 'elite', enemy: 'brute',    count: 3 },
-    { t: 815, kind: 'stampede', count: 15, ranks: 2 },
+    { t: 815, kind: 'stampede' },
     { t: 780, kind: 'boss',  enemy: 'mecha',    count: 1, text: 'Lab subject B-0 has stolen the HARE TRIGGER. Evac is two minutes out' },
     { t: 870, kind: 'banner', text: 'Evac helicopter inbound. Hold on' },
-    { t: 880, kind: 'stampede', count: 15, ranks: 2, text: 'One last stampede' },
+    { t: 880, kind: 'stampede', text: 'One last stampede' },
   ];
   // The Director walks this list in order, so keep it sorted by time.
   OO.EVENTS.sort((a, b) => a.t - b.t);

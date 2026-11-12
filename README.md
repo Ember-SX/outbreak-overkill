@@ -4,7 +4,7 @@ A bio-horror horde survival game for the browser. You play one operative inside 
 
 The core loop follows the Vampire Survivors formula: move only, auto-firing weapons, XP gems (DNA samples here), a pick-one-of-three upgrade screen, weapon and passive slots, elites that drop supply cases, and a wave script that escalates until you're overrun or extracted.
 
-**Status:** v0.12.0. Playable start to finish, solo or 2-player online co-op, with cover, volatile drums, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions, tactical call-downs, an endless **Infinite Mode** with Apex mutations past max rank, and between runs an Armory with upgrades and an outfit wardrobe plus a Dossier with ranked achievements, a bestiary and lifetime statistics.
+**Status:** v0.13.0. Playable start to finish, solo or 2-player online co-op, with cover, volatile drums, ranged infected, invincible stampedes, enemy leveling, a late-game surge, a final boss, weapon evolutions, tactical call-downs, an endless **Infinite Mode** with Apex mutations past max rank, and between runs an Armory with upgrades and an outfit wardrobe plus a Dossier with ranked achievements, a bestiary and lifetime statistics.
 
 ## Play it
 
@@ -52,7 +52,7 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 **Supply cases** (dropped by Brutes and bosses) apply the moment you walk over them; there is no case screen and nothing to confirm.
 - A ready evolution goes first.
 - Then each roll levels up a weapon or gear you own (one roll, three from a boss case), plus 20 credits (60 from a boss case).
-- When there's nothing left to level, each roll becomes an **Apex mutation plus 30% of a level in XP**, in Standard as well as Infinite Mode.
+- When there's nothing left to level, each roll becomes **30% of a level in XP** plus a field heal (20% of max HP); in Infinite overtime (past 15:00) the heal is replaced by an **Apex mutation**. No Apex mutation ever appears before 15:00.
 - Floating text and a one-line banner say what you got.
 - Cases are pulled in by your pickup range like other items and despawn after 20 seconds.
 
@@ -76,6 +76,8 @@ With the debug overlay on: **L** levels you up, **T** skips a minute, **H** heal
 - Destroy it and it drops a big supply case and herbs, and Biscuit ejects by parachute, unharmed and furious. Tuning lives in `OO.ENEMIES.mecha.mech`; the AI is in `js/boss.js`.
 
 **Stampedes:** a rumble, rising screen shake and distant shrieks give 3 seconds of warning, with a STAMPEDE arrow on the screen edge the Bursters come from.
+- **Every stampede is the same size**, from the first at 2:45 to the last in Infinite overtime: a solid row 15 Bursters wide (660 px) and 2 rows deep (60 px apart), 30 Bursters in all. That's the size the 15:00 stampede had in v0.12; only how often they come changes (`OO.CONFIG.STAMPEDE`).
+- **They're lethal.** A Burster blast hits for 120 base damage (was 50), so a stampede hit always lands at the full per-hit ceiling (45% of your max HP at the start, 68% by 15:00). Two in a row, or one plus the horde, will finish you.
 - The warning is a solid red band exactly as wide as the row and exactly along the line the row will run. The row has no gaps.
 - The band is fixed the moment it appears, aimed through where you stood then. It doesn't follow you; it only pulses faster for the last 0.8 seconds.
 - Once launched, the Bursters run in a dead-straight line and never turn after you.
@@ -117,7 +119,7 @@ In co-op each operative brings their own call-down; the host runs it and both sc
     | Ascension | highest level in one run | 50 · 75 · 100 · 150 · 200 |
 
   - Each card shows the current rank's metal, a pip per rank and the progress to the next one. A slide-down notice announces every unlock and rank-up the moment it happens, and the results screen lists what you earned that run.
-- **Bestiary:** a report on every specimen, filed the first time it comes into view: original lore, base stats, threat rating, traits and how many you've killed. Unseen ones stay silhouettes.
+- **Bestiary:** a report on every specimen, filed the first time it comes into view: original lore, base stats, threat rating, traits and how many you've killed. Unseen ones stay silhouettes. No dates are kept: the save only records *that* you've seen it (and *that* you earned an achievement), never when, and nothing in the game reads the wall clock.
 - **Call-downs:** equip the one you'll take into the next run.
 - **Statistics:** lifetime totals: playtime, runs, evacuations, kills, shots fired, damage dealt and taken, boss takedowns, drums detonated, call-downs used, revives, distance on foot, credits banked, and a row per operative.
 - **Reset all data** (next to Back): wipes everything this game has saved in the browser (achievements, statistics, bestiary, Armory credits and upgrades, outfits, records and settings) and reloads at zero. It asks twice: **Continue**, then **Erase everything**. Cancel or Esc backs out at either step.
@@ -127,37 +129,36 @@ Ranks are saved as `<id>.<rank>` keys. When v0.10 first loads a v0.9 save, the o
 Saves: achievements in `oo.achievements`, statistics in `oo.stats`, the bestiary in `oo.codex`, the equipped call-down in `oo.meta`. Saves from older versions keep working: the first time v0.9 loads, lifetime stats start from your service record, and achievements your save already proves (an evacuation, an outfit bought, a secret code found) are backdated with one notice. In co-op each player earns their own achievements and keeps their own stats. Achievement data is in `js/archive.js`; tracking in `js/progress.js`.
 
 **Infinite Mode:** pick *Infinite* under Mode on the menu (in co-op the host's choice counts).
-- The run plays like Standard until 15:00. There is no evac and no way to call one: the HUD clock counts down to overtime, then counts overtime, and the run goes on until you (both, in co-op) are overrun. Reaching 15:00 still counts as an evacuation for achievements and stats; the results screen reads "Lost in the dark at …".
-- In overtime (m = minutes past 15:00), enemy HP and damage follow a **hybrid curve**: a linear part times a gentle compound part, `(1 + lin·m) · (1 + rate)^m`.
+- The run plays like Standard until 15:00, Apex mutations and XP curve included. There is no evac and no way to call one: the run goes on until you (both, in co-op) are overrun. The top header shows only the timer (no "overtime" or countdown text). Reaching 15:00 still counts as an evacuation for achievements and stats; the results screen reads "Lost in the dark at …".
+- In overtime (m = minutes past 15:00), **enemy HP grows linearly**, `1 + 0.2·m`, with no compounding, so weapons stay viable at 30–40+ minutes and Brutes never become bullet sponges. Damage keeps a hybrid curve (every hit is capped by the per-hit ceiling anyway).
 
-  | Overtime | +1 min | +10 min | +30 min | +60 min | +120 min |
+  | Overtime | +1 min | +10 min | +15 min (30:00) | +25 min (40:00) | +60 min |
   |---|---|---|---|---|---|
-  | Enemy HP, v0.12: (1 + 0.1m) · 1.05^m | ×1.16 | ×3.3 | ×17 | ×131 | ×4,500 |
-  | Enemy HP, v0.10–0.11: 1.16^m | ×1.16 | ×4.4 | ×86 | ×7,400 | ×54 million |
-  | Enemy damage, v0.12: (1 + 0.06m) · 1.03^m | ×1.09 | ×2.2 | ×6.8 | ×27 | ×285 |
-  | Enemy damage, v0.10–0.11: 1.09^m | ×1.09 | ×2.4 | ×13 | ×176 | ×31,000 |
+  | Enemy HP, v0.13: 1 + 0.2m | ×1.2 | ×3 | ×4 | ×6 | ×13 |
+  | Enemy HP, v0.12: (1 + 0.1m) · 1.05^m | ×1.16 | ×3.3 | ×5.2 | ×11.9 | ×131 |
+  | Enemy HP, v0.10–0.11: 1.16^m | ×1.16 | ×4.4 | ×9.3 | ×41 | ×7,400 |
+  | Enemy damage: (1 + 0.06m) · 1.03^m | ×1.09 | ×2.2 | ×3.0 | ×5.2 | ×27 |
 
-  Bosses use 60% of both HP rates. Enemy speed adds 2% a minute, up to +50%. 0:00–15:00 is unchanged.
-- The director also refills faster, mixes Brutes into the horde, and repeats the set pieces:
-  - a stampede every 55 s, growing to 21 Bursters four rows deep
-  - a skinner (later bloater) ring every 90 s
-  - a Stalker hunt every 2 minutes, growing to five at once
-  - a Hare Trigger every 5 minutes
+  Bosses use 60% of the HP rate. Enemy speed adds 2% a minute, up to +50%. 0:00–15:00 is unchanged.
+- **Late difficulty is crowding and stampedes, not math walls.**
+  - The director refills up to 3× faster with bigger batches, so the screen stays packed at the 500-infected cap even when a strong build is killing 10,000 a minute. Brutes join the mix, capped at about 15% of spawns.
+  - Stampedes stay the fixed 15 × 2 size but come more often: every 55 s at 15:00, 1 s sooner each minute, down to every 25 s. From 30:00 every second one is a **crossfire**: two rows at right angles.
+  - A skinner (later bloater) ring every 90 s, a Stalker hunt every 2 minutes (growing to five at once), a Hare Trigger every 5 minutes.
 - **Necrosis:** all healing loses 3% per overtime minute, down to 30%.
-- **Horde-scaled damage falls behind.** Drum blasts, Sentry rounds, Necrotic Pulse and Volatile Blood track the strain level but not the overtime HP multiplier. However broken your build, the horde eventually outgrows it.
+- **Horde-scaled damage falls behind.** Drum blasts, Sentry rounds, Necrotic Pulse and Volatile Blood track the strain level but not the overtime HP multiplier.
 - **The per-hit ceiling still holds.** No single hit kills a healthy operative; deaths come from many hits in a row.
-- The HUD clock turns red and counts overtime. The line under it shows the current HP, damage, speed and healing multipliers.
 - **Payout:** the run up to 15:00 pays as normal. Overtime adds 15 credits a minute, 1 per 200 kills and 10% of the credits you pick up, so one endless run can't buy out the Armory and the wardrobe.
-- **XP keeps slowing down, without a wall.** Up to level 60 the curve is the same as Standard. Past 60, each level costs 2% more per level above 60, added linearly rather than compounded: level 100 costs ×1.8 the Standard amount and level 200 ×3.8. The old compound curve (×1.02 per level) hit ×16 at level 200 and ×115 at 300. One-off XP (a supply case at max rank, Field Notes) is a share of the Standard curve, so it shrinks as levels get dearer. In the god-mode sim, a strong build levels fastest just after it comes together (10–35 levels a minute), then slows steadily to under 10 a minute by 40:00.
-- **Leveling past max rank.** XP never stops. Once every weapon and gear slot is maxed (max rank), every level-up card is an **Apex mutation**, and during overtime every level-up includes at least one.
+- **XP in overtime climbs steeply and steadily.** Before 15:00 it's exactly the Standard curve. From 15:00, each level costs the Standard amount times `1 + 0.06x + 0.0011x²`, where x counts levels past the level you reached 15:00 with (or 60, if higher). There's no jump at 15:00. 40 levels in, a level costs ×5.2; 100 levels in, ×18. It's polynomial, so it never turns into an exponential wall. One-off XP (a supply case at max rank, Field Notes) is a share of the Standard curve. In the god-mode sim, strong builds now gain 4–10 levels a minute from 15:00 to 25:00, easing to 3–5 a minute (one every 12–20 s) by 30:00–35:00, down from 12–19 a minute in v0.12.
+- **Apex mutations only exist in overtime.** Before 15:00, max rank gets the usual herb / credits cards and supply cases heal, as in Standard. From 15:00 every level-up includes at least one Apex mutation, and once every weapon and gear slot is maxed (max rank) every card is one.
+  - **Damage stacking has diminishing returns.** Each further stack of Berserker Gene, Adrenal Overdrive or an Overclock's damage is worth 80% of the one before (`APEX_FX.falloff`): 8 Berserker Genes give +104% damage (was +200%), 6 Adrenal Overdrives ×1.41 fire rate (was ×1.88), 5 Overclocks ×1.67 damage (was ×2).
   - Every mutation that adds damage, fire rate, projectiles, area, HP or per-tick work has a **hard stack cap**, so a deep run can't drag the frame rate down. A capped card shows its count (for example `3 / 8`) and stops appearing once it's full. Overclock is capped per weapon.
   - A handful of **light, stateless mutations have no cap**, so once everything else is full they fill the hand and there's always something to draft.
 
   | Apex mutation | Per stack | Cap |
   |---|---|---|
-  | Overclock | One weapon past its max level: +20% damage, 6% faster, +1 projectile every second overclock | 5 per weapon |
-  | Berserker Gene | +25% damage | 8 |
-  | Adrenal Overdrive | weapons fire 10% faster | 6 |
+  | Overclock | One weapon past its max level: +20% damage (each further one worth 80% of the last), 6% faster, +1 projectile every second overclock | 5 per weapon |
+  | Berserker Gene | +25% damage, each further stack worth 80% of the last | 8 |
+  | Adrenal Overdrive | weapons fire 10% faster, each further stack worth 80% of the last | 6 |
   | Hive Swarm | +1 projectile for every weapon | 4 |
   | Blast Radius | +25% area | 6 |
   | Titan Frame | +40 max HP and a full heal | 8 |
@@ -235,7 +236,10 @@ Tuning lives in `OO.CONFIG.THREAT`, `OO.CONFIG.SURGE` and `OO.CONFIG.HIT_CEILING
 
 **HP cap at 13:00:** enemy HP stops growing at 13:00 (`OO.CONFIG.LEVELING.hpCapTime`). The clock part of the strain level, the surge HP multiplier and the adaptive bonus all freeze there, so infected spawning in the last two minutes have the same HP as at 13:00. A Standard shambler tops out at x26.6 its base HP instead of reaching about x50 by 15:00. The HUD marks the HP multiplier with (MAX). Enemy damage keeps rising.
 
-**Threat levels:** Standard uses what v0.2 called Nightmare (35% tougher, 25% harder-hitting, 25% bigger waves). Nightmare is locked until it gets its own tuning in a future update.
+**Threat levels** (menu > Threat level; in co-op the host's choice counts for both):
+- **Standard** uses what v0.2 called Nightmare (35% tougher, 25% harder-hitting, 25% bigger waves than v0.1).
+- **Nightmare** doubles Standard: enemy base HP and base damage ×2.0, and every infected (Bursters and bosses included) moves ×1.5 faster. Credits pay ×2. It stacks with Infinite Mode. The per-hit ceiling still holds.
+- **Nightmare looks different**, so you always know where you are. The menu turns blood red the moment you pick it: arterial-red accents, red-black glass, ember buttons, a faster red heartbeat under the logo, and a film-grain and vignette layer over everything. In a run the canvas gets a blood-red colour grade with the colour drained out, a heavy red-black vignette that throbs with a slow heartbeat, double film grain, a brief dark flicker every few seconds, red-black darkness, and a red HUD (plates, XP bar, level, gear slots, vitals). Reduced motion freezes the grain and the flicker. Code: `render.js` `nightmareFx`, `css` `body.nightmare`.
 
 **Pickups:** DNA samples (XP), Green Herb (heal), Scanner (pulls in the DNA samples around you), Airstrike Flare (clears the screen), credits, supply cases.
 - **Supply crates** (the wooden boxes that turn up around you) open the moment you walk over them; the herb, credits, scanner or flare goes straight to you.
@@ -301,7 +305,7 @@ js/
   archive.js        data: achievements (one-off and ranked), tiers and the bestiary entries
   progress.js       achievements, lifetime statistics and bestiary sightings (localStorage) + slide-down notices
   tactical.js       call-downs, sentry turrets, med drones, volatile drums, per-run stats upkeep
-  infinite.js       Infinite Mode: overtime scaling, necrosis, Apex mutations and their caps
+  infinite.js       Infinite Mode: overtime scaling, necrosis, Apex mutations, caps and diminishing returns
   dossier.js        the Dossier screen (achievements, bestiary, call-downs, statistics) and the call-down button
   world.js          procedural obstacles, collision, line of sight
   weapons.js        Weapon class + one behaviour per weapon
@@ -351,7 +355,7 @@ npm run sim                       # 2 runs per operative per bot
 npm run sim -- standard 3         # threat level, runs per combination
 ```
 
-`npm run sim -- standard 1 god infinite:30` runs Infinite Mode to 30:00 (bots take Apex mutations). Add `mortal-from:15` to make damage real from 15:00 (how long a grown build lasts in overtime), and `ops:mara,rin` to run only some operatives. With `god` it also prints the team level at every minute mark.
+`npm run sim -- standard 1 god infinite:30` runs Infinite Mode to 30:00 (bots take Apex mutations). Add `mortal-from:15` to make damage real from 15:00 (how long a grown build lasts in overtime), and `ops:mara,rin` to run only some operatives. With `god` it also prints, per minute, the team level, kills, infected on screen (crowding) and how many seconds the whole loadout needs to drop one Brute (the bullet-sponge check).
 
 `npm run sim -- standard 1 god` makes the bots unkillable (damage is counted but not applied), so they reach the last minutes. It prints a shambler's HP multiplier at every minute mark (it should go flat from 13:00) and how much of the Hare Trigger's health each bot took off.
 
@@ -383,7 +387,9 @@ Done in v0.11: instant supply cases and crates, ranked Body Count, the painted p
 
 Done in v0.12: Apex stack caps, engine limits on projectiles and blast size, the pickup-radius fix, Reset all data, Infinite Mode without extraction and its flatter overtime and XP curves.
 
-Next up: give **Nightmare** its own tuning (faster strain growth, more stampedes) and unlock it.
+Done in v0.13: Nightmare unlocked with its own look, fixed-size lethal stampedes, aligned wardrobe buttons, date-free saves, a timer-only Infinite header, and the Infinite recalibration (Apex only in overtime, steep overtime XP, damage diminishing returns, linear enemy HP, crowding and crossfire stampedes).
+
+Next up: play-test Nightmare and the v0.13 Infinite curves, then stages and unlockable operatives.
 
 1. **Real art.** Swap procedural shapes for sprite sheets; `Renderer.enemySprite()` and `obstacleSprite()` are the places to change.
 2. **Audio pass.** Recorded SFX and a music loop; `Audio.play()` cases map one-to-one to samples.

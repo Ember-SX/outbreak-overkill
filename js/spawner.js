@@ -19,14 +19,14 @@
       const w = OO.WAVES[i];
       const m = this.g.overtimeMinutes();
       if (!m) return w;
-      // Overtime: the last wave, refilling faster and with Brutes in the mix.
+      // Overtime: the last wave, refilling faster (the screen stays packed) and with Brutes in the mix.
       const I = OO.CONFIG.INFINITE;
       const key = Math.floor(m * 4);   // rebuild four times a minute
       if (this._otKey !== key) {
         this._otKey = key;
         this._otWave = Object.assign({}, w, {
-          interval: w.interval / Math.min(2, 1 + I.refillPerMin * m),
-          batch: w.batch + Math.floor(m / 3),
+          interval: w.interval / Math.min(I.refillMax, 1 + I.refillPerMin * m),
+          batch: w.batch + Math.floor(m / I.batchEvery),
           pool: w.pool.concat([['brute', Math.min(I.bruteMax, I.brutePerMin * m)]]),
         });
       }
@@ -123,10 +123,10 @@
    */
   Director.prototype.stampede = function (ev) {
     const g = this.g, p = g.anchorPlayer(), S = OO.CONFIG.STAMPEDE;
-    const count = ev.count || 9;
+    // Fixed size (CONFIG.STAMPEDE.count x ranks) for the whole run; ev.a forces a heading.
     g.stampedes.push({
-      a: U.rand(0, U.TAU), ax: p.x, ay: p.y, t: S.warn, warn: S.warn, locked: false,
-      count, ranks: ev.ranks || 1, shrieked: false,
+      a: ev.a !== undefined ? ev.a : U.rand(0, U.TAU), ax: p.x, ay: p.y, t: S.warn, warn: S.warn, locked: false,
+      count: S.count, ranks: S.ranks, shrieked: false,
     });
     if (!ev.text) g.banner("Stampede! Bursters can't be stopped. Get behind cover", 'boss');
     OO.Audio.play('rumble');
@@ -140,8 +140,14 @@
     const g = this.g, T = this.ot, E = OO.CONFIG.INFINITE.every, m = g.overtimeMinutes();
     for (const k in E) T[k] -= dt;
     if (T.stampede <= 0) {
-      T.stampede = E.stampede;
-      this.runEvent({ kind: 'stampede', count: Math.min(21, 15 + Math.floor(m / 2)), ranks: Math.min(4, 2 + Math.floor(m / 6)) });
+      // Same fixed-size stampede as before 15:00, coming more often (down to stampedeMin seconds);
+      // from crossFrom minutes on, every second one is a crossfire: two lanes at right angles.
+      const I = OO.CONFIG.INFINITE;
+      T.stampede = Math.max(I.stampedeMin, E.stampede - I.stampedeFaster * m);
+      this.otStampedes = (this.otStampedes || 0) + 1;
+      const a = U.rand(0, U.TAU);
+      this.runEvent({ kind: 'stampede', a, text: m >= I.crossFrom && this.otStampedes % 2 === 0 ? 'Crossfire stampede' : undefined });
+      if (m >= I.crossFrom && this.otStampedes % 2 === 0) this.runEvent({ kind: 'stampede', a: a + Math.PI / 2, text: 'Crossfire stampede' });
     }
     if (T.ring <= 0) {
       T.ring = E.ring;
